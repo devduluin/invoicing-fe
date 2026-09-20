@@ -63,10 +63,17 @@ export async function getGoodsReceipt(id: string): Promise<GoodsReceipt> {
   return data.data;
 }
 
-/** Goods Receipt is create-once — no update/delete endpoint exists (matches
- *  the seeded invoice-goods-receipt-{list,create} permissions: a physical
- *  receiving log, never edited or deleted through the API). */
 export async function createGoodsReceipt(input: GoodsReceiptInput): Promise<GoodsReceipt> {
   const { data } = await api.post<Envelope<GoodsReceipt>>("/goods-receipts", input);
   return data.data;
+}
+
+export async function updateGoodsReceipt(id: string, input: GoodsReceiptInput): Promise<GoodsReceipt> {
+  const { data } = await api.put<Envelope<GoodsReceipt>>(`/goods-receipts/${encodeURIComponent(id)}`, input);
+  return data.data;
+}
+
+/** Soft delete — the record disappears from lists but is kept in the database. */
+export async function deleteGoodsReceipt(id: string): Promise<void> {
+  await api.delete(`/goods-receipts/${encodeURIComponent(id)}`);
 }

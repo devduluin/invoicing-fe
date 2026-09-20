@@ -151,7 +151,7 @@ export function Select({
         <Popover.Content
           align="start"
           sideOffset={4}
-          className="z-50 w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-xl border border-border bg-white shadow-xl shadow-slate-900/10 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          className="z-[60] w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-lg border border-border bg-card shadow-pop data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
           onOpenAutoFocus={(e) => {
             if (header) return; // let the search input take focus
             e.preventDefault();

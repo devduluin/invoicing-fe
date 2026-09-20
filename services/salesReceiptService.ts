@@ -65,16 +65,38 @@ export async function previewSalesReceiptNumber(): Promise<string> {
   return data.data.number;
 }
 
+/** Receipts that allocate money to one invoice (each carries its `allocations`, so the
+ *  amount applied to THIS invoice can be read off) — the detail page's payments tab. */
+export async function listAllSalesReceiptsForInvoice(salesInvoiceId: string): Promise<SalesReceipt[]> {
+  const res = await fetchList<SalesReceipt>("/sales-receipts", {
+    page: 1,
+    limit: 100,
+    sales_invoice_id: salesInvoiceId,
+    sort: "date",
+    order: "DESC",
+  });
+  return res.items;
+}
+
 export async function getSalesReceipt(id: string): Promise<SalesReceipt> {
   const { data } = await api.get<Envelope<SalesReceipt>>(`/sales-receipts/${encodeURIComponent(id)}`);
   return data.data;
 }
 
-/** Kuitansi Penjualan is create-once — no update/delete endpoint exists
- *  (matches the seeded invoice-receipt-{list,create} permissions). */
 export async function createSalesReceipt(input: SalesReceiptInput): Promise<SalesReceipt> {
   const { data } = await api.post<Envelope<SalesReceipt>>("/sales-receipts", input);
   return data.data;
+}
+
+/** Full replace. The server reverses the old allocations on the invoices and applies the new ones. */
+export async function updateSalesReceipt(id: string, input: SalesReceiptInput): Promise<SalesReceipt> {
+  const { data } = await api.put<Envelope<SalesReceipt>>(`/sales-receipts/${encodeURIComponent(id)}`, input);
+  return data.data;
+}
+
+/** Soft delete — the receipt disappears from lists and its allocations are given back to the invoices. */
+export async function deleteSalesReceipt(id: string): Promise<void> {
+  await api.delete(`/sales-receipts/${encodeURIComponent(id)}`);
 }
 
 export const PAYMENT_METHOD_LABEL: Record<SalesReceiptPaymentMethod, string> = {

@@ -97,7 +97,7 @@ export function JournalLinesEditor({
   };
 
   return (
-    <div className="overflow-hidden rounded-2xl border-[1.5px] border-border bg-card">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="overflow-x-auto">
         <div className="min-w-[880px]">
           <div className={`${GRID_COLS} border-b border-border bg-table-head px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400`}>
@@ -151,7 +151,7 @@ export function JournalLinesEditor({
                     type="button"
                     onClick={() => remove(line.key)}
                     disabled={lines.length <= 2}
-                    className="grid size-8 place-items-center self-center rounded-lg text-slate-300 transition-colors hover:bg-rose-50 hover:text-rose-400 disabled:pointer-events-none disabled:opacity-30"
+                    className="grid size-8 place-items-center self-center rounded-lg text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-30"
                     title="Delete line"
                   >
                     <Trash2 className="size-[15px]" />
@@ -194,7 +194,7 @@ export function JournalLinesEditor({
             <p className="font-mono text-sm font-bold text-slate-700">{money.format(totalCredit)}</p>
           </div>
           {!balanced && (
-            <span className="rounded-lg bg-rose-50 px-2 py-1 text-[11px] font-semibold text-rose-500">
+            <span className="rounded-lg bg-slate-100 px-2 py-1 text-xs font-semibold text-slate-700">
               Not balanced
             </span>
           )}

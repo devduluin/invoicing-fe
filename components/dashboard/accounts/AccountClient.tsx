@@ -131,6 +131,7 @@ export default function AccountClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "code", order: "asc" }}
         emptyTitle="No accounts yet"
         onRowClick={canUpdate ? (row) => setModal({ open: true, row: row as unknown as Account }) : undefined}

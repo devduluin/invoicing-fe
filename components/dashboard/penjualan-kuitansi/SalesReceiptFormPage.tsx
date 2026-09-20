@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, Textarea, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
@@ -16,6 +16,8 @@ import { listAllSalesInvoices, getSalesInvoice, type SalesInvoice } from "@/serv
 import { listAllBankAccounts, type BankAccount } from "@/services/bankAccountService";
 import {
   createSalesReceipt,
+  getSalesReceipt,
+  updateSalesReceipt,
   previewSalesReceiptNumber,
   PAYMENT_METHOD_OPTIONS,
   type SalesReceiptInput,
@@ -37,15 +39,15 @@ interface AllocationRow {
 
 const emptyAllocation = (): AllocationRow => ({ key: crypto.randomUUID(), salesInvoiceId: "", amount: null });
 
-/** Kuitansi Penjualan is create-only — no edit route exists (matches the
- *  seeded invoice-receipt-{list,create} permissions: a receipt is
- *  create-once, never edited or deleted through the API). Its "Kepada
- *  Invoice" table lets one receipt allocate payment across several
- *  invoices at once — each row updates that invoice's paid_amount/
- *  payment_status server-side (see SalesReceiptRepository.Create). */
-export default function SalesReceiptFormPage() {
+/** Create and edit share this form (`mode="edit"` + `id` loads the saved receipt). Its
+ *  "Kepada Invoice" table lets one receipt allocate payment across several invoices at
+ *  once — each row updates that invoice's paid_amount/payment_status server-side. On edit
+ *  the server reverses the old allocations first, so the balance a row may take is the
+ *  invoice's remaining balance PLUS what this receipt already allocated to it. */
+export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isEdit = mode === "edit" && !!id;
 
   // Tracks every initial-load fetch (base lists + number preview + the
   // ?dari_invoice prefill, if present) so the form only renders once ALL of
@@ -54,8 +56,10 @@ export default function SalesReceiptFormPage() {
   // loads would show the Partner field blank even though mitraId is
   // already correctly set.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "invoices", "bank-accounts", "number"]);
-    if (searchParams.get("dari_invoice")) s.add("prefill");
+    const s = new Set<string>(["mitras", "invoices", "bank-accounts"]);
+    if (isEdit) s.add("receipt");
+    else s.add("number");
+    if (!isEdit && searchParams.get("dari_invoice")) s.add("prefill");
     return s;
   });
   const done = (key: string) =>
@@ -81,22 +85,52 @@ export default function SalesReceiptFormPage() {
   const [bankAccountId, setBankAccountId] = useState("");
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
+  // What the saved receipt already allocated per invoice (edit only) — that amount is
+  // free to re-use, because the server gives it back before applying the new rows.
+  const [originalAllocated, setOriginalAllocated] = useState<Map<string, number>>(new Map());
 
-  usePageBreadcrumb([{ label: "Sales Receipts", href: "/dashboard/penjualan/kuitansi" }, { label: "Add Receipt" }]);
+  usePageBreadcrumb([
+    { label: "Sales Receipts", href: "/dashboard/penjualan/kuitansi" },
+    { label: isEdit ? "Edit Receipt" : "Add Receipt" },
+  ]);
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllSalesInvoices("invoice").then(setInvoices).catch(() => setInvoices([])).finally(() => done("invoices"));
     listAllBankAccounts().then(setBankAccounts).catch(() => setBankAccounts([])).finally(() => done("bank-accounts"));
-    previewSalesReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
+    if (!isEdit) previewSalesReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Edit: load the saved receipt into the form.
+  useEffect(() => {
+    if (!isEdit || !id) return;
+    getSalesReceipt(id)
+      .then((r) => {
+        setMitraId(r.mitra_id);
+        setNumber(r.number);
+        setDate(r.date.slice(0, 10));
+        setPaymentMethod(r.payment_method);
+        setBankAccountId(r.bank_account_id ?? "");
+        setNotes(r.notes ?? "");
+        setAllocations(
+          (r.allocations ?? []).map((a) => ({ key: crypto.randomUUID(), salesInvoiceId: a.sales_invoice_id, amount: a.amount })),
+        );
+        setOriginalAllocated(new Map((r.allocations ?? []).map((a) => [a.sales_invoice_id, a.amount])));
+      })
+      .catch((err) => {
+        toast.error(extractApiError(err, "Failed to load receipt"));
+        router.push("/dashboard/penjualan/kuitansi");
+      })
+      .finally(() => done("receipt"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, id]);
 
   // ?dari_invoice=<id> → pre-fill partner + one allocation row (remaining
   // balance) from that confirmed invoice's "Create Receipt" action.
   useEffect(() => {
     const invoiceId = searchParams.get("dari_invoice");
-    if (!invoiceId) return;
+    if (isEdit || !invoiceId) return;
     getSalesInvoice(invoiceId)
       .then((invoice) => {
         setMitraId(invoice.mitra_id);
@@ -110,7 +144,8 @@ export default function SalesReceiptFormPage() {
   }, []);
 
   const invoiceByID = useMemo(() => new Map(invoices.map((i) => [i.id, i])), [invoices]);
-  const remainingOf = (inv: SalesInvoice) => Math.max(0, inv.grand_total - inv.paid_amount);
+  const remainingOf = (inv: SalesInvoice) =>
+    Math.max(0, inv.grand_total - inv.paid_amount + (originalAllocated.get(inv.id) ?? 0));
 
   const updateRow = (key: string, patch: Partial<AllocationRow>) =>
     setAllocations((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -165,8 +200,13 @@ export default function SalesReceiptFormPage() {
 
     setBusy(true);
     try {
-      await createSalesReceipt(payload);
-      toast.success("Receipt added");
+      if (isEdit && id) {
+        await updateSalesReceipt(id, payload);
+        toast.success("Receipt updated");
+      } else {
+        await createSalesReceipt(payload);
+        toast.success("Receipt added");
+      }
       router.push("/dashboard/penjualan/kuitansi");
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save receipt"));
@@ -195,7 +235,7 @@ export default function SalesReceiptFormPage() {
     <div className="space-y-4">
       <PageHeader
         icon={Wallet}
-        title="Add Receipt"
+        title={isEdit ? "Edit Receipt" : "Add Receipt"}
         description="Record a payment received from a partner against one or more sales invoices."
         actions={
           <>
@@ -328,7 +368,7 @@ export default function SalesReceiptFormPage() {
                       <button
                         type="button"
                         onClick={() => removeRow(row.key)}
-                        className="grid size-8 place-items-center justify-self-center rounded-lg text-slate-300 transition-colors hover:bg-rose-50 hover:text-rose-400"
+                        className="grid size-8 place-items-center justify-self-center rounded-lg text-slate-300 transition-colors hover:bg-slate-100 hover:text-slate-900"
                         title="Remove row"
                       >
                         <X className="size-[15px]" />
@@ -348,13 +388,7 @@ export default function SalesReceiptFormPage() {
         }
         notes={
           <FormField label="Notes" htmlFor="kw-notes" optional>
-            <Textarea
-              id="kw-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Internal notes (optional)"
-              rows={3}
-            />
+            <RichTextEditor id="kw-notes" value={notes} onChange={setNotes} placeholder="Internal notes (optional)" />
           </FormField>
         }
         totals={

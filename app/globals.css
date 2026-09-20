@@ -2,8 +2,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ── Design tokens — "TagihanPro" invoicing look (Invoicing Product Design repo).
-   Periwinkle-blue primary, cool-grey ground, dark-navy sidebar. ─────────────── */
+/* ── Design system ────────────────────────────────────────────────────────────
+   One restrained blue brand, cool-grey ground, white surfaces, 1px hairlines.
+     · Radius   controls 10px (rounded-xl) · cards/dialogs 12px (rounded-2xl)
+     · Depth    flat by default; `shadow-card` (hairline) on cards, `shadow-pop` only on
+                floating layers (menus, popovers, dialogs, drawers)
+     · Type     page title 22/600 · section 15/600 · body & table 13 · caption 12 (never
+                smaller) · muted text uses slate-500+ so it stays readable (WCAG AA)
+     · Status   never colour alone — every status has an icon + label (ui/StatusBadge)
+   The invoice document (`[data-invoice-sheet]`) is a print artefact, NOT app chrome: it
+   resets the remapped tokens below so on-screen and PDF output never change with the UI. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -34,42 +42,74 @@
   --font-sans: var(--font-inter), "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-display: var(--font-jakarta), "Plus Jakarta Sans", var(--font-inter), sans-serif;
 
+  --radius-sm: 0.25rem;
+  --radius-md: 0.375rem;
+  --radius-lg: 0.5rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 0.625rem;
+  --radius-3xl: 1rem;
+
+  --shadow-card: 0 1px 2px rgba(20, 30, 60, 0.05), 0 0 0 0.5px rgba(20, 30, 60, 0.03);
+  --shadow-pop: 0 8px 24px -6px rgba(15, 23, 42, 0.16), 0 2px 6px rgba(15, 23, 42, 0.06);
+
+  --color-warning: var(--warning);
+  --color-info: var(--info);
+}
+
+/* Muted greys: the default slate-400/300 are too pale for 12px text on white (≈2.6:1).
+   Remapped once here instead of touching 50+ files; icons/placeholders get slightly firmer. */
+@theme {
+  --color-slate-400: #6b7a90;
+  --color-slate-300: #a2aec0;
+  /* The only tints of the brand blue: selected / active / hover surfaces. */
+  --color-primary-soft: #eef1fd;
+  --color-primary-soft-hover: #e4e9fb;
+}
+
+:root {
+  color-scheme: light;
+  --background: #e9edf3; /* soft gray ground: the page sits on this, content surfaces sit above it */
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --primary: #4863e6; /* brand blue — white text on it is 5:1 (AA) */
+  --primary-foreground: #ffffff;
+  --primary-ink: #3450cc; /* brand blue for text/links on white/tinted surfaces */
+  --secondary: #e8edfd; /* blue tint */
+  --secondary-foreground: #3450cc;
+  --muted: #f1f4f8;
+  --muted-foreground: #64748b;
+  --accent: #eef1ff;
+  --accent-foreground: #3450cc;
+  --destructive: #f43f5e;
+  --border: #dde2ea; /* hairline */
+  --border-strong: #cdd4df; /* input border */
+  --input: #cdd4df;
+  --ring: #4863e6;
+  --brand-muted: #eef1ff;
+  --cta: #4863e6;
+  --cta-foreground: #ffffff;
+  --success: #059669;
+  --warning: #d97706;
+  --info: #3450cc;
+  --success-foreground: #ffffff;
+  --table-head: #f3f5f9;
+  --row-border: #eceff4;
+  --radius: 0.75rem;
+  --surface-2: #f6f8fb; /* secondary surface: section headers, toolbars, read-only fields */
+  --tint: #eef2fe; /* soft blue highlight */
+  --tint-border: #d9e1fb;
+}
+
+/* The invoice document keeps its own look — undo the token remaps above inside it. */
+[data-invoice-sheet] {
   --radius-sm: 0.5rem;
   --radius-md: 0.625rem;
   --radius-lg: 0.75rem;
   --radius-xl: 0.875rem;
   --radius-2xl: 1rem;
-  --radius-3xl: 1.25rem;
-}
-
-:root {
-  color-scheme: light;
-  --background: #f0f2f7; /* cool grey ground */
-  --foreground: #0f172a;
-  --card: #ffffff;
-  --card-foreground: #0f172a;
-  --primary: #6b8fff; /* periwinkle */
-  --primary-foreground: #ffffff;
-  --primary-ink: #3b57d4; /* readable periwinkle for text/links */
-  --secondary: #eef1ff; /* periwinkle-50 */
-  --secondary-foreground: #3b57d4;
-  --muted: #f5f7fc;
-  --muted-foreground: #64748b;
-  --accent: #eef1ff;
-  --accent-foreground: #3b57d4;
-  --destructive: #f43f5e;
-  --border: #eaeff6; /* card / hairline */
-  --border-strong: #e4e9f2; /* input border */
-  --input: #e4e9f2;
-  --ring: #6b8fff;
-  --brand-muted: #eef1ff;
-  --cta: #6b8fff;
-  --cta-foreground: #ffffff;
-  --success: #10b981;
-  --success-foreground: #ffffff;
-  --table-head: #f8fafd;
-  --row-border: #f4f7fc;
-  --radius: 0.75rem;
+  --color-slate-400: #94a3b8;
+  --color-slate-300: #cbd5e1;
 }
 
 @layer base {
@@ -87,6 +127,18 @@
   }
   a {
     color: var(--primary-ink);
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
   }
   a:hover {
     color: color-mix(in srgb, var(--primary-ink) 80%, transparent);
@@ -112,10 +164,11 @@
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  padding: 3px 9px;
-  border-radius: 999px;
-  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 600;
+  line-height: 1.5;
   white-space: nowrap;
 }
 
@@ -145,3 +198,156 @@
 .animate-step-in-back {
   animation: step-in-back 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
+
+/* ── Rich text (TipTap editor + read-only Notes / Terms) ──────────────────────
+   Tailwind's preflight strips list/paragraph styling, so it is restored here.
+   The same class styles the on-screen invoice, the editor and the Playwright
+   PDF, keeping them visually identical. */
+.rich-text p {
+  margin: 0 0 0.35em;
+  min-height: 1em;
+}
+.rich-text p:last-child,
+.rich-text li:last-child > p:last-child {
+  margin-bottom: 0;
+}
+.rich-text ul {
+  list-style: disc;
+  margin: 0 0 0.35em;
+  padding-left: 1.25rem;
+}
+.rich-text ol {
+  list-style: decimal;
+  margin: 0 0 0.35em;
+  padding-left: 1.25rem;
+}
+.rich-text li > p {
+  margin: 0;
+}
+.rich-text a {
+  color: var(--primary-ink);
+  text-decoration: underline;
+  word-break: break-all;
+}
+.rich-text strong,
+.rich-text b {
+  font-weight: 700;
+}
+.rich-text em,
+.rich-text i {
+  font-style: italic;
+}
+.rich-text u {
+  text-decoration: underline;
+}
+.rich-text p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  color: #94a3b8;
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+@media print {
+  .rich-text li,
+  .rich-text p {
+    break-inside: avoid;
+    orphans: 2;
+    widows: 2;
+  }
+}
+
+/* ── Print / PDF pagination ───────────────────────────────────────────────────
+   Applies to window.print() and to the Playwright PDF (which prints the same
+   page): repeat the table header on every page and never split a row. */
+@media print {
+  thead {
+    display: table-header-group;
+  }
+  tfoot {
+    display: table-footer-group;
+  }
+  tr {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  html,
+  body {
+    background: #fff !important;
+  }
+  * {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}
+
+/* ── Motion: short and functional. All of it is disabled by the reduced-motion rule above. ── */
+@keyframes page-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+.page-in {
+  animation: page-in 0.26s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.page-in > * {
+  animation: page-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+}
+.page-in > *:nth-child(2) {
+  animation-delay: 40ms;
+}
+.page-in > *:nth-child(3) {
+  animation-delay: 80ms;
+}
+.page-in > *:nth-child(n + 4) {
+  animation-delay: 120ms;
+}
+.bar-grow {
+  transform-origin: left;
+  animation: bar-grow 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.15s both;
+}
+/* menus, popovers and select lists ease in */
+[data-radix-popper-content-wrapper] > [data-state="open"] {
+  animation: pop-in 0.14s ease-out both;
+}
+/* the workspace header: a soft blue wash that fades into the gray page */
+.workspace-wash {
+  background-image: linear-gradient(180deg, rgba(72, 99, 230, 0.085) 0%, rgba(72, 99, 230, 0.03) 140px, transparent 260px);
+}
+/* the financial overview: blue to lighter blue to transparent, nothing else */
+.overview-gradient {
+  background-image: linear-gradient(115deg, #dbe3fc 0%, #e9eefd 38%, rgba(255, 255, 255, 0) 78%);
+}
+
+@keyframes onb-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+.onb-float { animation: onb-float 6s ease-in-out infinite; }
+.onb-float-slow { animation: onb-float 8s ease-in-out infinite; }
+
+/* ── Overlay layers (one place, not ad hoc z-index values) ──────────────────────────────
+   header 20 · sidebar 30 · drawer / mobile nav 40 · modal 50 · dropdown, popover, select 60
+   (must sit above modals, because selects live inside them) · confirmation dialog 70 · toast 80 */

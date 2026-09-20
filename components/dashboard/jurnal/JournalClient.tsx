@@ -14,7 +14,8 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
-import { buildColumns, StatusPill, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
   listJournalEntries,
   deleteJournalEntry,
@@ -28,11 +29,6 @@ const TABLE_KEY = "journal-entries";
 const DEFAULT_VISIBLE = ["number", "date", "description", "status", "total_debit", "total_credit"];
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
-
-const STATUS_STYLE: Record<JournalEntryStatus, { bg: string; text: string; dot: string }> = {
-  draft: { bg: "#f1f5f9", text: "#64748b", dot: "#cbd5e1" },
-  posted: { bg: "#ecfdf5", text: "#065f46", dot: "#34d399" },
-};
 
 export default function JournalClient() {
   const router = useRouter();
@@ -70,8 +66,7 @@ export default function JournalClient() {
         header: "Status",
         render: (v) => {
           const s = (v as JournalEntryStatus) ?? "draft";
-          const style = STATUS_STYLE[s] ?? STATUS_STYLE.draft;
-          return <StatusPill label={JOURNAL_STATUS_LABEL[s] ?? s} bg={style.bg} text={style.text} dot={style.dot} />;
+          return <Status status={(s === "posted" ? "paid" : s) as StatusKey} label={JOURNAL_STATUS_LABEL[s] ?? s} />;
         },
       },
       {
@@ -137,6 +132,7 @@ export default function JournalClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "date", order: "desc" }}
         emptyTitle="No journal entries yet"
         emptyDescription="Add a journal entry to record a manual transaction outside of sales/purchases."

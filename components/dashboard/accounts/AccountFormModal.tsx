@@ -112,7 +112,7 @@ export default function AccountFormModal({
       busy={busy}
       banner={
         locked ? (
-          <div className="flex items-start gap-2.5 border-b border-border bg-amber-50/70 px-5 py-2.5 text-[11px] text-amber-700">
+          <div className="flex items-start gap-2.5 border-b border-border bg-slate-50 px-5 py-2.5 text-xs text-slate-600">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <p>
               Built-in system account. Its code and classification are locked — name, parent,

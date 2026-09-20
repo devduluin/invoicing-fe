@@ -1,24 +1,60 @@
-import { Search } from "lucide-react";
+"use client";
 
+import type { LucideIcon } from "lucide-react";
+import { FileSearch, Inbox } from "lucide-react";
+import type { ReactNode } from "react";
+
+import { Button } from "@/components/ui/Button";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { ErrorState } from "@/components/ui/ErrorState";
+import { useTr } from "@/lib/useTr";
+
+/** One cell that explains the table's state: failed to load / nothing matches / nothing yet. */
 export default function TableEmptyState({
   colSpan,
-  title = "No data yet",
+  title,
   description,
+  action,
+  icon,
+  error,
+  onRetry,
+  filtered,
+  onClearFilters,
 }: {
   colSpan: number;
   title?: string;
   description?: string;
+  action?: ReactNode;
+  icon?: LucideIcon;
+  /** the load failed — show a retry, never an "empty" table */
+  error?: boolean;
+  onRetry?: () => void;
+  /** a search/filter is active, so "empty" means "no match", not "no data" */
+  filtered?: boolean;
+  onClearFilters?: () => void;
 }) {
+  const tr = useTr();
   return (
     <tr>
-      <td colSpan={colSpan} className="py-16">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <span className="grid size-14 place-items-center rounded-2xl bg-[#f1f5fb] text-slate-300">
-            <Search className="size-6" strokeWidth={1.5} />
-          </span>
-          <p className="text-sm font-semibold text-slate-400">{title}</p>
-          {description && <p className="text-xs text-slate-300">{description}</p>}
-        </div>
+      <td colSpan={colSpan}>
+        {error ? (
+          <ErrorState onRetry={onRetry} />
+        ) : filtered ? (
+          <EmptyState
+            icon={FileSearch}
+            title={tr("Tidak ada hasil", "No results")}
+            description={tr("Tidak ada data yang cocok dengan pencarian atau filter Anda.", "Nothing matches your search or filters.")}
+            action={
+              onClearFilters && (
+                <Button variant="outline" size="sm" onClick={onClearFilters}>
+                  {tr("Hapus pencarian & filter", "Clear search & filters")}
+                </Button>
+              )
+            }
+          />
+        ) : (
+          <EmptyState icon={icon ?? Inbox} title={title ?? tr("Belum ada data", "No data yet")} description={description} action={action} />
+        )}
       </td>
     </tr>
   );

@@ -53,11 +53,20 @@ export async function getPurchaseReceipt(id: string): Promise<PurchaseReceipt> {
   return data.data;
 }
 
-/** Purchase Receipt is create-once — no update/delete endpoint exists
- *  (matches the seeded invoice-purchase-receipt-{list,create} permissions). */
 export async function createPurchaseReceipt(input: PurchaseReceiptInput): Promise<PurchaseReceipt> {
   const { data } = await api.post<Envelope<PurchaseReceipt>>("/purchase-receipts", input);
   return data.data;
+}
+
+/** Full replace. */
+export async function updatePurchaseReceipt(id: string, input: PurchaseReceiptInput): Promise<PurchaseReceipt> {
+  const { data } = await api.put<Envelope<PurchaseReceipt>>(`/purchase-receipts/${encodeURIComponent(id)}`, input);
+  return data.data;
+}
+
+/** Soft delete — the record disappears from lists but is kept in the database. */
+export async function deletePurchaseReceipt(id: string): Promise<void> {
+  await api.delete(`/purchase-receipts/${encodeURIComponent(id)}`);
 }
 
 export const PAYMENT_METHOD_LABEL: Record<PurchaseReceiptPaymentMethod, string> = {

@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
+import { Status } from "@/components/ui/StatusBadge";
+import { useTr } from "@/lib/useTr";
+import { useInvoiceStatusLabels } from "./statusBadges";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, Textarea, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
@@ -31,13 +34,23 @@ import {
   type SalesInvoiceStatus,
   type DiscountType,
 } from "@/services/salesInvoiceService";
-import { LineItemsEditor, LineItemsTotals, emptyLine, calcLine, type EditableLine } from "../shared/LineItemsEditor";
+import {
+  LineItemsEditor,
+  LineItemsTotals,
+  emptyLine,
+  calcLine,
+  calcDocumentTotals,
+  type EditableLine,
+} from "../shared/LineItemsEditor";
+import { InvoiceTemplatePanel } from "./templates/InvoiceTemplatePanel";
+import { DEFAULT_INVOICE_TEMPLATE, resolveInvoiceTemplate, type InvoiceTemplateId } from "./templates/types";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
+const noop = () => {};
 
 const KIND_LABEL: Record<SalesInvoiceKind, { title: string; breadcrumb: string; basePath: string }> = {
   invoice: { title: "Sales Invoice", breadcrumb: "Sales Invoices", basePath: "/dashboard/penjualan/invoice" },
@@ -61,6 +74,8 @@ interface Props {
  *  draft. On create, `?dari_order=<id>` pre-fills mitra + lines from that
  *  confirmed Sales Order (pure frontend convenience — no backend coupling). */
 export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
+  const tr = useTr();
+  const statusLabels = useInvoiceStatusLabels();
   const router = useRouter();
   const searchParams = useSearchParams();
   const isEdit = mode === "edit";
@@ -78,7 +93,12 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       s.add("entity");
     } else {
       s.add("number");
-      if (searchParams.get("dari_order") || searchParams.get("duplicate_from") || searchParams.get("linked_invoice")) {
+      if (
+        searchParams.get("dari_order") ||
+        searchParams.get("duplicate_from") ||
+        searchParams.get("linked_invoice") ||
+        searchParams.get("dari_down_payment")
+      ) {
         s.add("prefill");
       }
     }
@@ -119,9 +139,68 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const [attachmentName, setAttachmentName] = useState("");
   const [signatureData, setSignatureData] = useState("");
   const [stampDuty, setStampDuty] = useState(false);
+  // Layout choice — presentation only; saved with the invoice. Switching it never touches the fields above.
+  const [template, setTemplate] = useState<InvoiceTemplateId>(DEFAULT_INVOICE_TEMPLATE);
+  const [paidAmount, setPaidAmount] = useState(0);
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string; dueDate?: string }>({});
 
   const readOnly = isEdit && status !== "draft";
+
+  // ── live preview: the form state shaped like a saved invoice ──
+  // Amounts come from the SAME calcLine / calcDocumentTotals the totals panel uses, so
+  // the preview can never disagree with the numbers next to it (the server stays
+  // authoritative on save).
+  const taxByID = useMemo(() => new Map(taxes.map((t) => [t.id, t])), [taxes]);
+  const previewMitra = useMemo(() => mitras.find((m) => m.id === mitraId) ?? null, [mitras, mitraId]);
+  const draftInvoice = useMemo<SalesInvoice>(() => {
+    const active = lines.filter((l) => l.product_name.trim() || l.quantity || l.unit_price);
+    const totals = calcDocumentTotals(
+      active,
+      taxes,
+      { type: additionalDiscountType, value: additionalDiscountValue, onTypeChange: noop, onValueChange: noop },
+      { value: shippingCost, onChange: noop },
+    );
+    return {
+      id: id ?? "draft",
+      company_id: company?.id ?? "",
+      mitra_id: mitraId,
+      kind,
+      number: number.trim() || "—",
+      date,
+      due_date: dueDate || undefined,
+      ref_no: refNo.trim() || undefined,
+      notes: notes.trim() || undefined,
+      terms: terms.trim() || undefined,
+      template,
+      status,
+      subtotal: totals.subtotal,
+      discount_total: totals.discountTotal,
+      additional_discount_amount: totals.additionalDiscountAmount,
+      tax_total: totals.taxTotal,
+      grand_total: totals.grandTotal,
+      shipping_cost: shippingCost ?? 0,
+      signature_data: signatureData || undefined,
+      stamp_duty: stampDuty,
+      paid_amount: paidAmount,
+      payment_status: "unpaid",
+      lines: active.map((l) => ({
+        id: l.key,
+        product_name: l.product_name,
+        description: l.description,
+        quantity: l.quantity ?? 0,
+        unit_price: l.unit_price ?? 0,
+        discount_type: l.discount_type,
+        discount_value: l.discount_value ?? 0,
+        tax_ids: l.tax_ids,
+        line_total: calcLine(l, taxes).lineTotal,
+      })),
+      created_at: "",
+      updated_at: "",
+    };
+  }, [
+    id, company, mitraId, kind, number, date, dueDate, refNo, notes, terms, template, status, lines, taxes,
+    additionalDiscountType, additionalDiscountValue, shippingCost, signatureData, stampDuty, paidAmount,
+  ]);
 
   usePageBreadcrumb([
     { label: label.breadcrumb, href: label.basePath },
@@ -199,6 +278,41 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit]);
 
+  // Create mode + ?dari_down_payment=<id> → the "Create Invoice" action on a
+  // confirmed Down Payment invoice's detail page: pre-fill mitra & lines
+  // from that DP invoice, and silently carry a reference back to it via
+  // linked_invoice_id (the same field DP invoices use to point at the
+  // regular invoice they're a down payment against — Kind tells you which
+  // direction to read it from). Only meaningful for kind="invoice".
+  useEffect(() => {
+    if (isEdit || kind !== "invoice") return;
+    const dpID = searchParams.get("dari_down_payment");
+    if (!dpID) return;
+    getSalesInvoice(dpID)
+      .then((dp) => {
+        setLinkedInvoiceId(dp.id);
+        setMitraId(dp.mitra_id);
+        if (dp.lines.length) {
+          setLines(
+            dp.lines.map((l) => ({
+              key: crypto.randomUUID(),
+              product_name: l.product_name,
+              description: l.description ?? "",
+              quantity: l.quantity,
+              unit_price: l.unit_price,
+              discount_type: l.discount_type ?? "percent",
+              discount_value: l.discount_value || null,
+              tax_ids: l.tax_ids ?? [],
+            })),
+          );
+        }
+        toast.success(`Auto-filled from down payment invoice ${dp.number}`);
+      })
+      .catch((err) => toast.error(extractApiError(err, "Failed to load down payment invoice")))
+      .finally(() => done("prefill"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit]);
+
   // Create mode + ?duplicate_from=<id> → pre-fill everything from that
   // invoice except number/date/due_date (reset), sales_order_id (this
   // isn't generated from that order), and attachment/signature.
@@ -230,6 +344,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
               }))
             : [emptyLine()],
         );
+        setTemplate(resolveInvoiceTemplate(source.template));
         toast.success(`Duplicated from ${source.number}`);
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load invoice")))
@@ -260,6 +375,8 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         setAttachmentName(invoice.attachment_name ?? "");
         setSignatureData(invoice.signature_data ?? "");
         setStampDuty(invoice.stamp_duty ?? false);
+        setTemplate(resolveInvoiceTemplate(invoice.template));
+        setPaidAmount(invoice.paid_amount ?? 0);
         setLines(
           invoice.lines.length
             ? invoice.lines.map((l) => ({
@@ -288,6 +405,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     if (!mitraId) fieldErrors.mitraId = "Partner is required";
     if (!date) fieldErrors.date = "Date is required";
     if (!dueDate) fieldErrors.dueDate = "Due date is required";
+    else if (date && dueDate < date) fieldErrors.dueDate = "Due date can't be before the invoice date";
     setErrors(fieldErrors);
     if (fieldErrors.mitraId || fieldErrors.date || fieldErrors.dueDate) return null;
 
@@ -350,7 +468,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     const payload: SalesInvoiceInput = {
       kind,
       sales_order_id: salesOrderId || undefined,
-      linked_invoice_id: kind === "down_payment" ? linkedInvoiceId || undefined : undefined,
+      linked_invoice_id: linkedInvoiceId || undefined,
       mitra_id: mitraId,
       number: number.trim() || undefined,
       date,
@@ -358,6 +476,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       ref_no: refNo.trim() || undefined,
       notes: notes.trim() || undefined,
       terms: terms.trim() || undefined,
+      template,
       additional_discount_type: additionalDiscountType,
       additional_discount_value: additionalDiscountValue ?? 0,
       shipping_cost: shippingCost ?? 0,
@@ -440,13 +559,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
   const selectedMitra = mitras.find((m) => m.id === mitraId) ?? null;
 
-  const statusStyle =
-    status === "confirmed"
-      ? { bg: "#eef1ff", text: "#3b57d4", dot: "#6b8fff" }
-      : status === "cancelled"
-        ? { bg: "#fef2f2", text: "#b91c1c", dot: "#f87171" }
-        : { bg: "#f1f5f9", text: "#64748b", dot: "#cbd5e1" };
-
   if (loading) {
     return (
       <div className="space-y-4">
@@ -457,66 +569,86 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     );
   }
 
+  const isDP = kind === "down_payment";
+  const docTitle = isDP ? tr("Invoice Uang Muka", "Down Payment Invoice") : tr("Invoice Penjualan", "Sales Invoice");
+
+  // Primary/secondary actions live in two places on purpose: the page header, and the sticky
+  // summary card — so "Save" is always one glance away on a long form.
+  const saveActions = readOnly ? (
+    <>
+      {status === "confirmed" && (
+        <>
+          <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
+            {tr("Kembalikan ke Draf", "Move Back to Draft")}
+          </Button>
+          <Button variant="outline" fullWidth onClick={doCancel} disabled={busy}>
+            {tr("Batalkan Invoice", "Cancel Invoice")}
+          </Button>
+        </>
+      )}
+      {status === "cancelled" && (
+        <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
+          {tr("Kembalikan ke Draf", "Move Back to Draft")}
+        </Button>
+      )}
+    </>
+  ) : (
+    <>
+      <Button variant="primary" fullWidth onClick={submit} loading={busy} className="hidden xl:inline-flex">
+        {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan Invoice", "Save Invoice")}
+      </Button>
+      {isEdit && (
+        <Button variant="outline" fullWidth onClick={doConfirm} disabled={busy}>
+          {tr("Terbitkan Invoice", "Confirm Invoice")}
+        </Button>
+      )}
+    </>
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
-        icon={FileText}
-        title={isEdit ? `Edit ${label.title}` : `Add ${label.title}`}
-        description="Bill a partner with tax-aware line items, ready to confirm and print."
+        title={isEdit ? tr(`Ubah ${docTitle}`, `Edit ${docTitle}`) : tr(`Buat ${docTitle}`, `New ${docTitle}`)}
+        description={
+          readOnly
+            ? tr("Invoice ini sudah diterbitkan atau dibatalkan — hanya bisa dilihat.", "This invoice is issued or cancelled — view only.")
+            : tr("Isi informasi, tambahkan item, lalu simpan. Ringkasan dan template ada di sisi kanan.", "Fill in the details, add items, then save. Summary and template are on the right.")
+        }
+        meta={isEdit ? <Status status={status === "confirmed" ? "confirmed" : status === "cancelled" ? "cancelled" : "draft"} label={status === "confirmed" ? statusLabels.confirmed : status === "cancelled" ? statusLabels.cancelled : statusLabels.draft} /> : undefined}
         actions={
           <>
             {isEdit && (
-              <>
-                <span className="badge" style={{ background: statusStyle.bg, color: statusStyle.text }}>
-                  <span className="size-1.5 rounded-full" style={{ background: statusStyle.dot }} />
-                  {SALES_INVOICE_STATUS_LABEL[status]}
-                </span>
-                <Button variant="outline" onClick={() => router.push(`/dashboard/penjualan/cetak/${id}`)}>
-                  Print Invoice
-                </Button>
-              </>
+              <Button variant="outline" onClick={() => router.push(`/dashboard/penjualan/cetak/${id}`)}>
+                {tr("Cetak / PDF", "Print / PDF")}
+              </Button>
             )}
-            {readOnly ? (
-              <>
-                <Button variant="ghost" onClick={() => router.push(label.basePath)}>
-                  Close
-                </Button>
-                {status === "confirmed" && (
-                  <>
-                    <Button variant="outline" onClick={doCancel} disabled={busy}>
-                      Cancel Invoice
-                    </Button>
-                    <Button variant="outline" onClick={doBackToDraft} disabled={busy}>
-                      {busy ? "Processing…" : "Move Back to Draft"}
-                    </Button>
-                  </>
-                )}
-                {status === "cancelled" && (
-                  <Button variant="outline" onClick={doBackToDraft} disabled={busy}>
-                    {busy ? "Processing…" : "Move Back to Draft"}
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => router.push(label.basePath)} disabled={busy}>
-                  Cancel
-                </Button>
-                <Button variant="primary" onClick={submit} disabled={busy}>
-                  {busy ? "Saving…" : "Save Invoice"}
-                </Button>
-                {isEdit && (
-                  <Button variant="outline" onClick={doConfirm} disabled={busy}>
-                    {busy ? "Processing…" : "Confirm Invoice"}
-                  </Button>
-                )}
-              </>
+            <Button variant="outline" onClick={() => router.push(label.basePath)} disabled={busy}>
+              {readOnly ? tr("Tutup", "Close") : tr("Batal", "Cancel")}
+            </Button>
+            {/* The sticky summary column carries Save on wide screens; this one only shows when that
+                column has dropped below the form (below xl), so the action never appears twice. */}
+            {!readOnly && (
+              <Button variant="primary" onClick={submit} loading={busy} className="xl:hidden">
+                {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan Invoice", "Save Invoice")}
+              </Button>
             )}
           </>
         }
       />
 
       <DocumentFormLayout
+        summaryActions={saveActions}
+        aside={
+          <InvoiceTemplatePanel
+            value={template}
+            onChange={setTemplate}
+            disabled={readOnly}
+            invoice={draftInvoice}
+            mitra={previewMitra}
+            company={company}
+            taxByID={taxByID}
+          />
+        }
         headerLeft={
           <AttachmentUpload
             value={{ data: attachmentData, name: attachmentName }}
@@ -529,7 +661,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         }
         metaFields={
           <>
-            <FormField label="Partner" htmlFor="inv-mitra" required error={errors.mitraId}>
+            <FormField label={tr("Mitra", "Partner")} htmlFor="inv-mitra" required error={errors.mitraId}>
               <SearchableSelect
                 id="inv-mitra"
                 value={mitraId}
@@ -539,36 +671,38 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                   if (kind === "down_payment") setLinkedInvoiceId(null);
                   setErrors((prev) => ({ ...prev, mitraId: undefined }));
                 }}
-                placeholder="Select a partner…"
+                placeholder={tr("Pilih mitra…", "Select a partner…")}
                 disabled={readOnly}
                 error={errors.mitraId}
                 onAddNew={readOnly ? undefined : () => setAddMitraOpen(true)}
-                addNewLabel="Add new partner"
+                addNewLabel={tr("Tambah mitra baru", "Add new partner")}
               />
             </FormField>
-            <FormField label="Invoice No." htmlFor="inv-number" optional>
+            <FormField label={tr("No. Invoice", "Invoice No.")} htmlFor="inv-number" optional>
               <Input
                 id="inv-number"
                 value={number}
                 onChange={(e) => setNumber(e.target.value)}
-                placeholder="Automatic if left blank"
+                placeholder={tr("Otomatis jika dikosongkan", "Automatic if left blank")}
                 disabled={readOnly}
                 className="field-sizing-content min-w-35 max-w-full"
               />
             </FormField>
-            <FormField label="Date" htmlFor="inv-date" required error={errors.date}>
+            <FormField label={tr("Tanggal", "Date")} htmlFor="inv-date" required error={errors.date}>
               <DatePickerInput
                 value={date}
                 onChange={(v) => {
                   setDate(v);
-                  setErrors((prev) => ({ ...prev, date: undefined }));
+                  // Due date can't precede the invoice date: pull it forward with the date.
+                  if (v && dueDate && dueDate < v) setDueDate(v);
+                  setErrors((prev) => ({ ...prev, date: undefined, dueDate: undefined }));
                 }}
                 id="inv-date"
                 disabled={readOnly}
                 error={errors.date}
               />
             </FormField>
-            <FormField label="Due Date" htmlFor="inv-due" required error={errors.dueDate}>
+            <FormField label={tr("Jatuh Tempo", "Due Date")} htmlFor="inv-due" required error={errors.dueDate}>
               <DatePickerInput
                 value={dueDate}
                 onChange={(v) => {
@@ -576,43 +710,44 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                   setErrors((prev) => ({ ...prev, dueDate: undefined }));
                 }}
                 id="inv-due"
+                min={date || undefined}
                 disabled={readOnly}
                 error={errors.dueDate}
               />
             </FormField>
-            <FormField label="Ref. No." htmlFor="inv-ref" optional>
+            <FormField label={tr("No. Referensi", "Ref. No.")} htmlFor="inv-ref" optional>
               <Input
                 id="inv-ref"
                 value={refNo}
                 onChange={(e) => setRefNo(e.target.value)}
-                placeholder="Partner's reference number"
+                placeholder={tr("Nomor referensi mitra", "Partner's reference number")}
                 disabled={readOnly}
               />
             </FormField>
-            <FormField label="Ship From" htmlFor="inv-ship-from" optional>
+            <FormField label={tr("Dikirim Dari", "Ship From")} htmlFor="inv-ship-from" optional>
               <Input
                 id="inv-ship-from"
                 value={shipFrom}
                 onChange={(e) => setShipFrom(e.target.value)}
-                placeholder="e.g. Main Warehouse"
+                placeholder={tr("mis. Gudang Utama", "e.g. Main Warehouse")}
                 disabled={readOnly}
               />
             </FormField>
-            <FormField label="Salesperson" htmlFor="inv-salesperson" optional>
+            <FormField label={tr("Sales", "Salesperson")} htmlFor="inv-salesperson" optional>
               <Input
                 id="inv-salesperson"
                 value={salesperson}
                 onChange={(e) => setSalesperson(e.target.value)}
-                placeholder="Who made this sale"
+                placeholder={tr("Siapa yang menjual", "Who made this sale")}
                 disabled={readOnly}
               />
             </FormField>
             {kind === "down_payment" && (
               <FormField
-                label="Linked Invoice"
+                label={tr("Invoice Terkait", "Linked Invoice")}
                 htmlFor="inv-linked"
                 optional
-                hint={mitraId ? "Which sales invoice this down payment is for." : "Select a partner first."}
+                hint={mitraId ? tr("Untuk invoice penjualan yang mana uang muka ini.", "Which sales invoice this down payment is for.") : tr("Pilih mitra terlebih dahulu.", "Select a partner first.")}
               >
                 <SearchableSelect
                   id="inv-linked"
@@ -621,7 +756,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                     .filter((i) => i.mitra_id === mitraId)
                     .map((i) => ({ value: i.id, label: i.number }))}
                   onChange={(v) => setLinkedInvoiceId(v || null)}
-                  placeholder="No linked invoice"
+                  placeholder={tr("Tanpa invoice terkait", "No linked invoice")}
                   disabled={readOnly || !mitraId}
                 />
               </FormField>
@@ -631,9 +766,9 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         belowMeta={
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
-              <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Info Perusahaan</p>
+              <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{tr("Info Perusahaan", "Company")}</p>
               <p className="mt-1 text-sm font-bold text-slate-800">{company?.name ?? "—"}</p>
-              <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+              <div className="mt-1 space-y-0.5 text-[13px] text-slate-600">
                 {company?.alamat && <p>{company.alamat}</p>}
                 {(company?.kota || company?.provinsi) && (
                   <p>{[company?.kota, company?.provinsi].filter(Boolean).join(", ")}</p>
@@ -643,18 +778,18 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
               </div>
             </div>
             <div>
-              <p className="text-[11px] font-semibold tracking-wide text-slate-400 uppercase">Info Pelanggan</p>
+              <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{tr("Info Pelanggan", "Customer")}</p>
               {selectedMitra ? (
                 <>
                   <p className="mt-1 text-sm font-bold text-slate-800">{selectedMitra.name}</p>
-                  <div className="mt-1 space-y-0.5 text-xs text-slate-500">
+                  <div className="mt-1 space-y-0.5 text-[13px] text-slate-600">
                     {selectedMitra.address && <p>{selectedMitra.address}</p>}
                     {selectedMitra.phone && <p>Telp: {selectedMitra.phone}</p>}
                     {selectedMitra.email && <p>Email: {selectedMitra.email}</p>}
                   </div>
                 </>
               ) : (
-                <p className="mt-1 text-xs text-slate-400">Select a partner to preview their details.</p>
+                <p className="mt-1 text-[13px] text-slate-500">{tr("Pilih mitra untuk melihat detailnya.", "Select a partner to see their details.")}</p>
               )}
             </div>
           </div>
@@ -665,7 +800,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
             onChange={setLines}
             taxes={taxes}
             disabled={readOnly}
-            disabledMessage="This invoice is already confirmed/cancelled — view only."
+            disabledMessage={tr("Invoice ini sudah diterbitkan/dibatalkan — hanya bisa dilihat.", "This invoice is already confirmed/cancelled — view only.")}
             additionalDiscount={{
               type: additionalDiscountType,
               value: additionalDiscountValue,
@@ -679,25 +814,11 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         }
         notes={
           <div className="space-y-4">
-            <FormField label="Notes" htmlFor="inv-notes" optional>
-              <Textarea
-                id="inv-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Internal notes (optional)"
-                rows={3}
-                disabled={readOnly}
-              />
+            <FormField label={tr("Catatan", "Notes")} htmlFor="inv-notes" optional>
+              <RichTextEditor id="inv-notes" value={notes} onChange={setNotes} placeholder={tr("Catatan (opsional)", "Notes (optional)")} disabled={readOnly} />
             </FormField>
-            <FormField label="Terms and Conditions" htmlFor="inv-terms" optional>
-              <Textarea
-                id="inv-terms"
-                value={terms}
-                onChange={(e) => setTerms(e.target.value)}
-                placeholder="Payment terms, warranty, or other conditions (optional)"
-                rows={3}
-                disabled={readOnly}
-              />
+            <FormField label={tr("Syarat & Ketentuan", "Terms and Conditions")} htmlFor="inv-terms" optional>
+              <RichTextEditor id="inv-terms" value={terms} onChange={setTerms} placeholder={tr("Termin pembayaran, garansi, atau ketentuan lain (opsional)", "Payment terms, warranty, or other conditions (optional)")} disabled={readOnly} />
             </FormField>
           </div>
         }
@@ -717,7 +838,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         }
         bottom={
           <div className="space-y-3">
-            <p className="text-xs text-slate-400">{formatDateStyle(date)}</p>
+            <p className="text-[13px] text-slate-500">{formatDateStyle(date)}</p>
             <SignatureUpload
               signatureData={signatureData}
               onSignatureChange={setSignatureData}

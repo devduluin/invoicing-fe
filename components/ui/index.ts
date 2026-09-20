@@ -2,7 +2,12 @@
 // kit) and components/onboarding/fields/ (Faktura kit); this barrel re-exports
 // the Faktura kit + Modal for existing importers during the migration.
 export { Button, type ButtonProps } from "./Button";
-export { Card } from "./Card";
+export { Card, SectionTitle } from "./Card";
+export { StatusBadge, Status, STATUS_META, type StatusTone, type StatusKey } from "./StatusBadge";
+export { EmptyState } from "./EmptyState";
+export { ErrorState } from "./ErrorState";
+export { Skeleton } from "./Skeleton";
+export { Tabs, type TabItem } from "./Tabs";
 export { Stepper, type Step } from "./Stepper";
 export { Modal } from "@/components/modal/Modal";
 export {

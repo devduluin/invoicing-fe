@@ -68,13 +68,13 @@ export const NumberSeparatorInput = forwardRef<HTMLInputElement, NumberSeparator
     return (
       <div className="flex">
         {prefix && (
-          <span className="inline-flex items-center rounded-l-xl border-[1.5px] border-r-0 border-border-strong bg-slate-50 px-3 text-[13px] font-semibold text-slate-500">
+          <span className="inline-flex items-center rounded-l-xl border border-r-0 border-border-strong bg-slate-50 px-3 text-[13px] font-semibold text-slate-500">
             {prefix}
           </span>
         )}
         {field}
         {suffix && (
-          <span className="inline-flex items-center rounded-r-xl border-[1.5px] border-l-0 border-border-strong bg-slate-50 px-3 text-[13px] font-semibold text-slate-500">
+          <span className="inline-flex items-center rounded-r-xl border border-l-0 border-border-strong bg-slate-50 px-3 text-[13px] font-semibold text-slate-500">
             {suffix}
           </span>
         )}

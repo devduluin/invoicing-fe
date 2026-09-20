@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Receipt, Plus, Copy } from "lucide-react";
+import { Receipt, Plus, Copy, FileText, Truck, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
+import { useTr } from "@/lib/useTr";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
@@ -14,7 +15,8 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
-import { buildColumns, StatusPill, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
   listSalesOrders,
   deleteSalesOrder,
@@ -29,13 +31,8 @@ const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "status", "grand_total"];
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
-const STATUS_STYLE: Record<SalesOrderStatus, { bg: string; text: string; dot: string }> = {
-  draft: { bg: "#f1f5f9", text: "#64748b", dot: "#cbd5e1" },
-  confirmed: { bg: "#eef1ff", text: "#3b57d4", dot: "#6b8fff" },
-  cancelled: { bg: "#fef2f2", text: "#b91c1c", dot: "#f87171" },
-};
-
 export default function SalesOrderClient() {
+  const tr = useTr();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-sales-order-create");
@@ -72,9 +69,8 @@ export default function SalesOrderClient() {
         header: "Status",
         render: (v) => {
           const s = (v as SalesOrderStatus) ?? "draft";
-          const style = STATUS_STYLE[s] ?? STATUS_STYLE.draft;
           return (
-            <StatusPill label={SALES_ORDER_STATUS_LABEL[s] ?? s} bg={style.bg} text={style.text} dot={style.dot} />
+            <Status status={s as StatusKey} label={SALES_ORDER_STATUS_LABEL[s] ?? s} />
           );
         },
       },
@@ -135,6 +131,7 @@ export default function SalesOrderClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "date", order: "desc" }}
         emptyTitle="No sales orders yet"
         emptyDescription="Add a sales order to record an agreement with a partner before it's invoiced."
@@ -149,7 +146,7 @@ export default function SalesOrderClient() {
                 ...(canCreate
                   ? [
                       {
-                        label: "Duplicate",
+                        label: tr("Duplikat", "Duplicate"),
                         icon: <Copy className="size-3.5" />,
                         onClick: () => router.push(`/dashboard/penjualan/order/add?duplicate_from=${order.id}`),
                       },
@@ -160,15 +157,25 @@ export default function SalesOrderClient() {
                       ...(canCreateInvoice
                         ? [
                             {
-                              label: "Create Invoice",
+                              label: tr("Buat Invoice", "Create Invoice"),
+                              icon: <FileText className="size-4" />,
+                              section: "related" as const,
                               onClick: () => router.push(`/dashboard/penjualan/invoice/add?dari_order=${order.id}`),
+                            },
+                            {
+                              label: tr("Buat Uang Muka", "Create Down Payment"),
+                              icon: <Wallet className="size-4" />,
+                              section: "related" as const,
+                              onClick: () => router.push(`/dashboard/penjualan/uang-muka/add?dari_order=${order.id}`),
                             },
                           ]
                         : []),
                       ...(canCreateDeliveryNote
                         ? [
                             {
-                              label: "Create Delivery Note",
+                              label: tr("Buat Surat Jalan", "Create Delivery Note"),
+                              icon: <Truck className="size-4" />,
+                              section: "related" as const,
                               onClick: () => router.push(`/dashboard/penjualan/surat-jalan/add?dari_order=${order.id}`),
                             },
                           ]

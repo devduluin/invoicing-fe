@@ -2,23 +2,31 @@
 
 import { useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { getMe } from "@/services/authService";
 import { useAuthStore } from "@/store/useAuthStore";
 import { readAppToken } from "@/utils/ssoCookies";
-import { getCookie, setActiveCompanyCookie } from "@/utils/cookies";
+import { setActiveCompanyCookie } from "@/utils/cookies";
 import { getRootCookieDomain } from "@/utils/cookieDomain";
+import { isUnauthorized, syncIdentity } from "@/lib/session";
 
 /**
- * On mount (and on path change): if the SSO cookie is present, hydrate the auth
- * store from `GET /api/v1/me`, then route on onboarding state:
- *   - no onboarded company + on /dashboard → /onboarding
- *   - has an onboarded company + on /onboarding → /dashboard
- * If the active-company pointer is stale (e.g. a cookie left on an abandoned
- * draft company), repair it to a real company instead of trapping the user.
- * A 401/403 is handled by the apiClient interceptor.
+ * Bootstraps auth → company → permissions, and only then declares the store
+ * "ready" (PermissionGate shows a skeleton until that point instead of a
+ * premature "access denied"):
+ *
+ *   1. SSO cookie present? no → unauthenticated.
+ *   2. GET /me → identity, companies, permissions for the active company.
+ *   3. Active-company pointer valid? If it is stale, repair it and re-fetch
+ *      (the second /me is awaited, not fire-and-forget) — permissions from the
+ *      wrong/absent company must never be trusted.
+ *   4. Route on onboarding state, then mark ready.
+ *
+ * Failure handling: only a 401 clears the identity (and the apiClient
+ * interceptor logs out, after confirming the session is really dead). Network
+ * errors / 5xx leave the store intact and surface as status "error" with a
+ * retry, instead of looking like a logout or an access denial.
  */
 export default function AuthInitializer() {
-  const { setUser, clear, isLoaded, companies, companyId } = useAuthStore();
+  const { isLoaded, companies, companyId } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
   // "create another company" flow: user is deliberately in the wizard even
@@ -31,47 +39,77 @@ export default function AuthInitializer() {
     if (fetched.current) return;
     fetched.current = true;
 
+    const { setStatus, clear } = useAuthStore.getState();
     if (!readAppToken()) {
       clear();
       return;
     }
-    getMe()
-      .then((user) => {
-        setUser(user);
-        // Company context travels as a header from the company_id cookie. If it
-        // isn't set yet (fresh login), seed it from the resolved active company
-        // so every later request carries it explicitly.
-        if (user.activeCompanyId && !getCookie("company_id") && !getCookie("app_company_id")) {
-          setActiveCompanyCookie(user.activeCompanyId, getRootCookieDomain());
-        }
-      })
-      .catch(clear);
-  }, [setUser, clear]);
+    setStatus("loading");
+    syncIdentity().catch((err) => {
+      if (isUnauthorized(err)) clear();
+      else setStatus("error");
+    });
+  }, []);
 
   useEffect(() => {
     if (!isLoaded) return;
+    const { setStatus, status } = useAuthStore.getState();
+    // A failed (re)load keeps the last good identity around; don't let an
+    // unrelated re-run flip that back to ready.
+    if (status === "error") return;
 
     const onboarded = companies.filter((c) => c.onboardingStatus === "active");
 
     // No usable company at all → onboarding is the only place to be.
     if (onboarded.length === 0) {
-      if (isDashboardPath(pathname) && !creatingCompany) router.replace("/onboarding");
+      if (isDashboardPath(pathname) && !creatingCompany) {
+        router.replace("/onboarding");
+        return;
+      }
+      setStatus("ready");
       return;
     }
 
     // Has an onboarded company, but the active-company pointer doesn't name one
-    // of them (stale cookie / abandoned draft) → point it at a real company and
-    // reload identity. Guarded so a failed cookie write can't loop.
+    // of them (first login, stale cookie, abandoned draft). With exactly one
+    // accessible company, auto-pick it (existing UX). With more than one, let
+    // the user choose instead of silently guessing — /select-company reuses
+    // this same cookie + /me refresh mechanism, just with a UI in front of it.
     const pointerOk = onboarded.some((c) => c.id === companyId);
-    if (!pointerOk && !creatingCompany && !repairedPointer.current) {
-      repairedPointer.current = true;
-      setActiveCompanyCookie(onboarded[0].id, getRootCookieDomain());
-      getMe().then(setUser).catch(() => {});
+    if (!pointerOk && !creatingCompany) {
+      if (onboarded.length > 1) {
+        if (isDashboardPath(pathname)) {
+          router.replace(`/select-company?redirect=${encodeURIComponent(pathname)}`);
+          return;
+        }
+        setStatus("ready");
+        return;
+      }
+      if (!repairedPointer.current) {
+        repairedPointer.current = true;
+        setStatus("loading");
+        setActiveCompanyCookie(onboarded[0].id, getRootCookieDomain());
+        syncIdentity().catch((err) => {
+          if (isUnauthorized(err)) useAuthStore.getState().clear();
+          else useAuthStore.getState().setStatus("error");
+        });
+        return;
+      }
+      // Repair already tried and the pointer is still off — stop instead of looping.
+      setStatus("error");
       return;
     }
 
-    if (isOnboardingPath(pathname) && !creatingCompany) router.replace("/dashboard");
-  }, [isLoaded, companies, companyId, pathname, creatingCompany, router, setUser]);
+    // /select-company never bounces on its own: it is only ever entered because the pointer was
+    // invalid, and picking a company navigates by itself. An automatic hop back to /dashboard here
+    // could ping-pong with the dashboard -> select-company redirect above whenever /me and the
+    // pointer briefly disagree.
+    if (isOnboardingPath(pathname) && !creatingCompany) {
+      router.replace("/dashboard");
+      return;
+    }
+    setStatus("ready");
+  }, [isLoaded, companies, companyId, pathname, creatingCompany, router]);
 
   return null;
 }
@@ -83,3 +121,4 @@ function isDashboardPath(pathname: string): boolean {
 function isOnboardingPath(pathname: string): boolean {
   return pathname === "/onboarding" || pathname.startsWith("/onboarding/");
 }
+

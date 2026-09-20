@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, FileSignature, FileText, Printer, Stamp } from "lucide-react";
+import { ArrowLeft, Download, FileSignature, FileText, Loader2, Printer, Stamp } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { cn } from "@/lib/utils";
@@ -11,6 +11,8 @@ import { getSalesInvoice, type SalesInvoice } from "@/services/salesInvoiceServi
 import { getMitra, type Mitra } from "@/services/mitraService";
 import { getMyCompany, type Company } from "@/services/companyService";
 import { listAllTaxes, type Tax } from "@/services/taxService";
+import { downloadInvoicePdf, PdfDownloadError } from "@/services/pdfService";
+import { useLanguageStore } from "@/store/useLanguageStore";
 import { InvoiceDocument, type InvoiceDocumentVariant } from "./InvoiceDocument";
 
 const TEMPLATES: { value: InvoiceDocumentVariant; label: string; icon: typeof FileText }[] = [
@@ -27,6 +29,8 @@ export default function InvoicePrintClient({ id }: { id: string }) {
   const [company, setCompany] = useState<Company | null>(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [variant, setVariant] = useState<InvoiceDocumentVariant>("original");
+  const [exporting, setExporting] = useState(false);
+  const language = useLanguageStore((s) => s.language);
 
   useEffect(() => {
     setLoading(true);
@@ -48,6 +52,26 @@ export default function InvoicePrintClient({ id }: { id: string }) {
       .finally(() => setLoading(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+
+  const exportPdf = async () => {
+    setExporting(true);
+    try {
+      await downloadInvoicePdf(id, variant, language);
+    } catch (err) {
+      const status = err instanceof PdfDownloadError ? err.status : 0;
+      toast.error(
+        status === 401
+          ? "Your session expired. Please sign in again."
+          : status === 503
+            ? "PDF service is busy. Try again in a moment."
+            : err instanceof Error
+              ? err.message
+              : "Failed to generate PDF",
+      );
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const taxByID = useMemo(() => new Map(taxes.map((t) => [t.id, t])), [taxes]);
 
@@ -98,9 +122,18 @@ export default function InvoicePrintClient({ id }: { id: string }) {
           <button
             type="button"
             onClick={() => window.print()}
-            className="flex items-center gap-1.5 rounded-xl bg-[linear-gradient(135deg,#6b8fff,#4f6cff)] px-4 py-2 text-xs font-bold text-white shadow-sm transition-opacity hover:opacity-90"
+            className="flex items-center gap-1.5 rounded-xl border border-border-strong bg-white px-3.5 py-2 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
           >
-            <Printer className="size-3.5" /> Print / Download PDF
+            <Printer className="size-3.5" /> Print
+          </button>
+          <button
+            type="button"
+            onClick={exportPdf}
+            disabled={exporting}
+            className="flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-[13px] font-semibold text-white transition-colors hover:bg-[#3f59d6] disabled:cursor-wait disabled:opacity-60"
+          >
+            {exporting ? <Loader2 className="size-3.5 animate-spin" /> : <Download className="size-3.5" />}
+            {exporting ? "Generating…" : "Download PDF"}
           </button>
         </div>
       </div>

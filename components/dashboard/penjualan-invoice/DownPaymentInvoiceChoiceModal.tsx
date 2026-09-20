@@ -137,7 +137,7 @@ function ChoiceCard({
     <button
       type="button"
       onClick={onClick}
-      className="flex flex-col items-center gap-2 rounded-xl border-[1.5px] border-border p-5 text-center transition-colors hover:border-primary/40 hover:bg-secondary/40"
+      className="flex flex-col items-center gap-2 rounded-xl border border-border p-5 text-center transition-colors hover:border-primary/40 hover:bg-secondary/40"
     >
       <span className="grid size-12 place-items-center rounded-xl bg-secondary text-primary-ink">
         <Icon className="size-6" />

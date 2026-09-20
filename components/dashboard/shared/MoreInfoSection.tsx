@@ -55,8 +55,16 @@ function CheckRow({
 }
 
 export function MoreInfoSection({ value, onChange, embedded = false }: Props) {
-  const [expanded, setExpanded] = useState(false);
-  const [enabled, setEnabled] = useState<Partial<Record<keyof MoreInfoValue, boolean>>>({});
+  // On an existing document the saved details start enabled (and the section
+  // expanded); on a new one everything starts unchecked.
+  const [enabled, setEnabled] = useState<Partial<Record<keyof MoreInfoValue, boolean>>>(() => ({
+    shipping_method: !!value.shipping_method,
+    tracking_no: !!value.tracking_no,
+    vehicle_no: !!value.vehicle_no,
+    driver_name: !!value.driver_name,
+    total_weight: value.total_weight !== null && value.total_weight !== undefined,
+  }));
+  const [expanded, setExpanded] = useState(() => Object.values(enabled).some(Boolean));
 
   const toggle = (key: keyof MoreInfoValue) => {
     const next = !enabled[key];

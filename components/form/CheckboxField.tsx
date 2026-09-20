@@ -45,7 +45,7 @@ export function CheckboxField({
         disabled={disabled}
         onClick={() => onChange(!checked)}
         className={cn(
-          "mt-px grid size-[18px] shrink-0 place-items-center rounded-md border-[1.5px] transition-colors",
+          "mt-px grid size-[18px] shrink-0 place-items-center rounded-md border transition-colors",
           checked || indeterminate
             ? "border-primary bg-primary text-white"
             : "border-border-strong bg-white",

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
 import { RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 
 import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import FilterButton from "@/components/layouts/page/FilterButton";
+import { useTr } from "@/lib/useTr";
 import ColumnVisibilityMenu from "./ColumnVisibilityMenu";
 
 interface Props<TData> {
@@ -19,15 +19,13 @@ interface Props<TData> {
   onRefresh: () => void;
   loading?: boolean;
   showSettingMenu?: boolean;
-  hasFilters?: boolean;
-  filterOpen?: boolean;
-  activeFilterCount?: number;
-  onToggleFilter?: () => void;
+  /** the Filters button + popover, when the page has entity filters */
+  filterSlot?: ReactNode;
   selectedCount?: number;
   onClearSelection?: () => void;
 }
 
-/** The strip at the top of the table card: search + filter/refresh/columns. */
+/** The strip at the top of the table: search on the left, filters/refresh/columns on the right. */
 export default function TableActionBar<TData>({
   table,
   tableKey,
@@ -39,13 +37,11 @@ export default function TableActionBar<TData>({
   onRefresh,
   loading = false,
   showSettingMenu = true,
-  hasFilters = false,
-  filterOpen = false,
-  activeFilterCount = 0,
-  onToggleFilter,
+  filterSlot,
   selectedCount = 0,
   onClearSelection,
 }: Props<TData>) {
+  const tr = useTr();
   const [value, setValue] = useState(search);
 
   useEffect(() => {
@@ -56,58 +52,50 @@ export default function TableActionBar<TData>({
   useEffect(() => setValue(search), [search]);
 
   return (
-    <div className="flex flex-wrap items-center gap-2 border-b border-border px-3 py-2.5 sm:px-4">
-      <div className="relative min-w-0 flex-1 sm:max-w-xs">
-        <Search className="pointer-events-none absolute top-1/2 left-3 size-3.5 -translate-y-1/2 text-slate-400" />
+    <div className="flex flex-wrap items-center gap-2 border-b border-border bg-[var(--surface-2)] px-3 py-2">
+      <div className="relative min-w-0 flex-1 sm:max-w-sm">
+        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-slate-400" aria-hidden />
         <input
-          type="text"
+          type="search"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          placeholder="Search…"
-          className="h-9 w-full rounded-xl border-[1.5px] border-border-strong bg-[#f5f7fc] pl-9 pr-8 text-xs text-foreground outline-none transition-all focus:border-primary focus:bg-white focus:ring-[3px] focus:ring-primary/15"
+          placeholder={tr("Cari…", "Search…")}
+          aria-label={tr("Cari", "Search")}
+          className="h-9 w-full rounded-lg border border-border-strong bg-white pr-8 pl-9 text-[13px] text-foreground outline-none transition-colors placeholder:text-slate-400 focus:border-primary focus:ring-[3px] focus:ring-primary/15 [&::-webkit-search-cancel-button]:hidden"
         />
         {value && (
           <button
             type="button"
             onClick={() => setValue("")}
-            aria-label="Clear search"
-            className="absolute top-1/2 right-2.5 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+            aria-label={tr("Hapus pencarian", "Clear search")}
+            className="absolute top-1/2 right-2 grid size-6 -translate-y-1/2 place-items-center rounded text-slate-400 hover:bg-slate-100 hover:text-slate-600"
           >
             <X className="size-3.5" />
           </button>
         )}
       </div>
 
+      {filterSlot}
+
       {selectedCount > 0 && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-400">{selectedCount} selected</span>
-          <button
-            type="button"
-            onClick={onClearSelection}
-            className="rounded-lg px-2 py-1 font-semibold text-slate-500 hover:bg-slate-100"
-          >
-            Cancel
+        <div className="flex items-center gap-2 text-[13px]">
+          <span className="text-slate-500">{tr(`${selectedCount} dipilih`, `${selectedCount} selected`)}</span>
+          <button type="button" onClick={onClearSelection} className="rounded-md px-2 py-1 font-semibold text-slate-600 hover:bg-slate-100">
+            {tr("Batal", "Cancel")}
           </button>
         </div>
       )}
 
-      <div className="ml-auto flex items-center gap-2">
-        {hasFilters && (
-          <FilterButton
-            activeCount={activeFilterCount}
-            open={filterOpen}
-            onClick={() => onToggleFilter?.()}
-          />
-        )}
-
+      <div className="ml-auto flex items-center gap-1.5">
         <button
           type="button"
           onClick={onRefresh}
           disabled={loading}
-          title="Refresh"
-          className="grid size-9 shrink-0 place-items-center rounded-xl border-[1.5px] border-border-strong bg-white/60 text-slate-500 transition-colors hover:bg-white hover:text-primary-ink disabled:opacity-50"
+          title={tr("Muat ulang", "Refresh")}
+          aria-label={tr("Muat ulang", "Refresh")}
+          className="grid size-9 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-50"
         >
-          <RefreshCw className={loading ? "size-3.5 animate-spin" : "size-3.5"} />
+          <RefreshCw className={loading ? "size-4 animate-spin" : "size-4"} />
         </button>
 
         {showSettingMenu && (
@@ -115,19 +103,14 @@ export default function TableActionBar<TData>({
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                title="Configure columns"
-                className="grid size-9 shrink-0 place-items-center rounded-xl border-[1.5px] border-border-strong bg-white/60 text-slate-500 transition-colors hover:bg-white hover:text-primary-ink"
+                title={tr("Atur kolom", "Configure columns")}
+                aria-label={tr("Atur kolom", "Configure columns")}
+                className="grid size-9 shrink-0 place-items-center rounded-lg text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 data-[state=open]:bg-slate-100"
               >
-                <SlidersHorizontal className="size-3.5" />
+                <SlidersHorizontal className="size-4" />
               </button>
             </DropdownMenuTrigger>
-            <ColumnVisibilityMenu
-              table={table}
-              tableKey={tableKey}
-              availableColumns={availableColumns}
-              attribute={attribute}
-              columnLabel={columnLabel}
-            />
+            <ColumnVisibilityMenu table={table} tableKey={tableKey} availableColumns={availableColumns} attribute={attribute} columnLabel={columnLabel} />
           </DropdownMenu>
         )}
       </div>

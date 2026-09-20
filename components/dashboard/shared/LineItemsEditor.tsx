@@ -1,6 +1,9 @@
 "use client";
 
 import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { useTr } from "@/lib/useTr";
 
 import { MultiSelect, NumberSeparatorInput, Input } from "@/components/form";
 import { Button } from "@/components/ui";
@@ -139,6 +142,7 @@ interface TotalsProps {
  *  of stacked under the line-items table (see DocumentFormLayout). Also
  *  used internally by `LineItemsEditor` when `hideTotals` isn't set. */
 export function LineItemsTotals({ lines, taxes, disabled, additionalDiscount, shippingCost }: TotalsProps) {
+  const tr = useTr();
   const { subtotal, discountTotal, taxTotal, grandTotal } = calcDocumentTotals(
     lines,
     taxes,
@@ -146,19 +150,23 @@ export function LineItemsTotals({ lines, taxes, disabled, additionalDiscount, sh
     shippingCost,
   );
 
+  const row = "flex items-center justify-between gap-3 py-1.5";
+  const label = "shrink-0 text-slate-600";
+  const value = "text-right tabular-nums text-slate-900";
+
   return (
-    <div className="w-full space-y-0.5 text-[13px]">
-      <div className="flex items-center justify-between py-1.5">
-        <span className="text-slate-400">Subtotal</span>
-        <span className="font-mono text-slate-700">{money.format(subtotal)}</span>
+    <div className="w-full divide-y divide-border text-[13px]">
+      <div className={row}>
+        <span className={label}>Subtotal</span>
+        <span className={value}>{money.format(subtotal)}</span>
       </div>
-      <div className="flex items-center justify-between border-t border-border py-1.5">
-        <span className="text-slate-400">Total Discount</span>
-        <span className="font-mono text-slate-700">{money.format(discountTotal)}</span>
+      <div className={row}>
+        <span className={label}>{tr("Total Diskon", "Total Discount")}</span>
+        <span className={value}>{money.format(discountTotal)}</span>
       </div>
       {additionalDiscount && (
-        <div className="flex items-center justify-between gap-3 border-t border-border py-1.5">
-          <span className="shrink-0 text-slate-400">Additional Discount</span>
+        <div className={row}>
+          <span className={label}>{tr("Diskon Tambahan", "Additional Discount")}</span>
           <div className="flex">
             <button
               type="button"
@@ -166,10 +174,11 @@ export function LineItemsTotals({ lines, taxes, disabled, additionalDiscount, sh
                 additionalDiscount.onTypeChange(additionalDiscount.type === "amount" ? "percent" : "amount")
               }
               disabled={disabled}
-              title="Switch between % and Rp"
-              className="inline-flex w-14 shrink-0 items-center justify-center gap-1 rounded-l-xl border-[1.5px] border-r-0 border-border-strong bg-secondary/50 text-[11px] font-bold text-primary-ink transition-colors hover:bg-secondary disabled:pointer-events-none disabled:opacity-60"
+              title={tr("Ganti antara % dan Rp", "Switch between % and Rp")}
+              aria-label={tr("Ganti antara % dan Rp", "Switch between % and Rp")}
+              className="inline-flex w-14 shrink-0 items-center justify-center gap-1 rounded-l-lg border border-r-0 border-border-strong bg-secondary/50 text-xs font-semibold text-primary-ink transition-colors hover:bg-secondary disabled:pointer-events-none disabled:opacity-60"
             >
-              <ArrowLeftRight className="size-3" />
+              <ArrowLeftRight className="size-3" aria-hidden />
               {additionalDiscount.type === "amount" ? "Rp" : "%"}
             </button>
             <NumberSeparatorInput
@@ -179,14 +188,14 @@ export function LineItemsTotals({ lines, taxes, disabled, additionalDiscount, sh
               min={0}
               max={additionalDiscount.type === "percent" ? 100 : undefined}
               disabled={disabled}
-              className="w-32 rounded-l-none"
+              className="w-28 rounded-l-none"
             />
           </div>
         </div>
       )}
       {shippingCost && (
-        <div className="flex items-center justify-between gap-3 border-t border-border py-1.5">
-          <span className="shrink-0 text-slate-400">Shipping Cost</span>
+        <div className={row}>
+          <span className={label}>{tr("Ongkos Kirim", "Shipping Cost")}</span>
           <NumberSeparatorInput
             value={shippingCost.value}
             onChange={shippingCost.onChange}
@@ -198,14 +207,27 @@ export function LineItemsTotals({ lines, taxes, disabled, additionalDiscount, sh
           />
         </div>
       )}
-      <div className="flex items-center justify-between border-t border-border py-1.5">
-        <span className="text-slate-400">Tax</span>
-        <span className="font-mono text-slate-700">{money.format(taxTotal)}</span>
+      <div className={row}>
+        <span className={label}>{tr("Pajak", "Tax")}</span>
+        <span className={value}>{money.format(taxTotal)}</span>
       </div>
-      <div className="flex items-center justify-between border-t border-border pt-2.5 text-sm font-bold text-slate-800">
-        <span>Total</span>
-        <span className="font-mono text-primary-ink">{money.format(grandTotal)}</span>
+      <div className="flex items-center justify-between gap-3 pt-3">
+        <span className="text-sm font-semibold text-slate-900">Total</span>
+        <span className="font-display text-xl font-semibold tabular-nums text-primary-ink">{money.format(grandTotal)}</span>
       </div>
+    </div>
+  );
+}
+
+/** A field's label is visible whenever the row is stacked (narrow container) and becomes a
+ *  screen-reader-only column header once the table layout takes over (wide container).
+ *  Module-level on purpose: a component declared inside the editor would get a new identity on
+ *  every render and remount its inputs (losing focus on each keystroke). */
+function Cell({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <span className="mb-1 block text-xs font-medium text-slate-600 @[900px]:sr-only">{label}</span>
+      {children}
     </div>
   );
 }
@@ -246,13 +268,14 @@ export function LineItemsEditor({
   onChange,
   taxes,
   disabled = false,
-  disabledMessage = "This document is already confirmed/cancelled — view only.",
+  disabledMessage,
   minLines = 1,
   additionalDiscount,
   shippingCost,
   hideTotals = false,
   embedded = false,
 }: Props) {
+  const tr = useTr();
   const taxOptions = taxes
     .filter((t) => t.is_active)
     .map((t) => ({ value: t.id, label: `${t.name} (${t.rate}%)` }));
@@ -267,110 +290,135 @@ export function LineItemsEditor({
 
   const addRow = () => onChange([...lines, emptyLine()]);
 
+  const L = {
+    product: tr("Produk", "Product"),
+    description: tr("Deskripsi", "Description"),
+    qty: "Qty",
+    price: tr("Harga", "Price"),
+    discount: tr("Diskon", "Discount"),
+    tax: tr("Pajak", "Tax"),
+    amount: tr("Jumlah", "Amount"),
+  };
   return (
-    <div className={embedded ? undefined : "overflow-hidden rounded-2xl border-[1.5px] border-border bg-card"}>
-      <div className="overflow-x-auto">
-        <div className="min-w-[1150px]">
-          <div
-            className={`${GRID_COLS} border-b border-border bg-table-head px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400`}
-          >
-            <span>Product</span>
-            <span>Description</span>
-            <span className="text-right">Qty</span>
-            <span className="text-right">Price</span>
-            <span className="text-right">Discount</span>
-            <span>Tax</span>
-            <span className="text-right">Amount</span>
-            <span />
-          </div>
+    <div className={cn("@container", embedded ? undefined : "overflow-hidden rounded-2xl border border-border bg-card")}>
+      <div
+        className={`${GRID_COLS} hidden border-b border-border bg-table-head px-3 py-1.5 text-xs font-semibold text-slate-600 @[900px]:grid`}
+        aria-hidden
+      >
+        <span>{L.product}</span>
+        <span>{L.description}</span>
+        <span className="text-right">{L.qty}</span>
+        <span className="text-right">{L.price}</span>
+        <span className="text-right">{L.discount}</span>
+        <span>{L.tax}</span>
+        <span className="text-right">{L.amount}</span>
+        <span />
+      </div>
 
-          <div className="divide-y divide-row-border">
-            {lines.map((line) => {
-              const c = calcLine(line, taxes);
-              return (
-                <div key={line.key} className={`${GRID_COLS} items-center px-4 py-2.5`}>
-                  <Input
-                    value={line.product_name}
-                    onChange={(e) => update(line.key, { product_name: e.target.value })}
-                    placeholder="Product/service name"
+      <div className="divide-y divide-row-border">
+        {lines.map((line, i) => {
+          const c = calcLine(line, taxes);
+          return (
+            <div
+              key={line.key}
+              className="grid grid-cols-6 items-start gap-x-2 gap-y-2.5 px-3 py-2.5 @[900px]:grid-cols-[minmax(150px,1.6fr)_minmax(130px,1.4fr)_88px_120px_150px_minmax(140px,1.2fr)_110px_36px] @[900px]:items-center @[900px]:py-1.5"
+            >
+              <Cell label={L.product} className="col-span-6 @[560px]:col-span-3 @[900px]:col-span-1">
+                <Input
+                  value={line.product_name}
+                  onChange={(e) => update(line.key, { product_name: e.target.value })}
+                  placeholder={tr("Nama produk/jasa", "Product/service name")}
+                  aria-label={`${L.product} ${i + 1}`}
+                  disabled={disabled}
+                />
+              </Cell>
+              <Cell label={L.description} className="col-span-6 @[560px]:col-span-3 @[900px]:col-span-1">
+                <Input
+                  value={line.description}
+                  onChange={(e) => update(line.key, { description: e.target.value })}
+                  placeholder={tr("Deskripsi (opsional)", "Description (optional)")}
+                  aria-label={`${L.description} ${i + 1}`}
+                  disabled={disabled}
+                />
+              </Cell>
+              <Cell label={L.qty} className="col-span-3 @[560px]:col-span-1 @[900px]:col-span-1">
+                <NumberSeparatorInput
+                  value={line.quantity}
+                  onChange={(v) => update(line.key, { quantity: v })}
+                  placeholder="0"
+                  decimals={2}
+                  disabled={disabled}
+                />
+              </Cell>
+              <Cell label={L.price} className="col-span-3 @[560px]:col-span-2 @[900px]:col-span-1">
+                <NumberSeparatorInput
+                  value={line.unit_price}
+                  onChange={(v) => update(line.key, { unit_price: v })}
+                  placeholder="0"
+                  disabled={disabled}
+                />
+              </Cell>
+              <Cell label={L.discount} className="col-span-6 @[560px]:col-span-3 @[900px]:col-span-1">
+                <div className="flex">
+                  <button
+                    type="button"
+                    onClick={() => update(line.key, { discount_type: line.discount_type === "amount" ? "percent" : "amount" })}
                     disabled={disabled}
-                  />
-                  <Input
-                    value={line.description}
-                    onChange={(e) => update(line.key, { description: e.target.value })}
-                    placeholder="Description (optional)"
-                    disabled={disabled}
-                  />
+                    title={tr("Ganti antara % dan Rp", "Switch between % and Rp")}
+                    aria-label={tr("Ganti antara % dan Rp", "Switch between % and Rp")}
+                    className="inline-flex w-14 shrink-0 items-center justify-center gap-1 rounded-l-lg border border-r-0 border-border-strong bg-secondary/50 text-xs font-semibold text-primary-ink transition-colors hover:bg-secondary disabled:pointer-events-none disabled:opacity-60"
+                  >
+                    <ArrowLeftRight className="size-3" aria-hidden />
+                    {line.discount_type === "amount" ? "Rp" : "%"}
+                  </button>
                   <NumberSeparatorInput
-                    value={line.quantity}
-                    onChange={(v) => update(line.key, { quantity: v })}
+                    value={line.discount_value}
+                    onChange={(v) => update(line.key, { discount_value: v })}
                     placeholder="0"
-                    decimals={2}
+                    min={0}
+                    max={line.discount_type === "percent" ? 100 : undefined}
                     disabled={disabled}
+                    className="rounded-l-none"
                   />
-                  <NumberSeparatorInput
-                    value={line.unit_price}
-                    onChange={(v) => update(line.key, { unit_price: v })}
-                    placeholder="0"
-                    disabled={disabled}
-                  />
-                  <div className="flex">
-                    <button
-                      type="button"
-                      onClick={() =>
-                        update(line.key, { discount_type: line.discount_type === "amount" ? "percent" : "amount" })
-                      }
-                      disabled={disabled}
-                      title="Switch between % and Rp"
-                      className="inline-flex w-14 shrink-0 items-center justify-center gap-1 rounded-l-xl border-[1.5px] border-r-0 border-border-strong bg-secondary/50 text-[11px] font-bold text-primary-ink transition-colors hover:bg-secondary disabled:pointer-events-none disabled:opacity-60"
-                    >
-                      <ArrowLeftRight className="size-3" />
-                      {line.discount_type === "amount" ? "Rp" : "%"}
-                    </button>
-                    <NumberSeparatorInput
-                      value={line.discount_value}
-                      onChange={(v) => update(line.key, { discount_value: v })}
-                      placeholder="0"
-                      min={0}
-                      max={line.discount_type === "percent" ? 100 : undefined}
-                      disabled={disabled}
-                      className="rounded-l-none"
-                    />
-                  </div>
-                  <MultiSelect
-                    value={line.tax_ids}
-                    options={taxOptions}
-                    onChange={(v) => update(line.key, { tax_ids: v })}
-                    placeholder="No tax"
-                    disabled={disabled}
-                  />
-                  <span className="text-right font-mono text-[12.5px] text-slate-700">
-                    {money.format(c.lineTotal)}
-                  </span>
-                  {!disabled && (
-                    <button
-                      type="button"
-                      onClick={() => remove(line.key)}
-                      disabled={lines.length <= minLines}
-                      className="grid size-8 place-items-center self-center rounded-lg text-slate-300 transition-colors hover:bg-rose-50 hover:text-rose-400 disabled:pointer-events-none disabled:opacity-30"
-                      title="Delete line"
-                    >
-                      <Trash2 className="size-[15px]" />
-                    </button>
-                  )}
                 </div>
-              );
-            })}
-          </div>
-        </div>
+              </Cell>
+              <Cell label={L.tax} className="col-span-4 @[560px]:col-span-4 @[900px]:col-span-1">
+                <MultiSelect
+                  value={line.tax_ids}
+                  options={taxOptions}
+                  onChange={(v) => update(line.key, { tax_ids: v })}
+                  placeholder={tr("Tanpa pajak", "No tax")}
+                  disabled={disabled}
+                />
+              </Cell>
+              <Cell label={L.amount} className="col-span-2 @[560px]:col-span-1 @[900px]:col-span-1">
+                <p className="flex h-9 items-center justify-end text-[13px] font-medium tabular-nums text-slate-900 @[900px]:h-auto">{money.format(c.lineTotal)}</p>
+              </Cell>
+              <div className="col-span-6 flex justify-end @[560px]:col-span-1 @[560px]:self-end @[900px]:col-span-1 @[900px]:self-center">
+                {!disabled && (
+                  <button
+                    type="button"
+                    onClick={() => remove(line.key)}
+                    disabled={lines.length <= minLines}
+                    className="grid size-9 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-900 disabled:pointer-events-none disabled:opacity-30"
+                    title={tr("Hapus baris", "Delete line")}
+                    aria-label={tr(`Hapus baris ${i + 1}`, `Delete line ${i + 1}`)}
+                  >
+                    <Trash2 className="size-4" />
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
 
       <div className="border-t border-border bg-slate-50/60 px-4 py-3">
         {disabled ? (
-          <span className="text-[11px] font-medium text-slate-400">{disabledMessage}</span>
+          <span className="text-[13px] text-slate-500">{disabledMessage ?? tr("Dokumen ini sudah diterbitkan/dibatalkan — hanya bisa dilihat.", "This document is already confirmed/cancelled — view only.")}</span>
         ) : (
-          <Button variant="outline" size="sm" leftIcon={<Plus className="size-3.5" />} onClick={addRow}>
-            Add Line
+          <Button variant="outline" size="sm" leftIcon={<Plus className="size-4" />} onClick={addRow}>
+            {tr("Tambah Baris", "Add Line")}
           </Button>
         )}
       </div>

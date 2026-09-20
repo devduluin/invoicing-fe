@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Mail, Plus } from "lucide-react";
 import { Button, FieldError, Input, Label, Select } from "@/components/ui";
+import { useOnb } from "@/lib/onboardingText";
 import InviteRow from "./InviteRow";
 import { FALLBACK_INVITE_ROLE_NAMES, roleLabel } from "@/lib/onboarding";
 import { listRoles, type Role } from "@/services/roleService";
@@ -22,6 +23,7 @@ export default function Step4Invite({
   submitting: boolean;
   onFinish: () => void;
 }) {
+  const { t, tr } = useOnb();
   const [email, setEmail] = useState("");
   const [roleId, setRoleId] = useState(draft.invites[0]?.role_id ?? "");
   const [roles, setRoles] = useState<Role[]>([]);
@@ -50,11 +52,11 @@ export default function Step4Invite({
 
   const addInvite = () => {
     const value = email.trim().toLowerCase();
-    if (!value) return setError("Enter an email address.");
-    if (!EMAIL_RE.test(value)) return setError("Invalid email format.");
-    if (!roleId) return setError("Select a member role.");
-    if (remaining <= 0) return setError("The free invitation quota is full.");
-    if (invites.some((i) => i.email === value)) return setError("This email is already in the list.");
+    if (!value) return setError(t("Enter an email address."));
+    if (!EMAIL_RE.test(value)) return setError(t("Invalid email format."));
+    if (!roleId) return setError(t("Select a member role."));
+    if (remaining <= 0) return setError(t("The free invitation quota is full."));
+    if (invites.some((i) => i.email === value)) return setError(t("This email is already in the list."));
 
     const entry: OnboardingInvite = { email: value, role_id: roleId, role_label: roleName(roleId) };
     patch({ invites: [...invites, entry] });
@@ -69,15 +71,15 @@ export default function Step4Invite({
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-xl font-bold text-foreground text-balance">Invite your team</h2>
+        <h2 className="text-xl font-bold text-foreground text-balance">{t("Invite your team")}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Free for {FREE_QUOTA} people. Invitations are sent when you press "Finish".
+          {tr(`Gratis untuk ${FREE_QUOTA} orang. Undangan dikirim saat Anda menekan "Selesai".`, `Free for ${FREE_QUOTA} people. Invitations are sent when you press "Finish".`)}
         </p>
       </div>
 
       <div className="flex flex-col gap-3">
         <div>
-          <Label htmlFor="invite-email">Member email</Label>
+          <Label htmlFor="invite-email">{t("Member email")}</Label>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="flex-1">
               <Input
@@ -99,7 +101,7 @@ export default function Step4Invite({
             </div>
             <div className="sm:w-44">
               <Select
-                aria-label="Member role"
+                aria-label={t("Member role")}
                 options={roleOptions}
                 value={roleId}
                 onChange={(e) => setRoleId(e.target.value)}
@@ -118,11 +120,11 @@ export default function Step4Invite({
           onClick={addInvite}
           disabled={remaining <= 0}
         >
-          Add invitation
+          {t("Add invitation")}
         </Button>
 
         <p className="text-xs text-muted-foreground">
-          Remaining quota: <strong className="text-foreground">{Math.max(0, remaining)}</strong> / {FREE_QUOTA}
+          {tr("Sisa kuota", "Remaining quota")}: <strong className="text-foreground">{Math.max(0, remaining)}</strong> / {FREE_QUOTA}
         </p>
       </div>
 
@@ -143,13 +145,13 @@ export default function Step4Invite({
       <div className="flex flex-col items-center gap-2.5">
         <Button fullWidth onClick={onFinish} disabled={submitting}>
           {submitting
-            ? "Saving…"
+            ? t("Saving…")
             : invites.length > 0
-              ? `Finish · invite ${invites.length} ${invites.length === 1 ? "person" : "people"}`
-              : "Finish"}
+              ? tr(`Selesai · undang ${invites.length} orang`, `Finish · invite ${invites.length} ${invites.length === 1 ? "person" : "people"}`)
+              : t("Finish")}
         </Button>
         <Button variant="link" onClick={onFinish} disabled={submitting}>
-          Skip &amp; finish
+          {t("Skip & finish")}
         </Button>
       </div>
     </div>

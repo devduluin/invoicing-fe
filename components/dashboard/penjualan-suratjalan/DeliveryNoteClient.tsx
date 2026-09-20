@@ -1,17 +1,23 @@
 "use client";
 
+import { htmlToPlainText } from "@/lib/richText";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Truck, Plus } from "lucide-react";
 
+import toast from "react-hot-toast";
+
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
+import { extractApiError } from "@/lib/apiError";
 import type { TableRow } from "@/app/types/apiResponses";
 import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
+import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
+import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
-import { listDeliveryNotes } from "@/services/deliveryNoteService";
+import { listDeliveryNotes, deleteDeliveryNote } from "@/services/deliveryNoteService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
 
 const TABLE_KEY = "delivery-notes";
@@ -21,8 +27,11 @@ export default function DeliveryNoteClient() {
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-delivery-note-create");
+  const canUpdate = hasPermission(permissions, "invoice-delivery-note-update");
+  const canDelete = hasPermission(permissions, "invoice-delivery-note-delete");
 
   const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [confirm, setConfirm] = useState<{ id: string; number: string } | null>(null);
   const list = useMasterList(listDeliveryNotes, {});
 
   useEffect(() => {
@@ -41,7 +50,7 @@ export default function DeliveryNoteClient() {
         noSort: true,
         render: (v) => mitraNameByID.get(String(v ?? "")) ?? "—",
       },
-      { id: "notes", header: "Notes", noSort: true },
+      { id: "notes", header: "Notes", noSort: true, render: (v) => htmlToPlainText(String(v ?? "")) || "—" },
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
     [mitraNameByID],
@@ -49,14 +58,29 @@ export default function DeliveryNoteClient() {
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
 
+  const goTo = (id: string) => router.push(`/dashboard/penjualan/surat-jalan/${id}`);
+
+  const remove = async () => {
+    if (!confirm) return;
+    try {
+      await deleteDeliveryNote(confirm.id);
+      toast.success("Delivery note deleted");
+      setConfirm(null);
+      list.refresh();
+    } catch (err) {
+      toast.error(extractApiError(err, "Failed to delete delivery note"));
+    }
+  };
+
   return (
+    <>
     <MasterTable
       tableKey={TABLE_KEY}
       header={
         <PageHeader
           icon={Truck}
           title="Delivery Notes"
-          description="Record of goods physically shipped to a partner — once created, it can't be edited or deleted."
+          description="Record of goods physically shipped to a partner."
           actions={
             canCreate && (
               <Button
@@ -80,9 +104,29 @@ export default function DeliveryNoteClient() {
       updateParams={list.updateParams}
       onRefresh={list.refresh}
       loading={list.loading}
+      error={list.error}
       defaultSort={{ column: "date", order: "desc" }}
       emptyTitle="No delivery notes yet"
+      onRowClick={canUpdate ? (row) => goTo(String(row.id)) : undefined}
+      renderRowActions={(row) => {
+        const doc = row as unknown as { id: string; number: string };
+        return (
+          <RowActionDropdown
+            onEdit={canUpdate ? () => goTo(doc.id) : undefined}
+            onDelete={canDelete ? () => setConfirm({ id: doc.id, number: doc.number }) : undefined}
+          />
+        );
+      }}
       emptyDescription="Add a delivery note to record goods shipped to a partner."
     />
+
+    <ConfirmDeleteModal
+      open={!!confirm}
+      title="Delete delivery note?"
+      description={confirm ? `"${confirm.number}" will be deleted.` : undefined}
+      onConfirm={remove}
+      onClose={() => setConfirm(null)}
+    />
+    </>
   );
 }

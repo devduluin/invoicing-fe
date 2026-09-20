@@ -4,14 +4,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Wallet, Plus } from "lucide-react";
 
+import toast from "react-hot-toast";
+
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
+import { extractApiError } from "@/lib/apiError";
 import type { TableRow } from "@/app/types/apiResponses";
 import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
+import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
+import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
-import { listPurchaseReceipts, PAYMENT_METHOD_LABEL, type PurchaseReceiptPaymentMethod } from "@/services/purchaseReceiptService";
+import {
+  listPurchaseReceipts,
+  deletePurchaseReceipt,
+  PAYMENT_METHOD_LABEL,
+  type PurchaseReceiptPaymentMethod,
+} from "@/services/purchaseReceiptService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
 
 const TABLE_KEY = "purchase-receipts";
@@ -23,8 +33,11 @@ export default function PurchaseReceiptClient() {
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-purchase-receipt-create");
+  const canUpdate = hasPermission(permissions, "invoice-purchase-receipt-update");
+  const canDelete = hasPermission(permissions, "invoice-purchase-receipt-delete");
 
   const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [confirm, setConfirm] = useState<{ id: string; number: string } | null>(null);
   const list = useMasterList(listPurchaseReceipts, {});
 
   useEffect(() => {
@@ -61,14 +74,29 @@ export default function PurchaseReceiptClient() {
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
 
+  const goTo = (id: string) => router.push(`/dashboard/pembelian/kuitansi/${id}`);
+
+  const remove = async () => {
+    if (!confirm) return;
+    try {
+      await deletePurchaseReceipt(confirm.id);
+      toast.success("Receipt deleted");
+      setConfirm(null);
+      list.refresh();
+    } catch (err) {
+      toast.error(extractApiError(err, "Failed to delete receipt"));
+    }
+  };
+
   return (
+    <>
     <MasterTable
       tableKey={TABLE_KEY}
       header={
         <PageHeader
           icon={Wallet}
           title="Purchase Receipts"
-          description="Proof of payment made to a supplier — once created, it can't be edited or deleted."
+          description="Proof of payment made to a supplier."
           actions={
             canCreate && (
               <Button
@@ -92,9 +120,29 @@ export default function PurchaseReceiptClient() {
       updateParams={list.updateParams}
       onRefresh={list.refresh}
       loading={list.loading}
+      error={list.error}
       defaultSort={{ column: "date", order: "desc" }}
       emptyTitle="No receipts yet"
+      onRowClick={canUpdate ? (row) => goTo(String(row.id)) : undefined}
+      renderRowActions={(row) => {
+        const doc = row as unknown as { id: string; number: string };
+        return (
+          <RowActionDropdown
+            onEdit={canUpdate ? () => goTo(doc.id) : undefined}
+            onDelete={canDelete ? () => setConfirm({ id: doc.id, number: doc.number }) : undefined}
+          />
+        );
+      }}
       emptyDescription="Add a receipt to record a payment made to a supplier."
     />
+
+    <ConfirmDeleteModal
+      open={!!confirm}
+      title="Delete receipt?"
+      description={confirm ? `"${confirm.number}" will be deleted.` : undefined}
+      onConfirm={remove}
+      onClose={() => setConfirm(null)}
+    />
+    </>
   );
 }

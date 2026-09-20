@@ -101,6 +101,7 @@ export default function BankAccountClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "bank_name", order: "asc" }}
         emptyTitle="No accounts yet"
         emptyDescription="Add a bank account so partners know where to send transfers."

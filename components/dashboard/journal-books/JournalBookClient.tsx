@@ -116,6 +116,7 @@ export default function JournalBookClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "code", order: "asc" }}
         emptyTitle="No journal books yet"
         emptyDescription="Default journal books are created automatically — add new ones if needed."

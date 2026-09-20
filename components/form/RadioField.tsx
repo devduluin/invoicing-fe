@@ -43,14 +43,14 @@ export function RadioField({
               disabled={o.disabled}
               onClick={() => onChange(o.value)}
               className={cn(
-                "flex items-start gap-2.5 rounded-xl border-[1.5px] p-3 text-left transition-all",
+                "flex items-start gap-2.5 rounded-xl border p-3 text-left transition-all",
                 on ? "border-primary bg-secondary" : "border-border-strong hover:border-slate-300",
                 o.disabled && "cursor-not-allowed opacity-50",
               )}
             >
               <span
                 className={cn(
-                  "mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border-[1.5px]",
+                  "mt-0.5 grid size-4 shrink-0 place-items-center rounded-full border",
                   on ? "border-primary" : "border-border-strong",
                 )}
               >
@@ -89,7 +89,7 @@ export function RadioField({
             />
             <span
               className={cn(
-                "grid size-4 place-items-center rounded-full border-[1.5px] transition-colors",
+                "grid size-4 place-items-center rounded-full border transition-colors",
                 on ? "border-primary" : "border-border-strong",
               )}
             >

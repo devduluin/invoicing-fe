@@ -116,7 +116,7 @@ export function MultiSelect({
         <Popover.Content
           align="start"
           sideOffset={4}
-          className="z-50 w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-xl border border-border bg-white shadow-xl shadow-slate-900/10 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+          className="z-[60] w-[var(--radix-popover-trigger-width)] overflow-hidden rounded-lg border border-border bg-card shadow-pop data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
         >
           <div className="flex items-center gap-1 border-b border-border">
             <div className="relative min-w-0 flex-1">
@@ -185,7 +185,7 @@ export function MultiSelect({
                     </span>
                     <span
                       className={cn(
-                        "grid size-4 shrink-0 place-items-center rounded border-[1.5px]",
+                        "grid size-4 shrink-0 place-items-center rounded border",
                         checked ? "border-primary bg-primary text-white" : "border-border-strong text-transparent",
                       )}
                     >

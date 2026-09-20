@@ -2,6 +2,9 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import type { ReactNode } from "react";
+import { CheckCircle2, CircleDashed } from "lucide-react";
+
+import { StatusBadge } from "@/components/ui/StatusBadge";
 
 import { cn } from "@/lib/utils";
 import type { TableRow } from "@/app/types/apiResponses";
@@ -25,42 +28,7 @@ export interface ColumnSpec<T extends TableRow> {
 }
 
 function BoolPill({ on, labels }: { on: boolean; labels: [string, string] }) {
-  return (
-    <span
-      className="badge"
-      style={
-        on
-          ? { background: "#ecfdf5", color: "#065f46" }
-          : { background: "#f1f5f9", color: "#64748b" }
-      }
-    >
-      <span
-        className="size-1.5 rounded-full"
-        style={{ background: on ? "#34d399" : "#cbd5e1" }}
-      />
-      {on ? labels[0] : labels[1]}
-    </span>
-  );
-}
-
-/** Reference-style status pill with a leading dot. */
-export function StatusPill({
-  label,
-  bg,
-  text,
-  dot,
-}: {
-  label: string;
-  bg: string;
-  text: string;
-  dot: string;
-}) {
-  return (
-    <span className="badge" style={{ background: bg, color: text }}>
-      <span className="size-1.5 rounded-full" style={{ background: dot }} />
-      {label}
-    </span>
-  );
+  return <StatusBadge label={on ? labels[0] : labels[1]} tone={on ? "success" : "neutral"} icon={on ? CheckCircle2 : CircleDashed} />;
 }
 
 /** Build TanStack ColumnDefs from a compact spec list. */
@@ -78,11 +46,11 @@ export function buildColumns<T extends TableRow>(specs: ColumnSpec<T>[]): Column
         if (spec.render) return spec.render(value, row.original);
         switch (spec.kind) {
           case "mono":
-            return <span className="font-mono text-[12px] font-bold text-primary-ink">{fmtText(value)}</span>;
+            return <span className="font-mono text-[13px] font-semibold text-primary-ink">{fmtText(value)}</span>;
           case "date":
-            return <span className="text-slate-500">{formatDateStyle(value)}</span>;
+            return <span className="text-slate-600">{formatDateStyle(value)}</span>;
           case "datetime":
-            return <span className="text-slate-500">{formatDateTimeStyle(value)}</span>;
+            return <span className="text-slate-600">{formatDateTimeStyle(value)}</span>;
           case "bool":
             return <BoolPill on={Boolean(value)} labels={spec.boolLabels ?? ["Aktif", "Nonaktif"]} />;
           default:

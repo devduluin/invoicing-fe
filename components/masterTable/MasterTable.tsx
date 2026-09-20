@@ -18,12 +18,13 @@ import {
   useSensors,
 } from "@dnd-kit/core";
 import { SortableContext, horizontalListSortingStrategy } from "@dnd-kit/sortable";
-import { Check, Square } from "lucide-react";
+import { Check } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import type { GetAllPayload, TableMeta, TableRow } from "@/app/types/apiResponses";
 import { useTableColumnStore } from "@/store/useTableColumnStore";
-import FilterPanel, { type FilterConfig } from "@/components/layouts/page/FilterPanel";
+import { ActiveFilterChips, FilterPopover, type FilterConfig } from "@/components/layouts/page/FilterPanel";
 import TableActionBar from "./TableActionBar";
 import DraggableHeader from "./DraggableHeader";
 import PaginationControls from "./PaginationControls";
@@ -32,9 +33,10 @@ import TableEmptyState from "./TableEmptyState";
 
 export interface MasterTableProps<T extends TableRow> {
   tableKey: string;
-  /** Page header (icon/title/description/actions) rendered as the top strip
-   *  of this same card, instead of floating above it. */
+  /** Page header (title/description/actions) — rendered ABOVE the table card. */
   header?: ReactNode;
+  /** Optional strip between the header and the card — quick views such as "All / Unpaid / Overdue". */
+  beforeTable?: ReactNode;
   columns: ColumnDef<T, unknown>[];
   data: T[];
   /** column ids the backend exposes (falls back to the ColumnDef ids) */
@@ -47,6 +49,8 @@ export interface MasterTableProps<T extends TableRow> {
   updateParams: (patch: Partial<GetAllPayload>, replace?: boolean) => void;
   onRefresh: () => void;
   loading?: boolean;
+  /** the last load failed — shows a retry state instead of an empty table */
+  error?: string | null;
   defaultSort?: { column: string; order: "asc" | "desc" };
   renderRowActions?: (row: T) => ReactNode;
   onRowClick?: (row: T) => void;
@@ -56,6 +60,12 @@ export interface MasterTableProps<T extends TableRow> {
   onFilterReset?: () => void;
   emptyTitle?: string;
   emptyDescription?: string;
+  /** the next step when the table has never had data (usually the page's create button) */
+  emptyAction?: ReactNode;
+  emptyIcon?: LucideIcon;
+  /** true when a page-level view (tabs) is narrowing the list, so "empty" means "no match" */
+  viewFiltered?: boolean;
+  onClearView?: () => void;
   getRowId?: (row: T, index: number) => string;
 }
 
@@ -64,6 +74,7 @@ const EMPTY_VIS: Record<string, boolean> = {};
 export default function MasterTable<T extends TableRow>({
   tableKey,
   header,
+  beforeTable,
   columns,
   data,
   availableColumns,
@@ -74,6 +85,7 @@ export default function MasterTable<T extends TableRow>({
   updateParams,
   onRefresh,
   loading = false,
+  error,
   defaultSort,
   renderRowActions,
   onRowClick,
@@ -82,9 +94,12 @@ export default function MasterTable<T extends TableRow>({
   onFilterReset,
   emptyTitle,
   emptyDescription,
+  emptyAction,
+  emptyIcon,
+  viewFiltered,
+  onClearView,
   getRowId,
 }: MasterTableProps<T>) {
-  const [filterOpen, setFilterOpen] = useState(false);
   const activeFilterCount = filters?.filter((f) => f.value).length ?? 0;
   const storedVis = useTableColumnStore((s) => s.visibility[tableKey] ?? EMPTY_VIS);
   const storedSettings = useTableColumnStore((s) => s.settings[tableKey]);
@@ -174,46 +189,52 @@ export default function MasterTable<T extends TableRow>({
 
   const selectedCount = Object.values(selected).filter(Boolean).length;
 
+  const searching = !!(params.search && params.search.trim());
+  const filtered = searching || activeFilterCount > 0 || !!viewFiltered;
+  const clearAll = () => {
+    if (searching) updateParams({ search: undefined, page: 1 });
+    onFilterReset?.();
+    onClearView?.();
+  };
+
   return (
-    <div className="flex max-h-[calc(100svh-110px)] flex-col overflow-hidden rounded-2xl border-[1.5px] border-border bg-card shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
-      {header && <div className="shrink-0 border-b border-border px-5 py-4">{header}</div>}
+    <div className="space-y-3">
+      {header}
+      {beforeTable}
 
-      <div className="shrink-0">
-        <TableActionBar
-          table={table}
-          tableKey={tableKey}
-          availableColumns={allColumnIds}
-          attribute={attribute}
-          columnLabel={labelFor}
-          search={params.search ?? ""}
-          onSearch={(v) => updateParams({ search: v || undefined, page: 1 })}
-          onRefresh={onRefresh}
-          loading={loading}
-          hasFilters={!!filters?.length}
-          filterOpen={filterOpen}
-          activeFilterCount={activeFilterCount}
-          onToggleFilter={() => setFilterOpen((o) => !o)}
-          selectedCount={selectedCount}
-          onClearSelection={() => setSelected({})}
-        />
-
-        {filterOpen && filters?.length ? (
-          <FilterPanel
-            filters={filters}
-            onChange={(k, v) => onFilterChange?.(k, v)}
-            onReset={() => onFilterReset?.()}
+      <div className="flex flex-col overflow-hidden rounded-xl border border-border bg-card shadow-card">
+        <div className="shrink-0">
+          <TableActionBar
+            table={table}
+            tableKey={tableKey}
+            availableColumns={allColumnIds}
+            attribute={attribute}
+            columnLabel={labelFor}
+            search={params.search ?? ""}
+            onSearch={(v) => updateParams({ search: v || undefined, page: 1 })}
+            onRefresh={onRefresh}
+            loading={loading}
+            filterSlot={
+              filters?.length ? (
+                <FilterPopover filters={filters} onChange={(k, v) => onFilterChange?.(k, v)} onReset={() => onFilterReset?.()} />
+              ) : undefined
+            }
+            selectedCount={selectedCount}
+            onClearSelection={() => setSelected({})}
           />
-        ) : null}
-      </div>
+          {filters?.length ? (
+            <ActiveFilterChips filters={filters} onChange={(k, v) => onFilterChange?.(k, v)} onReset={() => onFilterReset?.()} />
+          ) : null}
+        </div>
 
-      <div className="min-h-[420px] flex-1 overflow-auto">
+      <div className="max-h-[calc(100svh-15rem)] min-h-[280px] flex-1 overflow-auto">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="sticky top-0 z-10 bg-table-head">
                 {showCheckbox && <th className="w-10 px-4 py-3" />}
                 {showAutoNumber && (
-                  <th className="w-12 px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                  <th scope="col" className="w-12 px-4 py-2.5 text-xs font-semibold text-slate-600">
                     #
                   </th>
                 )}
@@ -233,8 +254,8 @@ export default function MasterTable<T extends TableRow>({
                   ))}
                 </SortableContext>
                 {showActions && (
-                  <th className="w-16 px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                    Actions
+                  <th scope="col" className="w-16 px-4 py-2.5 text-right text-xs font-semibold text-slate-600">
+                    <span className="sr-only">Actions</span>
                   </th>
                 )}
               </tr>
@@ -243,11 +264,17 @@ export default function MasterTable<T extends TableRow>({
             <tbody>
               {loading ? (
                 <TableLoadingSkeleton colSpan={totalCols} />
+              ) : error ? (
+                <TableEmptyState colSpan={totalCols} error onRetry={onRefresh} />
               ) : table.getRowModel().rows.length === 0 ? (
                 <TableEmptyState
                   colSpan={totalCols}
                   title={emptyTitle}
                   description={emptyDescription}
+                  action={emptyAction}
+                  icon={emptyIcon}
+                  filtered={filtered}
+                  onClearFilters={clearAll}
                 />
               ) : (
                 table.getRowModel().rows.map((row, i) => {
@@ -256,32 +283,43 @@ export default function MasterTable<T extends TableRow>({
                     <tr
                       key={row.id}
                       onClick={clickable ? () => onRowClick!(row.original) : undefined}
+                      onKeyDown={
+                        clickable
+                          ? (e) => {
+                              if (e.target === e.currentTarget && (e.key === "Enter" || e.key === " ")) {
+                                e.preventDefault();
+                                onRowClick!(row.original);
+                              }
+                            }
+                          : undefined
+                      }
+                      tabIndex={clickable ? 0 : undefined}
                       className={cn(
-                        "group/row border-t border-row-border transition-colors",
-                        selected[row.id] ? "bg-secondary" : "hover:bg-muted",
+                        "group/row border-t border-row-border transition-colors focus-visible:outline-2 focus-visible:-outline-offset-2",
+                        selected[row.id] ? "bg-secondary" : "hover:bg-slate-50",
                         clickable && "cursor-pointer",
                       )}
                     >
                       {showCheckbox && (
-                        <td className="px-4 py-3.5" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-3.5 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <button
                             type="button"
                             onClick={() =>
                               setSelected((s) => ({ ...s, [row.id]: !s[row.id] }))
                             }
                             className={cn(
-                              "grid size-4 place-items-center rounded border-[1.5px] transition-colors",
+                              "grid size-4 place-items-center rounded border transition-colors",
                               selected[row.id]
                                 ? "border-primary bg-primary text-white"
                                 : "border-border-strong bg-card text-transparent",
                             )}
                           >
-                            {selected[row.id] ? <Check className="size-2.5" strokeWidth={3} /> : <Square className="size-2.5" />}
+                            {selected[row.id] && <Check className="size-2.5" strokeWidth={3} />}
                           </button>
                         </td>
                       )}
                       {showAutoNumber && (
-                        <td className="px-4 py-3.5 text-xs tabular-nums text-slate-400">
+                        <td className="px-4 py-3 text-[13px] tabular-nums text-slate-500">
                           {(meta.currentPage - 1) * meta.perPage + i + 1}
                         </td>
                       )}
@@ -291,7 +329,7 @@ export default function MasterTable<T extends TableRow>({
                           <td
                             key={cell.id}
                             className={cn(
-                              "px-4 py-3.5 align-middle text-[12.5px]",
+                              "px-3.5 py-2 align-middle text-[13px]",
                               m?.align === "right" && "text-right",
                             )}
                           >
@@ -300,7 +338,7 @@ export default function MasterTable<T extends TableRow>({
                         );
                       })}
                       {showActions && (
-                        <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                        <td className="px-3.5 py-1.5" onClick={(e) => e.stopPropagation()}>
                           <div className="flex justify-end">{renderRowActions!(row.original)}</div>
                         </td>
                       )}
@@ -313,7 +351,7 @@ export default function MasterTable<T extends TableRow>({
         </DndContext>
       </div>
 
-      {!loading && meta.totalItems > 0 && (
+      {!loading && !error && meta.totalItems > 0 && (
         <div className="shrink-0">
           <PaginationControls
             meta={meta}
@@ -322,6 +360,7 @@ export default function MasterTable<T extends TableRow>({
           />
         </div>
       )}
+      </div>
     </div>
   );
 }

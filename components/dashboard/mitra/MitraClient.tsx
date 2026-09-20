@@ -104,6 +104,7 @@ export default function MitraClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "created_at", order: "desc" }}
         emptyTitle="No partners yet"
         emptyDescription="Add a customer or supplier to start creating invoices."

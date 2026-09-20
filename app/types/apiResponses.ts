@@ -59,6 +59,9 @@ export type GetAllPayload = {
   sales_order_id?: string;
   sales_invoice_id?: string;
   status?: string;
+  payment_status?: string;
+  /** "true" → confirmed, not fully paid, past due date */
+  overdue?: string;
 };
 
 export function toListResult<T>(res: ListResponse<T>): ListResult<T> {

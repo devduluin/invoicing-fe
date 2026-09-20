@@ -7,7 +7,8 @@ import toast from "react-hot-toast";
 import { Card } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, DatePickerInput } from "@/components/form";
-import { StatusPill } from "@/components/masterTable/columnFactory";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { CheckCircle2, AlertCircle } from "lucide-react";
 import { extractApiError } from "@/lib/apiError";
 import { getBalanceSheet, type BalanceSheetResponse, type BalanceSheetRow } from "@/services/reportService";
 import { ReportTable, type ReportColumn } from "./ReportTable";
@@ -52,12 +53,7 @@ export default function BalanceSheetClient() {
         description="Position of assets, liabilities, and equity as of a given date — computed from posted journal entries."
         actions={
           data && (
-            <StatusPill
-              label={data.is_balanced ? "Balanced" : "Not Balanced"}
-              bg={data.is_balanced ? "#ecfdf5" : "#fef2f2"}
-              text={data.is_balanced ? "#065f46" : "#b91c1c"}
-              dot={data.is_balanced ? "#34d399" : "#f87171"}
-            />
+            <StatusBadge label={data.is_balanced ? "Balanced" : "Not Balanced"} tone={data.is_balanced ? "success" : "danger"} icon={data.is_balanced ? CheckCircle2 : AlertCircle} />
           )
         }
       />
@@ -76,7 +72,7 @@ export default function BalanceSheetClient() {
           <Section title="Liabilities" rows={data.liabilities.rows} total={data.liabilities.total} />
           <Section title="Equity" rows={data.equity.rows} total={data.equity.total} />
 
-          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-[1.5px] border-border bg-slate-50/60 px-5 py-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-border bg-slate-50/60 px-5 py-4">
             <span className="text-sm font-semibold text-slate-600">Total Assets vs. Liabilities + Equity</span>
             <div className="flex items-center gap-6 text-right">
               <div>

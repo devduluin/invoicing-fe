@@ -11,6 +11,7 @@ import PageHeader from "@/components/layouts/page/PageHeader";
 const TABS = [
   { label: "Company", href: "/dashboard/settings/company" },
   { label: "Team", href: "/dashboard/settings/team" },
+  { label: "Roles", href: "/dashboard/settings/roles" },
 ];
 
 /** One continuous card — header, tabs, and the sub-page's own sections all
@@ -19,7 +20,7 @@ const TABS = [
 export default function SettingsLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   return (
-    <div className="w-full overflow-hidden rounded-2xl border-[1.5px] border-border bg-card shadow-[0_2px_12px_rgba(15,23,42,0.04)]">
+    <div className="w-full overflow-hidden rounded-2xl border border-border bg-card shadow-card">
       <div className="border-b border-border-strong px-5 py-4">
         <PageHeader
           icon={Settings}

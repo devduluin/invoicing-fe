@@ -120,7 +120,7 @@ function CompanyForm() {
 
       <div className="border-b border-border-strong px-5 py-5">
         <h2 className="mb-4 flex items-center gap-2 font-display text-sm font-bold text-slate-800">
-          <span className="size-1.5 rounded-full bg-[#a78bfa]" />
+          <span className="size-1.5 rounded-full bg-primary" />
           Company Details
         </h2>
         <div className="space-y-4">

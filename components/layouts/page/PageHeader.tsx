@@ -6,25 +6,24 @@ import { cn } from "@/lib/utils";
 interface PageHeaderProps {
   title: string;
   description?: string;
+  /** Kept for existing call sites; the header draws no icon chip. */
   icon?: LucideIcon;
-  /** Right-aligned actions (buttons), vertically centered with the title. */
+  /** Right-aligned. Secondary actions first, the ONE primary action last. */
   actions?: ReactNode;
+  /** Small element beside the title, typically a status badge. */
+  meta?: ReactNode;
   className?: string;
 }
 
-export default function PageHeader({ title, description, icon: Icon, actions, className }: PageHeaderProps) {
+export default function PageHeader({ title, description, actions, meta, className }: PageHeaderProps) {
   return (
-    <div className={cn("flex flex-wrap items-center justify-between gap-3", className)}>
-      <div className="flex items-center gap-3">
-        {Icon && (
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl border border-border bg-white text-primary-ink shadow-sm">
-            <Icon className="size-[18px]" />
-          </span>
-        )}
-        <div>
-          <h1 className="font-display text-xl font-bold text-slate-800">{title}</h1>
-          {description && <p className="mt-0.5 max-w-2xl text-xs text-slate-400">{description}</p>}
+    <div className={cn("mb-1 flex flex-wrap items-end justify-between gap-x-4 gap-y-3 border-b border-slate-300/50 pb-3", className)}>
+      <div className="min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <h1 className="font-display text-[22px] leading-8 font-semibold tracking-tight text-slate-900">{title}</h1>
+          {meta}
         </div>
+        {description && <p className="mt-0.5 max-w-2xl text-[13px] leading-5 text-slate-500">{description}</p>}
       </div>
       {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </div>

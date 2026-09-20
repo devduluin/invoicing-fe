@@ -3,6 +3,7 @@ export { FormField } from "./FormField";
 export { FormLabel } from "./FormLabel";
 export { Input, type InputProps } from "./Input";
 export { Textarea, type TextareaProps } from "./Textarea";
+export { RichTextEditor } from "./RichTextEditor";
 export { Select, type SelectOption } from "./Select";
 export { SearchableSelect } from "./SearchableSelect";
 export { MultiSelect } from "./MultiSelect";

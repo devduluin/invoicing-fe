@@ -25,9 +25,23 @@ export interface AuthUser {
   isActivated: boolean;
 }
 
+/**
+ * Where the auth/company/permission bootstrap is. Permission checks must only
+ * be trusted at "ready" — before that `permissions` is just the empty default,
+ * which is not the same thing as "the user has no access".
+ *   idle            nothing started yet (also the SSR/first-paint state)
+ *   loading         /me in flight, or identity being re-resolved (company switch)
+ *   ready           identity + a valid active company are resolved
+ *   error           /me could not be loaded (network/5xx) — session is still valid
+ *   unauthenticated no session; a redirect to sign-in is on its way
+ */
+export type AuthStatus = "idle" | "loading" | "ready" | "error" | "unauthenticated";
+
 interface AuthState extends AuthUser {
   isLoaded: boolean;
+  status: AuthStatus;
   setUser: (user: Partial<AuthUser>) => void;
+  setStatus: (status: AuthStatus) => void;
   clear: () => void;
 }
 
@@ -50,8 +64,10 @@ const empty: AuthUser = {
 export const useAuthStore = create<AuthState>()((set) => ({
   ...empty,
   isLoaded: false,
+  status: "idle",
   setUser: (user) => set({ ...user, isLoaded: true }),
-  clear: () => set({ ...empty, isLoaded: false }),
+  setStatus: (status) => set({ status }),
+  clear: () => set({ ...empty, isLoaded: false, status: "unauthenticated" }),
 }));
 
 /** Role-name helper — matches an exact name or a company-prefixed one. */

@@ -7,7 +7,7 @@ import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, Textarea, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -15,6 +15,8 @@ import { listAllPurchaseInvoices, getPurchaseInvoice } from "@/services/purchase
 import { listAllBankAccounts, type BankAccount } from "@/services/bankAccountService";
 import {
   createPurchaseReceipt,
+  getPurchaseReceipt,
+  updatePurchaseReceipt,
   previewPurchaseReceiptNumber,
   PAYMENT_METHOD_OPTIONS,
   type PurchaseReceiptInput,
@@ -26,19 +28,20 @@ import MitraFormModal from "../mitra/MitraFormModal";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-/** Purchase Receipt is create-only — no edit route exists (matches the
- *  seeded invoice-purchase-receipt-{list,create} permissions: a receipt is
- *  create-once, never edited or deleted through the API). */
-export default function PurchaseReceiptFormPage() {
+/** Create and edit share this form (`mode="edit"` + `id` loads the saved receipt). */
+export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isEdit = mode === "edit" && !!id;
 
   // Tracks every initial-load fetch (base lists + number preview + the
   // ?dari_invoice prefill, if present) so the form only renders once ALL of
   // them have settled — see SalesReceiptFormPage for why.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "invoices", "bank-accounts", "number"]);
-    if (searchParams.get("dari_invoice")) s.add("prefill");
+    const s = new Set<string>(["mitras", "invoices", "bank-accounts"]);
+    if (isEdit) s.add("receipt");
+    else s.add("number");
+    if (!isEdit && searchParams.get("dari_invoice")) s.add("prefill");
     return s;
   });
   const done = (key: string) =>
@@ -66,21 +69,46 @@ export default function PurchaseReceiptFormPage() {
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string; amount?: string }>({});
 
-  usePageBreadcrumb([{ label: "Purchase Receipts", href: "/dashboard/pembelian/kuitansi" }, { label: "Add Receipt" }]);
+  usePageBreadcrumb([
+    { label: "Purchase Receipts", href: "/dashboard/pembelian/kuitansi" },
+    { label: isEdit ? "Edit Receipt" : "Add Receipt" },
+  ]);
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllPurchaseInvoices().then(setInvoices).catch(() => setInvoices([])).finally(() => done("invoices"));
     listAllBankAccounts().then(setBankAccounts).catch(() => setBankAccounts([])).finally(() => done("bank-accounts"));
-    previewPurchaseReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
+    if (!isEdit) previewPurchaseReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Edit: load the saved receipt into the form.
+  useEffect(() => {
+    if (!isEdit || !id) return;
+    getPurchaseReceipt(id)
+      .then((r) => {
+        setMitraId(r.mitra_id);
+        setPurchaseInvoiceId(r.purchase_invoice_id ?? "");
+        setNumber(r.number);
+        setDate(r.date.slice(0, 10));
+        setAmount(r.amount);
+        setPaymentMethod(r.payment_method);
+        setBankAccountId(r.bank_account_id ?? "");
+        setNotes(r.notes ?? "");
+      })
+      .catch((err) => {
+        toast.error(extractApiError(err, "Failed to load receipt"));
+        router.push("/dashboard/pembelian/kuitansi");
+      })
+      .finally(() => done("receipt"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, id]);
 
   // ?dari_invoice=<id> → pre-fill partner/reference/amount from that
   // confirmed invoice's "Create Receipt" action.
   useEffect(() => {
     const invoiceId = searchParams.get("dari_invoice");
-    if (!invoiceId) return;
+    if (isEdit || !invoiceId) return;
     getPurchaseInvoice(invoiceId)
       .then((invoice) => {
         setMitraId(invoice.mitra_id);
@@ -114,8 +142,13 @@ export default function PurchaseReceiptFormPage() {
 
     setBusy(true);
     try {
-      await createPurchaseReceipt(payload);
-      toast.success("Receipt added");
+      if (isEdit && id) {
+        await updatePurchaseReceipt(id, payload);
+        toast.success("Receipt updated");
+      } else {
+        await createPurchaseReceipt(payload);
+        toast.success("Receipt added");
+      }
       router.push("/dashboard/pembelian/kuitansi");
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save receipt"));
@@ -147,7 +180,7 @@ export default function PurchaseReceiptFormPage() {
     <div className="space-y-4">
       <PageHeader
         icon={Wallet}
-        title="Add Receipt"
+        title={isEdit ? "Edit Receipt" : "Add Receipt"}
         description="Record a payment made to a supplier, optionally linked to a purchase invoice."
         actions={
           <>
@@ -251,13 +284,7 @@ export default function PurchaseReceiptFormPage() {
         }
         notes={
           <FormField label="Notes" htmlFor="kw-notes" optional>
-            <Textarea
-              id="kw-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Internal notes (optional)"
-              rows={3}
-            />
+            <RichTextEditor id="kw-notes" value={notes} onChange={setNotes} placeholder="Internal notes (optional)" />
           </FormField>
         }
       />

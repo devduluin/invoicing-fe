@@ -22,7 +22,7 @@ interface ReportTableProps<T> {
  *  `border-row-border`) for consistency with the rest of the app. */
 export function ReportTable<T>({ columns, rows, totals, emptyText = "No data" }: ReportTableProps<T>) {
   return (
-    <div className="overflow-hidden rounded-2xl border-[1.5px] border-border bg-card">
+    <div className="overflow-hidden rounded-2xl border border-border bg-card">
       <div className="overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>

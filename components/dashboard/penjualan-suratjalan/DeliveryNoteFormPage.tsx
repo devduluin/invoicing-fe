@@ -7,36 +7,79 @@ import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, Textarea, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
-import { getSalesOrder } from "@/services/salesOrderService";
-import { createDeliveryNote, type DeliveryNoteInput } from "@/services/deliveryNoteService";
+import { getSalesOrder, listAllSalesOrders, type SalesOrder } from "@/services/salesOrderService";
+import { getSalesInvoice, listAllSalesInvoices, type SalesInvoice } from "@/services/salesInvoiceService";
+import { createDeliveryNote, getDeliveryNote, updateDeliveryNote, type DeliveryNoteInput } from "@/services/deliveryNoteService";
 import { SimpleLineItemsEditor, emptySimpleLine, type EditableSimpleLine } from "../shared/SimpleLineItemsEditor";
 import { MoreInfoSection, emptyMoreInfo, type MoreInfoValue } from "../shared/MoreInfoSection";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
+import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-/** Delivery Note is create-only — no edit route exists (matches the seeded
- *  invoice-delivery-note-{list,create} permissions: a physical shipment log,
- *  create-once, never edited or deleted through the API). On create,
- *  `?dari_order=<id>` pre-fills mitra + lines from that confirmed Sales
- *  Order (pure frontend convenience — no backend coupling). */
-export default function DeliveryNoteFormPage() {
+/** Create and edit share this form. Edit (`mode="edit"` + `id`) loads the saved record,
+ *  and saving replaces it (PUT); the number can be left blank to keep the current one. On
+ *  create, `?dari_order=<id>` pre-fills partner + lines from that confirmed order (pure
+ *  frontend convenience — no backend coupling). */
+export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isEdit = mode === "edit" && !!id;
 
   // Tracks every initial-load fetch (mitras + the ?dari_order prefill, if
   // present) so the form only renders once ALL of them have settled —
+  // Edit: load the saved record into the form.
+  useEffect(() => {
+    if (!isEdit || !id) return;
+    getDeliveryNote(id)
+      .then((n) => {
+      setSalesOrderId(n.sales_order_id ?? null);
+      setSalesInvoiceId(n.sales_invoice_id ?? null);
+        setMitraId(n.mitra_id);
+        setNumber(n.number);
+        setDate(n.date.slice(0, 10));
+        setNotes(n.notes ?? "");
+        setLines(
+          n.lines.length
+            ? n.lines.map((l) => ({
+                key: crypto.randomUUID(),
+                product_name: l.product_name,
+                description: l.description ?? "",
+                quantity: l.quantity,
+                unit: l.unit ?? "",
+              }))
+            : [emptySimpleLine()],
+        );
+        setMoreInfo({
+          shipping_method: n.shipping_method ?? "",
+          tracking_no: n.tracking_no ?? "",
+          vehicle_no: n.vehicle_no ?? "",
+          driver_name: n.driver_name ?? "",
+          total_weight: n.total_weight ?? null,
+        });
+        setAttachmentData(n.attachment_data ?? "");
+        setAttachmentName(n.attachment_name ?? "");
+      })
+      .catch((err) => {
+        toast.error(extractApiError(err, "Failed to load delivery note"));
+        router.back();
+      })
+      .finally(() => done("entity"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, id]);
+
   // ?dari_order=<id> resolves fast (one record) while listAllMitra() can be
   // slower, and revealing the form before mitras loads would show the
   // Partner field blank even though mitraId is already correctly set.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras"]);
-    if (searchParams.get("dari_order")) s.add("prefill");
+    const s = new Set<string>(["mitras", "orders", "invoices"]);
+    if (isEdit) s.add("entity");
+    else if (searchParams.get("dari_order") || searchParams.get("dari_invoice")) s.add("prefill");
     return s;
   });
   const done = (key: string) =>
@@ -50,24 +93,31 @@ export default function DeliveryNoteFormPage() {
 
   const [busy, setBusy] = useState(false);
   const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
+  const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>([]);
   const [addMitraOpen, setAddMitraOpen] = useState(false);
 
   const [salesOrderId, setSalesOrderId] = useState<string | null>(null);
+  const [salesInvoiceId, setSalesInvoiceId] = useState<string | null>(null);
   const [mitraId, setMitraId] = useState("");
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<EditableSimpleLine[]>([emptySimpleLine()]);
   const [moreInfo, setMoreInfo] = useState<MoreInfoValue>(emptyMoreInfo());
+  const [attachmentData, setAttachmentData] = useState("");
+  const [attachmentName, setAttachmentName] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
 
   usePageBreadcrumb([
     { label: "Delivery Notes", href: "/dashboard/penjualan/surat-jalan" },
-    { label: "Add Delivery Note" },
+    { label: isEdit ? "Edit Delivery Note" : "Add Delivery Note" },
   ]);
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
+    listAllSalesOrders().then(setSalesOrders).catch(() => setSalesOrders([])).finally(() => done("orders"));
+    listAllSalesInvoices("invoice").then(setSalesInvoices).catch(() => setSalesInvoices([])).finally(() => done("invoices"));
   }, []);
 
   // ?dari_order=<id> → pre-fill mitra & lines from that confirmed order.
@@ -85,12 +135,40 @@ export default function DeliveryNoteFormPage() {
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
+              unit: "",
             })),
           );
         }
         toast.success(`Auto-filled from order ${order.number}`);
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load sales order")))
+      .finally(() => done("prefill"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ?dari_invoice=<id> → pre-fill mitra & lines from that confirmed invoice
+  // ("Create Delivery Note" from the Sales Invoice detail page).
+  useEffect(() => {
+    const invoiceId = searchParams.get("dari_invoice");
+    if (!invoiceId) return;
+    getSalesInvoice(invoiceId)
+      .then((invoice) => {
+        setSalesInvoiceId(invoice.id);
+        setMitraId(invoice.mitra_id);
+        if (invoice.lines.length) {
+          setLines(
+            invoice.lines.map((l) => ({
+              key: crypto.randomUUID(),
+              product_name: l.product_name,
+              description: l.description ?? "",
+              quantity: l.quantity,
+              unit: "",
+            })),
+          );
+        }
+        toast.success(`Auto-filled from invoice ${invoice.number}`);
+      })
+      .catch((err) => toast.error(extractApiError(err, "Failed to load invoice")))
       .finally(() => done("prefill"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -128,6 +206,7 @@ export default function DeliveryNoteFormPage() {
     const payload: DeliveryNoteInput = {
       mitra_id: mitraId,
       sales_order_id: salesOrderId || undefined,
+      sales_invoice_id: salesInvoiceId || undefined,
       number: number.trim() || undefined,
       date,
       notes: notes.trim() || undefined,
@@ -136,17 +215,25 @@ export default function DeliveryNoteFormPage() {
       vehicle_no: moreInfo.vehicle_no.trim() || undefined,
       driver_name: moreInfo.driver_name.trim() || undefined,
       total_weight: moreInfo.total_weight ?? undefined,
+      attachment_data: attachmentData || undefined,
+      attachment_name: attachmentName || undefined,
       lines: active.map((l) => ({
         product_name: l.product_name.trim(),
         description: l.description.trim() || undefined,
         quantity: l.quantity ?? 0,
+        unit: l.unit || undefined,
       })),
     };
 
     setBusy(true);
     try {
-      await createDeliveryNote(payload);
-      toast.success("Delivery note added");
+      if (isEdit && id) {
+        await updateDeliveryNote(id, payload);
+        toast.success("Delivery Note updated");
+      } else {
+        await createDeliveryNote(payload);
+        toast.success("Delivery note added");
+      }
       router.push("/dashboard/penjualan/surat-jalan");
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save delivery note"));
@@ -171,7 +258,7 @@ export default function DeliveryNoteFormPage() {
     <div className="space-y-4">
       <PageHeader
         icon={Truck}
-        title="Add Delivery Note"
+        title={isEdit ? "Edit Delivery Note" : "Add Delivery Note"}
         description="Record goods physically shipped to a partner, optionally linked to a sales order."
         actions={
           <>
@@ -186,6 +273,15 @@ export default function DeliveryNoteFormPage() {
       />
 
       <DocumentFormLayout
+        headerLeft={
+          <AttachmentUpload
+            value={{ data: attachmentData, name: attachmentName }}
+            onChange={(v: AttachmentValue) => {
+              setAttachmentData(v.data);
+              setAttachmentName(v.name);
+            }}
+          />
+        }
         metaFields={
           <>
             <FormField label="Partner" htmlFor="dn-mitra" required error={errors.mitraId}>
@@ -195,6 +291,8 @@ export default function DeliveryNoteFormPage() {
                 options={mitraOptions}
                 onChange={(v) => {
                   setMitraId(v);
+                  setSalesOrderId(null);
+                  setSalesInvoiceId(null);
                   setErrors((prev) => ({ ...prev, mitraId: undefined }));
                 }}
                 placeholder="Select a partner…"
@@ -223,19 +321,47 @@ export default function DeliveryNoteFormPage() {
                 error={errors.date}
               />
             </FormField>
+            <FormField
+              label="Order No."
+              htmlFor="dn-order"
+              optional
+              hint={mitraId ? "Which sales order this delivery is for." : "Select a partner first."}
+            >
+              <SearchableSelect
+                id="dn-order"
+                value={salesOrderId ?? ""}
+                options={salesOrders
+                  .filter((o) => o.mitra_id === mitraId)
+                  .map((o) => ({ value: o.id, label: o.number }))}
+                onChange={(v) => setSalesOrderId(v || null)}
+                placeholder="No linked order"
+                disabled={!mitraId}
+              />
+            </FormField>
+            <FormField
+              label="Invoice No."
+              htmlFor="dn-invoice"
+              optional
+              hint={mitraId ? "Which invoice this delivery is for." : "Select a partner first."}
+            >
+              <SearchableSelect
+                id="dn-invoice"
+                value={salesInvoiceId ?? ""}
+                options={salesInvoices
+                  .filter((i) => i.mitra_id === mitraId)
+                  .map((i) => ({ value: i.id, label: i.number }))}
+                onChange={(v) => setSalesInvoiceId(v || null)}
+                placeholder="No linked invoice"
+                disabled={!mitraId}
+              />
+            </FormField>
           </>
         }
         belowMeta={<MoreInfoSection value={moreInfo} onChange={setMoreInfo} embedded />}
         lineItems={<SimpleLineItemsEditor lines={lines} onChange={setLines} embedded />}
         notes={
           <FormField label="Notes" htmlFor="dn-notes" optional>
-            <Textarea
-              id="dn-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Internal notes (optional)"
-              rows={3}
-            />
+            <RichTextEditor id="dn-notes" value={notes} onChange={setNotes} placeholder="Internal notes (optional)" />
           </FormField>
         }
       />

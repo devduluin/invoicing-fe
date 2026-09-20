@@ -9,6 +9,7 @@ import {
   type TableMeta,
   type TableRow,
 } from "@/app/types/apiResponses";
+import { useAuthStore } from "@/store/useAuthStore";
 
 type Fetcher<T extends TableRow> = (params: GetAllPayload) => Promise<ListResult<T>>;
 
@@ -44,6 +45,17 @@ export function useMasterList<T extends TableRow>(
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
+
+  // A different company must never inherit the previous one's filters, search or page
+  // (a partner id from company A means nothing in company B).
+  const initialRef = useRef(initialParams);
+  const lastCompany = useRef(activeCompanyId);
+  useEffect(() => {
+    if (lastCompany.current === activeCompanyId) return;
+    lastCompany.current = activeCompanyId;
+    setParams({ page: 1, limit: 20, ...initialRef.current });
+  }, [activeCompanyId]);
 
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
@@ -75,8 +87,11 @@ export function useMasterList<T extends TableRow>(
     return () => {
       alive = false;
     };
+    // Re-fetch on company switch too — a table mounted before a switch must
+    // not keep showing the previous company's rows (paramsKey/refreshKey
+    // alone don't change when only the active company changes).
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [paramsKey, refreshKey]);
+  }, [paramsKey, refreshKey, activeCompanyId]);
 
   const updateParams = useCallback((patch: Partial<GetAllPayload>, replace = false) => {
     setParams((prev) => (replace ? { ...patch } : { ...prev, ...patch }));

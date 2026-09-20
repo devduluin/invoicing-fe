@@ -6,8 +6,9 @@ import { FileText, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
+import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, Textarea, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
 import { formatDateStyle } from "@/utils/formatDate";
@@ -100,7 +101,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
   const [attachmentName, setAttachmentName] = useState("");
   const [signatureData, setSignatureData] = useState("");
   const [stampDuty, setStampDuty] = useState(false);
-  const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
+  const [errors, setErrors] = useState<{ mitraId?: string; date?: string; dueDate?: string }>({});
 
   const readOnly = isEdit && status !== "draft";
 
@@ -238,8 +239,9 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
     const fieldErrors: typeof errors = {};
     if (!mitraId) fieldErrors.mitraId = "Partner is required";
     if (!date) fieldErrors.date = "Date is required";
+    if (dueDate && date && dueDate < date) fieldErrors.dueDate = "Due date can't be before the invoice date";
     setErrors(fieldErrors);
-    if (fieldErrors.mitraId || fieldErrors.date) return null;
+    if (fieldErrors.mitraId || fieldErrors.date || fieldErrors.dueDate) return null;
 
     const active = lines.filter((l) => l.product_name.trim() || l.quantity || l.unit_price);
     if (active.length < 1) {
@@ -385,13 +387,6 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
 
   const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
 
-  const statusStyle =
-    status === "confirmed"
-      ? { bg: "#eef1ff", text: "#3b57d4", dot: "#6b8fff" }
-      : status === "cancelled"
-        ? { bg: "#fef2f2", text: "#b91c1c", dot: "#f87171" }
-        : { bg: "#f1f5f9", text: "#64748b", dot: "#cbd5e1" };
-
   if (loading) {
     return (
       <div className="space-y-4">
@@ -411,10 +406,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
         actions={
           <>
             {isEdit && (
-              <span className="badge" style={{ background: statusStyle.bg, color: statusStyle.text }}>
-                <span className="size-1.5 rounded-full" style={{ background: statusStyle.dot }} />
-                {PURCHASE_INVOICE_STATUS_LABEL[status]}
-              </span>
+              <Status status={status as StatusKey} label={PURCHASE_INVOICE_STATUS_LABEL[status]} />
             )}
             {readOnly ? (
               <>
@@ -508,15 +500,27 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 value={date}
                 onChange={(v) => {
                   setDate(v);
-                  setErrors((prev) => ({ ...prev, date: undefined }));
+                  // Due date can't precede the invoice date: pull it forward with the date.
+                  if (v && dueDate && dueDate < v) setDueDate(v);
+                  setErrors((prev) => ({ ...prev, date: undefined, dueDate: undefined }));
                 }}
                 id="inv-date"
                 disabled={readOnly}
                 error={errors.date}
               />
             </FormField>
-            <FormField label="Due Date" htmlFor="inv-due" optional>
-              <DatePickerInput value={dueDate} onChange={setDueDate} id="inv-due" disabled={readOnly} />
+            <FormField label="Due Date" htmlFor="inv-due" optional error={errors.dueDate}>
+              <DatePickerInput
+                value={dueDate}
+                onChange={(v) => {
+                  setDueDate(v);
+                  setErrors((prev) => ({ ...prev, dueDate: undefined }));
+                }}
+                id="inv-due"
+                min={date || undefined}
+                disabled={readOnly}
+                error={errors.dueDate}
+              />
             </FormField>
             <FormField label="Ref. No." htmlFor="inv-ref" optional>
               <Input
@@ -558,14 +562,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
         }
         notes={
           <FormField label="Notes" htmlFor="inv-notes" optional>
-            <Textarea
-              id="inv-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Internal notes (optional)"
-              rows={4}
-              disabled={readOnly}
-            />
+            <RichTextEditor id="inv-notes" value={notes} onChange={setNotes} placeholder="Internal notes (optional)" disabled={readOnly} />
           </FormField>
         }
         totals={

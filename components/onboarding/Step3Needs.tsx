@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { ArrowRight } from "lucide-react";
 import { Button, FieldError, OptionToggle } from "@/components/ui";
+import { useOnb } from "@/lib/onboardingText";
 import { NEED_OPTIONS } from "@/lib/onboarding";
 import type { OnboardingDraft } from "@/store/useOnboardingStore";
 
@@ -12,6 +14,7 @@ export default function Step3Needs({
   draft: OnboardingDraft;
   onNext: (p: Partial<OnboardingDraft>) => void;
 }) {
+  const { t } = useOnb();
   const [selected, setSelected] = useState<string[]>(draft.kebutuhan_user);
   const [error, setError] = useState<string>();
 
@@ -22,7 +25,7 @@ export default function Step3Needs({
 
   const submit = () => {
     if (selected.length === 0) {
-      setError("Select at least one need.");
+      setError(t("Select at least one need."));
       return;
     }
     onNext({ kebutuhan_user: selected });
@@ -38,10 +41,10 @@ export default function Step3Needs({
     >
       <div>
         <h2 className="text-xl font-bold text-foreground text-balance">
-          What do you need most?
+          {t("What do you need most?")}
         </h2>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Select all that apply. We'll use this to tailor your experience.
+          {t("Select all that apply. We'll use this to tailor your experience.")}
         </p>
       </div>
 
@@ -49,7 +52,7 @@ export default function Step3Needs({
         {NEED_OPTIONS.map((opt) => (
           <OptionToggle
             key={opt.value}
-            label={opt.label}
+            label={t(opt.label)}
             selected={selected.includes(opt.value)}
             onToggle={() => toggle(opt.value)}
           />
@@ -58,8 +61,9 @@ export default function Step3Needs({
 
       <FieldError>{error}</FieldError>
 
-      <Button type="submit" fullWidth>
-        Continue
+      <Button type="submit" fullWidth className="group">
+        {t("Continue")}
+        <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-1" aria-hidden />
       </Button>
     </form>
   );

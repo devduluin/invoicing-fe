@@ -31,6 +31,13 @@ export function setCookie(
 export function setActiveCompanyCookie(companyId: string, domain?: string) {
   const opts: Record<string, unknown> = { path: "/", sameSite: "Lax", maxAge: 60 * 60 * 24 * 30 };
   if (domain) opts.domain = domain;
+  // Other Duluin apps on the same host (Launchpad, Console) can leave a `company_id` cookie of their
+  // own, scoped differently (host-only vs shared domain). Two cookies with one name make the browser
+  // send whichever it likes, so clear both scopes before writing ours.
+  for (const name of ["company_id", "app_company_id"]) {
+    deleteCookie(name);
+    if (domain) deleteCookie(name, domain);
+  }
   setCookie("company_id", companyId, opts);
   setCookie("app_company_id", companyId, opts);
 }

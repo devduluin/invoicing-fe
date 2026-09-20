@@ -2,10 +2,11 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ShoppingCart, Plus, Copy } from "lucide-react";
+import { ShoppingCart, Plus, Copy, FileText, PackageCheck } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
+import { useTr } from "@/lib/useTr";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
@@ -14,7 +15,8 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
-import { buildColumns, StatusPill, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
   listPurchaseOrders,
   deletePurchaseOrder,
@@ -29,13 +31,8 @@ const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "status", "grand_total"];
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
-const STATUS_STYLE: Record<PurchaseOrderStatus, { bg: string; text: string; dot: string }> = {
-  draft: { bg: "#f1f5f9", text: "#64748b", dot: "#cbd5e1" },
-  confirmed: { bg: "#eef1ff", text: "#3b57d4", dot: "#6b8fff" },
-  cancelled: { bg: "#fef2f2", text: "#b91c1c", dot: "#f87171" },
-};
-
 export default function PurchaseOrderClient() {
+  const tr = useTr();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-purchase-order-create");
@@ -72,9 +69,8 @@ export default function PurchaseOrderClient() {
         header: "Status",
         render: (v) => {
           const s = (v as PurchaseOrderStatus) ?? "draft";
-          const style = STATUS_STYLE[s] ?? STATUS_STYLE.draft;
           return (
-            <StatusPill label={PURCHASE_ORDER_STATUS_LABEL[s] ?? s} bg={style.bg} text={style.text} dot={style.dot} />
+            <Status status={s as StatusKey} label={PURCHASE_ORDER_STATUS_LABEL[s] ?? s} />
           );
         },
       },
@@ -135,6 +131,7 @@ export default function PurchaseOrderClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "date", order: "desc" }}
         emptyTitle="No purchase orders yet"
         emptyDescription="Add a purchase order to record an agreement with a supplier before it's billed."
@@ -149,7 +146,7 @@ export default function PurchaseOrderClient() {
                 ...(canCreate
                   ? [
                       {
-                        label: "Duplicate",
+                        label: tr("Duplikat", "Duplicate"),
                         icon: <Copy className="size-3.5" />,
                         onClick: () => router.push(`/dashboard/pembelian/order/add?duplicate_from=${order.id}`),
                       },
@@ -160,7 +157,9 @@ export default function PurchaseOrderClient() {
                       ...(canCreateInvoice
                         ? [
                             {
-                              label: "Create Bill",
+                              label: tr("Buat Tagihan", "Create Bill"),
+                              icon: <FileText className="size-4" />,
+                              section: "related" as const,
                               onClick: () => router.push(`/dashboard/pembelian/invoice/add?dari_order=${order.id}`),
                             },
                           ]
@@ -168,7 +167,9 @@ export default function PurchaseOrderClient() {
                       ...(canCreateGoodsReceipt
                         ? [
                             {
-                              label: "Create Goods Receipt",
+                              label: tr("Buat Penerimaan Barang", "Create Goods Receipt"),
+                              icon: <PackageCheck className="size-4" />,
+                              section: "related" as const,
                               onClick: () => router.push(`/dashboard/pembelian/penerimaan/add?dari_order=${order.id}`),
                             },
                           ]

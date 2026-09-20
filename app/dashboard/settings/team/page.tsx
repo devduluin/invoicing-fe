@@ -17,15 +17,19 @@ import {
   updateMemberRole,
   removeMember,
 } from "@/services/memberService";
+import { useLanguageStore } from "@/store/useLanguageStore";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 export default function TeamPage() {
+  const isIndonesian = useLanguageStore((s) => s.language === "id");
   return (
     <PermissionGate
       anyPermission={["invoice-user-list"]}
       fallback={
-        <p className="px-5 py-5 text-sm text-muted-foreground">You don't have access to manage the team.</p>
+        <p className="px-5 py-5 text-sm text-muted-foreground">
+          {isIndonesian ? "Anda tidak memiliki akses untuk mengelola tim." : "You don't have access to manage the team."}
+        </p>
       }
     >
       <TeamManager />
@@ -34,6 +38,7 @@ export default function TeamPage() {
 }
 
 function TeamManager() {
+  const isIndonesian = useLanguageStore((s) => s.language === "id");
   const [members, setMembers] = useState<Member[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
   const [loading, setLoading] = useState(true);
@@ -63,17 +68,19 @@ function TeamManager() {
 
   const doInvite = async () => {
     const value = email.trim().toLowerCase();
-    if (!EMAIL_RE.test(value)) return setError("Invalid email format.");
-    if (!roleId) return setError("Select a role.");
+    if (!EMAIL_RE.test(value)) {
+      return setError(isIndonesian ? "Format email tidak valid." : "Invalid email format.");
+    }
+    if (!roleId) return setError(isIndonesian ? "Pilih peran." : "Select a role.");
     setBusy(true);
     setError(undefined);
     try {
       await inviteMember(value, roleId);
       setEmail("");
       await refresh();
-      toast.success("Invitation sent");
+      toast.success(isIndonesian ? "Undangan terkirim" : "Invitation sent");
     } catch (err) {
-      setError(extractApiError(err, "Failed to invite"));
+      setError(extractApiError(err, isIndonesian ? "Gagal mengundang" : "Failed to invite"));
     } finally {
       setBusy(false);
     }
@@ -84,17 +91,17 @@ function TeamManager() {
       await updateMemberRole(memberId, newRoleId);
       await refresh();
     } catch (err) {
-      toast.error(extractApiError(err, "Failed to change role"));
+      toast.error(extractApiError(err, isIndonesian ? "Gagal mengubah peran" : "Failed to change role"));
     }
   };
 
   const kick = async (memberId: string) => {
-    if (!window.confirm("Remove this member?")) return;
+    if (!window.confirm(isIndonesian ? "Hapus anggota ini?" : "Remove this member?")) return;
     try {
       await removeMember(memberId);
       await refresh();
     } catch (err) {
-      toast.error(extractApiError(err, "Failed to remove member"));
+      toast.error(extractApiError(err, isIndonesian ? "Gagal menghapus anggota" : "Failed to remove member"));
     }
   };
 
@@ -109,11 +116,11 @@ function TeamManager() {
 
   return (
     <div>
-      <PermissionGate anyPermission={["invoice-user-invite", "invoice-user-create"]}>
+      <PermissionGate anyPermission={["invoice-user-invite", "invoice-user-create"]} fallback={null}>
         <div className="border-b border-border-strong bg-slate-50/40 px-5 py-5">
           <h2 className="mb-3 flex items-center gap-2 font-display text-sm font-bold text-slate-800">
             <span className="size-1.5 rounded-full bg-[#6b8fff]" />
-            Invite Member
+            {isIndonesian ? "Undang Anggota" : "Invite Member"}
           </h2>
           <FormField error={error}>
             <div className="flex max-w-xl flex-col gap-2 sm:flex-row">
@@ -132,7 +139,7 @@ function TeamManager() {
                 <Select value={roleId} options={roleOptions} onChange={setRoleId} />
               </div>
               <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={doInvite} disabled={busy}>
-                Invite
+                {isIndonesian ? "Undang" : "Invite"}
               </Button>
             </div>
           </FormField>
@@ -141,8 +148,8 @@ function TeamManager() {
 
       <div className="border-b border-border-strong px-5 py-4">
         <h2 className="flex items-center gap-2 font-display text-sm font-bold text-slate-800">
-          <span className="size-1.5 rounded-full bg-[#a78bfa]" />
-          Team Members
+          <span className="size-1.5 rounded-full bg-primary" />
+          {isIndonesian ? "Anggota Tim" : "Team Members"}
         </h2>
       </div>
       <ul className="divide-y divide-row-border">
@@ -157,7 +164,7 @@ function TeamManager() {
                   <p className="truncate text-[13px] font-semibold text-slate-700">{m.name || m.email}</p>
                   <p className="truncate text-xs text-slate-400">
                     {m.email}
-                    {m.pending ? " · pending" : ""}
+                    {m.pending ? (isIndonesian ? " · menunggu" : " · pending") : ""}
                   </p>
                 </div>
 
@@ -179,7 +186,7 @@ function TeamManager() {
                 )}
 
                 {!isOwner && (
-                  <PermissionGate anyPermission={["invoice-user-delete"]}>
+                  <PermissionGate anyPermission={["invoice-user-delete"]} fallback={null}>
                     <button
                       type="button"
                       onClick={() => kick(m.id)}

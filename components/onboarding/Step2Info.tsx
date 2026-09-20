@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Button, Input, Label, SelectField, TextField, toOptions } from "@/components/ui";
+import { useOnb } from "@/lib/onboardingText";
+import { ArrowRight } from "lucide-react";
+import { Button, Input, Label, SelectField, TextField } from "@/components/ui";
 import { EMPLOYEE_COUNT_OPTIONS, INDUSTRY_OPTIONS } from "@/lib/onboarding";
 import type { AccountType } from "@/services/onboardingService";
 import type { OnboardingDraft } from "@/store/useOnboardingStore";
@@ -20,6 +22,7 @@ export default function Step2Info({
   draft: OnboardingDraft;
   onNext: (p: Partial<OnboardingDraft>) => void;
 }) {
+  const { t } = useOnb();
   const [info, setInfo] = useState<Record<FieldKey, string>>({
     jenis_usaha: draft.jenis_usaha,
     jumlah_karyawan: draft.jumlah_karyawan,
@@ -39,9 +42,9 @@ export default function Step2Info({
 
   const submit = () => {
     const next: Errors = {};
-    if (!info.jenis_usaha) next.jenis_usaha = "Select your industry.";
-    if (!info.jumlah_karyawan) next.jumlah_karyawan = "Select the employee count.";
-    if (!info.telepon.trim()) next.telepon = "Company phone number is required.";
+    if (!info.jenis_usaha) next.jenis_usaha = t("Select your industry.");
+    if (!info.jumlah_karyawan) next.jumlah_karyawan = t("Select the employee count.");
+    if (!info.telepon.trim()) next.telepon = t("Company phone number is required.");
     setErrors(next);
     if (Object.keys(next).length === 0) {
       onNext({ tipe_akun: DEFAULT_ACCOUNT_TYPE, npwp: "", ...info });
@@ -57,27 +60,27 @@ export default function Step2Info({
       }}
     >
       <div>
-        <h2 className="text-xl font-bold text-foreground text-balance">Company information</h2>
+        <h2 className="text-xl font-bold text-foreground text-balance">{t("Company information")}</h2>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Help us tailor the features for your business.
+          {t("Help us tailor the features for your business.")}
         </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2">
         <SelectField
           id="jenis_usaha"
-          label="Industry"
-          placeholder="Select your industry"
-          options={toOptions(INDUSTRY_OPTIONS)}
+          label={t("Industry")}
+          placeholder={t("Select your industry")}
+          options={INDUSTRY_OPTIONS.map((o) => ({ value: o, label: t(o) }))}
           value={info.jenis_usaha}
           error={errors.jenis_usaha}
           onChange={(e) => set("jenis_usaha", e.target.value)}
         />
         <SelectField
           id="jumlah_karyawan"
-          label="Employee Count"
-          placeholder="Select employee count"
-          options={EMPLOYEE_COUNT_OPTIONS}
+          label={t("Employee Count")}
+          placeholder={t("Select employee count")}
+          options={EMPLOYEE_COUNT_OPTIONS.map((o) => ({ ...o, label: t(o.label) }))}
           value={info.jumlah_karyawan}
           error={errors.jumlah_karyawan}
           onChange={(e) => set("jumlah_karyawan", e.target.value)}
@@ -87,7 +90,7 @@ export default function Step2Info({
       <div className="grid gap-4 sm:grid-cols-2">
         <TextField
           id="telepon"
-          label="Company Phone"
+          label={t("Company Phone")}
           placeholder="0812xxxxxxxx"
           value={info.telepon}
           error={errors.telepon}
@@ -95,7 +98,7 @@ export default function Step2Info({
         />
         <TextField
           id="email_perusahaan"
-          label="Company Email"
+          label={t("Company Email")}
           type="email"
           optional
           placeholder="hello@company.com"
@@ -105,23 +108,23 @@ export default function Step2Info({
       </div>
 
       <div>
-        <Label>Company address (optional)</Label>
+        <Label>{t("Company address (optional)")}</Label>
         <div className="flex flex-col gap-3">
           <Input
             id="alamat"
-            placeholder="Street, number, RT/RW"
+            placeholder={t("Street, number, RT/RW")}
             value={info.alamat}
             onChange={(e) => set("alamat", e.target.value)}
           />
           <div className="grid gap-3 sm:grid-cols-3">
-            <Input placeholder="City" value={info.kota} onChange={(e) => set("kota", e.target.value)} />
+            <Input placeholder={t("City")} value={info.kota} onChange={(e) => set("kota", e.target.value)} />
             <Input
-              placeholder="Province"
+              placeholder={t("Province")}
               value={info.provinsi}
               onChange={(e) => set("provinsi", e.target.value)}
             />
             <Input
-              placeholder="Postal code"
+              placeholder={t("Postal code")}
               value={info.kode_pos}
               onChange={(e) => set("kode_pos", e.target.value)}
             />
@@ -129,8 +132,9 @@ export default function Step2Info({
         </div>
       </div>
 
-      <Button type="submit" fullWidth>
-        Continue
+      <Button type="submit" fullWidth className="group">
+        {t("Continue")}
+        <ArrowRight className="size-4 transition-transform duration-200 group-hover:translate-x-1" aria-hidden />
       </Button>
     </form>
   );

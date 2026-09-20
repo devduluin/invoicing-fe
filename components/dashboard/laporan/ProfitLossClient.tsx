@@ -81,7 +81,7 @@ export default function ProfitLossClient() {
           </div>
 
           <div
-            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-[1.5px] px-5 py-4"
+            className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-5 py-4"
             style={{
               background: profit ? "#ecfdf5" : "#fef2f2",
               borderColor: profit ? "#a7f3d0" : "#fecaca",

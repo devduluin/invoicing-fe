@@ -115,7 +115,7 @@ export default function TaxFormModal({
       className="max-w-xl"
       banner={
         locked ? (
-          <div className="flex items-start gap-2.5 border-b border-border bg-amber-50/70 px-5 py-2.5 text-[11px] text-amber-700">
+          <div className="flex items-start gap-2.5 border-b border-border bg-slate-50 px-5 py-2.5 text-xs text-slate-600">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <p>Built-in system tax. Name & kind are locked — rate, method, accounts, and status can still be changed.</p>
           </div>

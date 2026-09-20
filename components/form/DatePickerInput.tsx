@@ -27,6 +27,9 @@ const MONTHS = [
   "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+const YEARS_PER_PAGE = 12;
+
+type PickerMode = "days" | "months" | "years";
 
 const iso = (d: Date) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -74,6 +77,7 @@ export function DatePickerInput({
   const selected = useMemo(() => parse(value), [value]);
   const [view, setView] = useState(() => selected ?? new Date());
   const [open, setOpen] = useState(false);
+  const [mode, setMode] = useState<PickerMode>("days");
   const [text, setText] = useState(() => (selected ? formatDMY(selected) : ""));
 
   // Keep the typed text in sync with externally-driven changes (a calendar
@@ -85,9 +89,28 @@ export function DatePickerInput({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value]);
 
+  // Always reopen on the day grid.
+  useEffect(() => {
+    if (open) setMode("days");
+  }, [open]);
+
   const minD = min ? parse(min) : null;
   const maxD = max ? parse(max) : null;
   const disabledDay = (d: Date) => (minD && d < minD) || (maxD && d > maxD);
+
+  const viewYear = view.getFullYear();
+  const yearPageStart = Math.floor(viewYear / YEARS_PER_PAGE) * YEARS_PER_PAGE;
+  const monthOutOfRange = (y: number, m: number) =>
+    !!((minD && new Date(y, m + 1, 0) < minD) || (maxD && new Date(y, m, 1) > maxD));
+  const yearOutOfRange = (y: number) =>
+    !!((minD && new Date(y, 11, 31) < minD) || (maxD && new Date(y, 0, 1) > maxD));
+
+  // Chevrons move by a month, a year, or a page of years depending on the view.
+  const step = (dir: 1 | -1) => {
+    if (mode === "days") setView(new Date(viewYear, view.getMonth() + dir, 1));
+    else if (mode === "months") setView(new Date(viewYear + dir, view.getMonth(), 1));
+    else setView(new Date(viewYear + dir * YEARS_PER_PAGE, view.getMonth(), 1));
+  };
 
   const grid = useMemo(() => {
     const first = new Date(view.getFullYear(), view.getMonth(), 1);
@@ -119,7 +142,7 @@ export function DatePickerInput({
         <Popover.Anchor asChild>
         <div
           className={cn(
-            "flex items-center gap-1 rounded-xl border-[1.5px] border-border-strong bg-white pl-3 pr-1.5 transition-all",
+            "flex items-center gap-1 rounded-xl border border-border-strong bg-white pl-3 pr-1.5 transition-all",
             "focus-within:border-primary focus-within:ring-[3px] focus-within:ring-primary/15",
             invalid && fieldError,
             disabled && "cursor-not-allowed bg-slate-50",
@@ -174,28 +197,113 @@ export function DatePickerInput({
           <Popover.Content
             align="start"
             sideOffset={4}
-            className="z-50 w-64 rounded-xl border border-border bg-white p-3 shadow-xl shadow-slate-900/10 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
+            // The popover opens when the input is focused; don't let it take that focus
+            // away, or typing a date by hand silently goes nowhere.
+            onOpenAutoFocus={(e) => e.preventDefault()}
+            className="z-[60] w-64 rounded-lg border border-border bg-card p-3 shadow-pop data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95"
           >
             <div className="mb-2 flex items-center justify-between">
               <button
                 type="button"
-                onClick={() => setView(new Date(view.getFullYear(), view.getMonth() - 1, 1))}
+                aria-label="Previous"
+                onClick={() => step(-1)}
                 className="grid size-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100"
               >
                 <ChevronLeft className="size-4" />
               </button>
-              <span className="text-[13px] font-semibold text-slate-700">
-                {MONTHS[view.getMonth()]} {view.getFullYear()}
+              <span className="flex items-center gap-0.5 text-[13px] font-semibold text-slate-700">
+                {mode === "years" ? (
+                  <span className="px-1.5 py-0.5">
+                    {yearPageStart} – {yearPageStart + YEARS_PER_PAGE - 1}
+                  </span>
+                ) : (
+                  <>
+                    {mode === "days" ? (
+                      <button
+                        type="button"
+                        onClick={() => setMode("months")}
+                        className="rounded-md px-1.5 py-0.5 hover:bg-slate-100"
+                        aria-label="Choose month"
+                      >
+                        {MONTHS[view.getMonth()]}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      onClick={() => setMode("years")}
+                      className="rounded-md px-1.5 py-0.5 hover:bg-slate-100"
+                      aria-label="Choose year"
+                    >
+                      {viewYear}
+                    </button>
+                  </>
+                )}
               </span>
               <button
                 type="button"
-                onClick={() => setView(new Date(view.getFullYear(), view.getMonth() + 1, 1))}
+                aria-label="Next"
+                onClick={() => step(1)}
                 className="grid size-7 place-items-center rounded-lg text-slate-400 hover:bg-slate-100"
               >
                 <ChevronRight className="size-4" />
               </button>
             </div>
 
+            {mode === "months" && (
+              <div className="grid grid-cols-3 gap-1">
+                {MONTHS.map((name, m) => {
+                  const out = monthOutOfRange(viewYear, m);
+                  const isSelected = !!selected && selected.getFullYear() === viewYear && selected.getMonth() === m;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      disabled={out}
+                      onClick={() => {
+                        setView(new Date(viewYear, m, 1));
+                        setMode("days");
+                      }}
+                      className={cn(
+                        "h-9 rounded-lg text-[12px] transition-colors",
+                        out && "cursor-not-allowed text-slate-300",
+                        !out && (isSelected ? "bg-primary font-bold text-white" : view.getMonth() === m ? "bg-secondary font-semibold text-primary-ink" : "text-slate-600 hover:bg-secondary"),
+                      )}
+                    >
+                      {name.slice(0, 3)}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {mode === "years" && (
+              <div className="grid grid-cols-3 gap-1">
+                {Array.from({ length: YEARS_PER_PAGE }, (_, i) => yearPageStart + i).map((y) => {
+                  const out = yearOutOfRange(y);
+                  const isSelected = !!selected && selected.getFullYear() === y;
+                  return (
+                    <button
+                      key={y}
+                      type="button"
+                      disabled={out}
+                      onClick={() => {
+                        setView(new Date(y, view.getMonth(), 1));
+                        setMode("months");
+                      }}
+                      className={cn(
+                        "h-9 rounded-lg text-[12px] tabular-nums transition-colors",
+                        out && "cursor-not-allowed text-slate-300",
+                        !out && (isSelected ? "bg-primary font-bold text-white" : y === viewYear ? "bg-secondary font-semibold text-primary-ink" : "text-slate-600 hover:bg-secondary"),
+                      )}
+                    >
+                      {y}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
+            {mode === "days" && (
             <div className="grid grid-cols-7 gap-0.5 text-center">
               {WEEKDAYS.map((w, i) => (
                 <span key={i} className="py-1 text-[10px] font-bold uppercase text-slate-400">
@@ -228,6 +336,7 @@ export function DatePickerInput({
                 ),
               )}
             </div>
+            )}
           </Popover.Content>
         </Popover.Portal>
       </Popover.Root>

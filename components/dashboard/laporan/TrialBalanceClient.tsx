@@ -7,7 +7,8 @@ import toast from "react-hot-toast";
 import { Card } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, DatePickerInput } from "@/components/form";
-import { StatusPill } from "@/components/masterTable/columnFactory";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { CheckCircle2, AlertCircle } from "lucide-react";
 import { extractApiError } from "@/lib/apiError";
 import { getTrialBalance, type TrialBalanceResponse, type TrialBalanceRow } from "@/services/reportService";
 import { ReportTable, type ReportColumn } from "./ReportTable";
@@ -53,12 +54,7 @@ export default function TrialBalanceClient() {
         description="Summary of beginning balance, movement, and ending balance per account — computed from posted journal entries."
         actions={
           data && (
-            <StatusPill
-              label={data.is_balanced ? "Balanced" : "Not Balanced"}
-              bg={data.is_balanced ? "#ecfdf5" : "#fef2f2"}
-              text={data.is_balanced ? "#065f46" : "#b91c1c"}
-              dot={data.is_balanced ? "#34d399" : "#f87171"}
-            />
+            <StatusBadge label={data.is_balanced ? "Balanced" : "Not Balanced"} tone={data.is_balanced ? "success" : "danger"} icon={data.is_balanced ? CheckCircle2 : AlertCircle} />
           )
         }
       />

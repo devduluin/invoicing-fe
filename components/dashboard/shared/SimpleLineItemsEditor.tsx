@@ -1,9 +1,11 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 
-import { NumberSeparatorInput, Input, Select } from "@/components/form";
+import { NumberSeparatorInput, Input, SearchableSelect } from "@/components/form";
 import { Button } from "@/components/ui";
+import { listAllUnits } from "@/services/unitService";
 
 /** One editable row — a client-only shape; `key` never leaves the browser.
  *  Shared by Delivery Note and Goods Receipt: both are physical-movement logs
@@ -27,21 +29,6 @@ export function emptySimpleLine(): EditableSimpleLine {
   };
 }
 
-const UNIT_OPTIONS = [
-  { value: "Pcs", label: "Pcs" },
-  { value: "Unit", label: "Unit" },
-  { value: "Box", label: "Box" },
-  { value: "Karton", label: "Karton" },
-  { value: "Pack", label: "Pack" },
-  { value: "Set", label: "Set" },
-  { value: "Roll", label: "Roll" },
-  { value: "Lembar", label: "Lembar" },
-  { value: "Kg", label: "Kg" },
-  { value: "Gram", label: "Gram" },
-  { value: "Liter", label: "Liter" },
-  { value: "Meter", label: "Meter" },
-];
-
 const GRID_COLS = "grid grid-cols-[minmax(200px,2fr)_minmax(180px,2fr)_100px_110px_40px] gap-2";
 
 interface Props {
@@ -58,6 +45,23 @@ interface Props {
  *  Distinct from LineItemsEditor rather than a "hide financial columns" mode
  *  of it, since the two share almost nothing once money is removed. */
 export function SimpleLineItemsEditor({ lines, onChange, minLines = 1, embedded = false }: Props) {
+  const [unitOptions, setUnitOptions] = useState<{ value: string; label: string }[]>([]);
+
+  useEffect(() => {
+    listAllUnits()
+      .then((units) =>
+        setUnitOptions(
+          units
+            .filter((u) => u.is_active)
+            .map((u) => ({
+              value: u.name,
+              label: u.symbol && u.symbol !== u.name ? `${u.name} (${u.symbol})` : u.name,
+            })),
+        ),
+      )
+      .catch(() => setUnitOptions([]));
+  }, []);
+
   const update = (key: string, patch: Partial<EditableSimpleLine>) =>
     onChange(lines.map((l) => (l.key === key ? { ...l, ...patch } : l)));
 
@@ -69,15 +73,16 @@ export function SimpleLineItemsEditor({ lines, onChange, minLines = 1, embedded 
   const addRow = () => onChange([...lines, emptySimpleLine()]);
 
   return (
-    <div className={embedded ? undefined : "overflow-hidden rounded-2xl border-[1.5px] border-border bg-card"}>
+    <div className={embedded ? undefined : "overflow-hidden rounded-2xl border border-border bg-card"}>
       <div className="overflow-x-auto">
-        <div className="min-w-[600px]">
+        <div className="min-w-[680px]">
           <div
             className={`${GRID_COLS} border-b border-border bg-table-head px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400`}
           >
             <span>Product</span>
             <span>Description</span>
             <span className="text-right">Qty</span>
+            <span>Unit</span>
             <span />
           </div>
 
@@ -99,6 +104,13 @@ export function SimpleLineItemsEditor({ lines, onChange, minLines = 1, embedded 
                   onChange={(v) => update(line.key, { quantity: v })}
                   placeholder="0"
                   decimals={2}
+                />
+                <SearchableSelect
+                  value={line.unit}
+                  onChange={(v) => update(line.key, { unit: v })}
+                  options={unitOptions}
+                  placeholder="Unit"
+                  searchPlaceholder="Search unit…"
                 />
                 <button
                   type="button"

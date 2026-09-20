@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, FileText } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button, Card, Stepper } from "@/components/ui";
+import { Button, Stepper } from "@/components/ui";
 import OnboardingAside from "./OnboardingAside";
 import Step1Company from "./Step1Company";
 import Step2Info from "./Step2Info";
@@ -15,12 +15,15 @@ import SetupTemplateModal from "./SetupTemplateModal";
 
 import { useOnboardingStore, draftToPayload, type OnboardingDraft } from "@/store/useOnboardingStore";
 import { useAuthStore } from "@/store/useAuthStore";
+import { cn } from "@/lib/utils";
+import { useOnb } from "@/lib/onboardingText";
 import { APP_NAME, TOTAL_STEPS, WIZARD_STEPS } from "@/lib/onboarding";
 import { extractApiError } from "@/lib/apiError";
 import { getMe } from "@/services/authService";
 import { submitOnboarding } from "@/services/onboardingService";
 
 export default function OnboardingWizard() {
+  const { t, tr } = useOnb();
   const router = useRouter();
   // ?new=1 → deliberately creating an additional company; don't bounce even
   // though the user already has one.
@@ -33,6 +36,7 @@ export default function OnboardingWizard() {
 
   const [hydrated, setHydrated] = useState(false);
   const [direction, setDirection] = useState<"next" | "back">("next");
+  const [leaving, setLeaving] = useState(false);
   const [doneCompanyName, setDoneCompanyName] = useState<string | null>(null);
   const didInit = useRef(false);
 
@@ -57,9 +61,14 @@ export default function OnboardingWizard() {
 
   const canCancel = companies.length > 0;
 
+  // The outgoing step fades and slides away first (about 140ms), then the new one animates in.
   const goToStep = (step: number, dir: "next" | "back") => {
     setDirection(dir);
-    setActiveStep(step);
+    setLeaving(true);
+    window.setTimeout(() => {
+      setActiveStep(step);
+      setLeaving(false);
+    }, 140);
   };
 
   const next = (p: Partial<OnboardingDraft>) => {
@@ -100,72 +109,69 @@ export default function OnboardingWizard() {
   const showBack = activeStep > 1 && !doneCompanyName;
 
   return (
-    <main className="flex min-h-svh w-full bg-gradient-to-b from-background to-accent">
-      <section className="flex w-full flex-col items-center justify-center px-4 py-8 sm:px-6 lg:w-[58%]">
-        <div className="w-full max-w-[480px]">
-          <header className="mb-6 flex items-center gap-2">
-            <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
-              <FileText className="size-5" />
-            </span>
-            <span className="text-lg font-bold tracking-tight text-foreground">{APP_NAME}</span>
-          </header>
+    <main className="flex min-h-svh w-full bg-[#f4f6fa] bg-[radial-gradient(900px_420px_at_0%_0%,rgba(72,99,230,0.10),transparent_70%)]">
+      <section className="flex min-w-0 flex-1 flex-col px-5 py-6 sm:px-10 lg:px-14 lg:py-8">
+        <header className="page-in flex items-center gap-2.5">
+          <span className="flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground shadow-[0_2px_8px_-2px_rgba(72,99,230,0.5)]">
+            <FileText className="size-[18px]" />
+          </span>
+          <span className="font-display text-lg font-bold tracking-tight text-foreground">{APP_NAME}</span>
+        </header>
 
-          <Card>
-            <div className="mb-7 flex min-h-6 items-center justify-between">
+        <div className="mx-auto flex w-full max-w-[520px] flex-1 flex-col justify-center py-8">
+          <div className="page-in [animation-delay:60ms]">
+            <p className="mb-3 text-xs font-semibold tracking-wider text-primary-ink uppercase">
+              {t("Setup")} · {tr("Langkah", "Step")} {Math.min(activeStep, TOTAL_STEPS)} {tr("dari", "of")} {TOTAL_STEPS}
+            </p>
+            <Stepper steps={WIZARD_STEPS.map((st) => ({ ...st, label: t(st.label) }))} current={Math.min(activeStep, TOTAL_STEPS)} />
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-border bg-white/80 p-5 shadow-[0_1px_2px_rgba(20,30,60,0.05),0_18px_40px_-24px_rgba(20,30,60,0.2)] backdrop-blur sm:p-6">
+            <div className="mb-4 flex min-h-6 items-center justify-between">
               {showBack ? (
-                <Button
-                  variant="link"
-                  leftIcon={<ArrowLeft className="size-4" />}
-                  onClick={() => goToStep(activeStep - 1, "back")}
-                >
-                  Back
+                <Button variant="link" leftIcon={<ArrowLeft className="size-4" />} onClick={() => goToStep(activeStep - 1, "back")}>
+                  {t("Back")}
                 </Button>
               ) : (
-                <span className="text-sm font-medium text-muted-foreground">
-                  Step {Math.min(activeStep, TOTAL_STEPS)} of {TOTAL_STEPS}
-                </span>
+                <span />
               )}
               {canCancel && !doneCompanyName && (
                 <Button variant="link" onClick={cancel} className="text-muted-foreground">
-                  Cancel
+                  {t("Cancel")}
                 </Button>
               )}
             </div>
 
-            <div className="mb-8">
-              <Stepper steps={WIZARD_STEPS} current={Math.min(activeStep, TOTAL_STEPS)} />
-            </div>
-
             {!hydrated ? (
-              <p className="py-8 text-center text-sm text-muted-foreground">Loading…</p>
+              <p className="py-8 text-center text-sm text-muted-foreground">{t("Loading…")}</p>
             ) : (
               <div
                 key={activeStep}
-                className={direction === "next" ? "animate-step-in" : "animate-step-in-back"}
+                className={
+                  leaving
+                    ? cn("opacity-0 transition-all duration-150 ease-in", direction === "next" ? "-translate-x-2" : "translate-x-2")
+                    : direction === "next"
+                      ? "animate-step-in"
+                      : "animate-step-in-back"
+                }
               >
                 {activeStep === 1 && <Step1Company draft={draft} onNext={next} />}
                 {activeStep === 2 && <Step2Info draft={draft} onNext={next} />}
                 {activeStep === 3 && <Step3Needs draft={draft} onNext={next} />}
-                {activeStep >= 4 && (
-                  <Step4Invite
-                    draft={draft}
-                    patch={patch}
-                    submitting={submitting}
-                    onFinish={finish}
-                  />
-                )}
+                {activeStep >= 4 && <Step4Invite draft={draft} patch={patch} submitting={submitting} onFinish={finish} />}
               </div>
             )}
-          </Card>
+          </div>
 
-          <p className="mt-5 text-center text-xs leading-relaxed text-muted-foreground">
-            By continuing, you agree to {APP_NAME}&apos;s Terms &amp; Conditions and Privacy
-            Policy.
+          <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+            {tr(`Dengan melanjutkan, Anda menyetujui Syarat & Ketentuan dan Kebijakan Privasi ${APP_NAME}.`, `By continuing, you agree to ${APP_NAME}'s Terms & Conditions and Privacy Policy.`)}
           </p>
         </div>
       </section>
 
-      <OnboardingAside />
+      <div className="hidden w-[38%] max-w-[560px] min-w-[340px] lg:flex xl:w-[42%]">
+        <OnboardingAside />
+      </div>
 
       {doneCompanyName && (
         <SetupTemplateModal

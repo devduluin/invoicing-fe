@@ -6,6 +6,7 @@ import { FileText, Plus, Copy } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
+import { useTr } from "@/lib/useTr";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
@@ -14,7 +15,8 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
-import { buildColumns, StatusPill, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
   listPurchaseInvoices,
   deletePurchaseInvoice,
@@ -26,17 +28,12 @@ import { listAllMitra, type Mitra } from "@/services/mitraService";
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
-const STATUS_STYLE: Record<PurchaseInvoiceStatus, { bg: string; text: string; dot: string }> = {
-  draft: { bg: "#f1f5f9", text: "#64748b", dot: "#cbd5e1" },
-  confirmed: { bg: "#eef1ff", text: "#3b57d4", dot: "#6b8fff" },
-  cancelled: { bg: "#fef2f2", text: "#b91c1c", dot: "#f87171" },
-};
-
 const TABLE_KEY = "purchase-invoices";
 const BASE_PATH = "/dashboard/pembelian/invoice";
 const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "due_date", "status", "grand_total"];
 
 export default function PurchaseInvoiceClient() {
+  const tr = useTr();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-bill-create");
@@ -72,9 +69,8 @@ export default function PurchaseInvoiceClient() {
         header: "Status",
         render: (v) => {
           const s = (v as PurchaseInvoiceStatus) ?? "draft";
-          const style = STATUS_STYLE[s] ?? STATUS_STYLE.draft;
           return (
-            <StatusPill label={PURCHASE_INVOICE_STATUS_LABEL[s] ?? s} bg={style.bg} text={style.text} dot={style.dot} />
+            <Status status={s as StatusKey} label={PURCHASE_INVOICE_STATUS_LABEL[s] ?? s} />
           );
         },
       },
@@ -135,6 +131,7 @@ export default function PurchaseInvoiceClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "date", order: "desc" }}
         emptyTitle="No invoices yet"
         emptyDescription="Add an invoice to record a bill from a supplier."
@@ -149,7 +146,7 @@ export default function PurchaseInvoiceClient() {
                 canCreate
                   ? [
                       {
-                        label: "Duplicate",
+                        label: tr("Duplikat", "Duplicate"),
                         icon: <Copy className="size-3.5" />,
                         onClick: () => router.push(`${BASE_PATH}/add?duplicate_from=${invoice.id}`),
                       },

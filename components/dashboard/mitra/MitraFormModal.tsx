@@ -5,6 +5,7 @@ import { Building2, Check, CreditCard, Info, Loader2, UserCircle, Wallet, X } fr
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
+import { Modal } from "@/components/modal/Modal";
 import { CheckboxField, FormField, Input, RadioField, Textarea } from "@/components/form";
 import { cn } from "@/lib/utils";
 import { extractApiError } from "@/lib/apiError";
@@ -140,10 +141,7 @@ export default function MitraFormModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
-      <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-sm" onClick={onClose} />
-
-      <div className="relative flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border-[1.5px] border-border bg-card shadow-[0_20px_60px_-12px_rgba(15,23,42,0.25)]">
+    <Modal className="flex max-h-[calc(100dvh-2rem)] max-w-3xl flex-col" onClose={busy ? undefined : onClose}>
         <div className="flex shrink-0 items-center justify-between border-b border-border px-5 py-3.5">
           <h2 className="font-display text-base font-bold text-slate-800">
             {editing ? "Edit Partner" : "Create New Partner"}
@@ -224,7 +222,7 @@ export default function MitraFormModal({
                         <Loader2 className="absolute top-1/2 right-3 size-4 -translate-y-1/2 animate-spin text-slate-400" />
                       )}
                       {lookup === "found" && (
-                        <Check className="absolute top-1/2 right-3 size-4 -translate-y-1/2 text-emerald-500" />
+                        <Check className="absolute top-1/2 right-3 size-4 -translate-y-1/2 text-primary" />
                       )}
                     </div>
                   </FormField>
@@ -313,7 +311,6 @@ export default function MitraFormModal({
             {busy ? "Saving…" : "Save"}
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

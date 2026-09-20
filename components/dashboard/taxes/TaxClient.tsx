@@ -168,6 +168,7 @@ export default function TaxClient() {
         updateParams={list.updateParams}
         onRefresh={list.refresh}
         loading={list.loading}
+        error={list.error}
         defaultSort={{ column: "name", order: "asc" }}
         emptyTitle="No taxes yet"
         emptyDescription="Add the tax types you usually apply to invoices."

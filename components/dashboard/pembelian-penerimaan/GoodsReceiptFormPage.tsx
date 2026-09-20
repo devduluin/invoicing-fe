@@ -7,36 +7,77 @@ import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, Textarea, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
-import { getPurchaseOrder } from "@/services/purchaseOrderService";
-import { createGoodsReceipt, type GoodsReceiptInput } from "@/services/goodsReceiptService";
+import { getPurchaseOrder, listAllPurchaseOrders, type PurchaseOrder } from "@/services/purchaseOrderService";
+import { createGoodsReceipt, getGoodsReceipt, updateGoodsReceipt, type GoodsReceiptInput } from "@/services/goodsReceiptService";
 import { SimpleLineItemsEditor, emptySimpleLine, type EditableSimpleLine } from "../shared/SimpleLineItemsEditor";
 import { MoreInfoSection, emptyMoreInfo, type MoreInfoValue } from "../shared/MoreInfoSection";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
+import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-/** Goods Receipt is create-only — no edit route exists (matches the seeded
- *  invoice-goods-receipt-{list,create} permissions: a physical receiving
- *  log, create-once, never edited or deleted through the API). On create,
- *  `?dari_order=<id>` pre-fills mitra + lines from that confirmed Purchase
- *  Order (pure frontend convenience — no backend coupling). */
-export default function GoodsReceiptFormPage() {
+/** Create and edit share this form. Edit (`mode="edit"` + `id`) loads the saved record,
+ *  and saving replaces it (PUT); the number can be left blank to keep the current one. On
+ *  create, `?dari_order=<id>` pre-fills partner + lines from that confirmed order (pure
+ *  frontend convenience — no backend coupling). */
+export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const isEdit = mode === "edit" && !!id;
 
   // Tracks every initial-load fetch (mitras + the ?dari_order prefill, if
   // present) so the form only renders once ALL of them have settled —
+  // Edit: load the saved record into the form.
+  useEffect(() => {
+    if (!isEdit || !id) return;
+    getGoodsReceipt(id)
+      .then((n) => {
+      setPurchaseOrderId(n.purchase_order_id ?? null);
+        setMitraId(n.mitra_id);
+        setNumber(n.number);
+        setDate(n.date.slice(0, 10));
+        setNotes(n.notes ?? "");
+        setLines(
+          n.lines.length
+            ? n.lines.map((l) => ({
+                key: crypto.randomUUID(),
+                product_name: l.product_name,
+                description: l.description ?? "",
+                quantity: l.quantity,
+                unit: l.unit ?? "",
+              }))
+            : [emptySimpleLine()],
+        );
+        setMoreInfo({
+          shipping_method: n.shipping_method ?? "",
+          tracking_no: n.tracking_no ?? "",
+          vehicle_no: n.vehicle_no ?? "",
+          driver_name: n.driver_name ?? "",
+          total_weight: n.total_weight ?? null,
+        });
+        setAttachmentData(n.attachment_data ?? "");
+        setAttachmentName(n.attachment_name ?? "");
+      })
+      .catch((err) => {
+        toast.error(extractApiError(err, "Failed to load goods receipt"));
+        router.back();
+      })
+      .finally(() => done("entity"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, id]);
+
   // ?dari_order=<id> resolves fast (one record) while listAllMitra() can be
   // slower, and revealing the form before mitras loads would show the
   // Partner field blank even though mitraId is already correctly set.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras"]);
-    if (searchParams.get("dari_order")) s.add("prefill");
+    const s = new Set<string>(["mitras", "orders"]);
+    if (isEdit) s.add("entity");
+    else if (searchParams.get("dari_order")) s.add("prefill");
     return s;
   });
   const done = (key: string) =>
@@ -50,6 +91,7 @@ export default function GoodsReceiptFormPage() {
 
   const [busy, setBusy] = useState(false);
   const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [addMitraOpen, setAddMitraOpen] = useState(false);
 
   const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
@@ -59,15 +101,18 @@ export default function GoodsReceiptFormPage() {
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<EditableSimpleLine[]>([emptySimpleLine()]);
   const [moreInfo, setMoreInfo] = useState<MoreInfoValue>(emptyMoreInfo());
+  const [attachmentData, setAttachmentData] = useState("");
+  const [attachmentName, setAttachmentName] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
 
   usePageBreadcrumb([
     { label: "Goods Receipts", href: "/dashboard/pembelian/penerimaan" },
-    { label: "Add Goods Receipt" },
+    { label: isEdit ? "Edit Goods Receipt" : "Add Goods Receipt" },
   ]);
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
+    listAllPurchaseOrders().then(setPurchaseOrders).catch(() => setPurchaseOrders([])).finally(() => done("orders"));
   }, []);
 
   // ?dari_order=<id> → pre-fill mitra & lines from that confirmed order.
@@ -85,6 +130,7 @@ export default function GoodsReceiptFormPage() {
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
+              unit: "",
             })),
           );
         }
@@ -136,17 +182,25 @@ export default function GoodsReceiptFormPage() {
       vehicle_no: moreInfo.vehicle_no.trim() || undefined,
       driver_name: moreInfo.driver_name.trim() || undefined,
       total_weight: moreInfo.total_weight ?? undefined,
+      attachment_data: attachmentData || undefined,
+      attachment_name: attachmentName || undefined,
       lines: active.map((l) => ({
         product_name: l.product_name.trim(),
         description: l.description.trim() || undefined,
         quantity: l.quantity ?? 0,
+        unit: l.unit || undefined,
       })),
     };
 
     setBusy(true);
     try {
-      await createGoodsReceipt(payload);
-      toast.success("Goods receipt added");
+      if (isEdit && id) {
+        await updateGoodsReceipt(id, payload);
+        toast.success("Goods Receipt updated");
+      } else {
+        await createGoodsReceipt(payload);
+        toast.success("Goods receipt added");
+      }
       router.push("/dashboard/pembelian/penerimaan");
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save goods receipt"));
@@ -171,7 +225,7 @@ export default function GoodsReceiptFormPage() {
     <div className="space-y-4">
       <PageHeader
         icon={PackageCheck}
-        title="Add Goods Receipt"
+        title={isEdit ? "Edit Goods Receipt" : "Add Goods Receipt"}
         description="Record goods physically received from a supplier, optionally linked to a purchase order."
         actions={
           <>
@@ -186,6 +240,15 @@ export default function GoodsReceiptFormPage() {
       />
 
       <DocumentFormLayout
+        headerLeft={
+          <AttachmentUpload
+            value={{ data: attachmentData, name: attachmentName }}
+            onChange={(v: AttachmentValue) => {
+              setAttachmentData(v.data);
+              setAttachmentName(v.name);
+            }}
+          />
+        }
         metaFields={
           <>
             <FormField label="Partner" htmlFor="gr-mitra" required error={errors.mitraId}>
@@ -195,6 +258,7 @@ export default function GoodsReceiptFormPage() {
                 options={mitraOptions}
                 onChange={(v) => {
                   setMitraId(v);
+                  setPurchaseOrderId(null);
                   setErrors((prev) => ({ ...prev, mitraId: undefined }));
                 }}
                 placeholder="Select a partner…"
@@ -223,19 +287,30 @@ export default function GoodsReceiptFormPage() {
                 error={errors.date}
               />
             </FormField>
+            <FormField
+              label="Order No."
+              htmlFor="gr-order"
+              optional
+              hint={mitraId ? "Which purchase order this receipt is for." : "Select a partner first."}
+            >
+              <SearchableSelect
+                id="gr-order"
+                value={purchaseOrderId ?? ""}
+                options={purchaseOrders
+                  .filter((o) => o.mitra_id === mitraId)
+                  .map((o) => ({ value: o.id, label: o.number }))}
+                onChange={(v) => setPurchaseOrderId(v || null)}
+                placeholder="No linked order"
+                disabled={!mitraId}
+              />
+            </FormField>
           </>
         }
         belowMeta={<MoreInfoSection value={moreInfo} onChange={setMoreInfo} embedded />}
         lineItems={<SimpleLineItemsEditor lines={lines} onChange={setLines} embedded />}
         notes={
           <FormField label="Notes" htmlFor="gr-notes" optional>
-            <Textarea
-              id="gr-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Internal notes (optional)"
-              rows={3}
-            />
+            <RichTextEditor id="gr-notes" value={notes} onChange={setNotes} placeholder="Internal notes (optional)" />
           </FormField>
         }
       />

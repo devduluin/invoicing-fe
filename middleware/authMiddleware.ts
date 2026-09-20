@@ -7,7 +7,7 @@ const LAUNCHPAD_URL = (
 const ACCOUNT_TYPE = process.env.NEXT_PUBLIC_X_ACCOUNT_TYPE || "duluin_invoice";
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
 
-const PROTECTED_PREFIXES = ["/dashboard", "/onboarding"];
+const PROTECTED_PREFIXES = ["/dashboard", "/onboarding", "/select-company"];
 
 /**
  * Auth follows Launchpad: this app has no login form. When the shared SSO

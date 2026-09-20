@@ -6,6 +6,8 @@ export type SalesInvoiceKind = "invoice" | "down_payment";
 export type SalesInvoiceStatus = "draft" | "confirmed" | "cancelled";
 export type SalesInvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
 export type DiscountType = "percent" | "amount";
+/** Printable layout chosen per invoice; presentation only. */
+export type InvoiceTemplateId = "template_1" | "template_2" | "template_3" | "template_4";
 
 export interface SalesInvoiceLine {
   id?: string;
@@ -37,6 +39,7 @@ export interface SalesInvoice {
   ref_no?: string;
   notes?: string;
   terms?: string;
+  template?: InvoiceTemplateId;
   status: SalesInvoiceStatus;
   subtotal: number;
   discount_total: number;
@@ -72,6 +75,7 @@ export interface SalesInvoiceInput {
   ref_no?: string;
   notes?: string;
   terms?: string;
+  template?: InvoiceTemplateId;
   additional_discount_type?: DiscountType;
   additional_discount_value?: number;
   shipping_cost?: number;
@@ -141,6 +145,24 @@ export async function draftSalesInvoice(id: string): Promise<SalesInvoice> {
 
 export async function cancelSalesInvoice(id: string): Promise<SalesInvoice> {
   const { data } = await api.post<Envelope<SalesInvoice>>(`/sales-invoices/${encodeURIComponent(id)}/cancel`);
+  return data.data;
+}
+
+export interface SalesInvoiceSummaryFigure {
+  amount: number;
+  count: number;
+}
+
+/** Dashboard numbers for regular sales invoices (down payments excluded). */
+export interface SalesInvoiceSummary {
+  outstanding: SalesInvoiceSummaryFigure;
+  overdue: SalesInvoiceSummaryFigure;
+  this_month: SalesInvoiceSummaryFigure;
+  drafts: number;
+}
+
+export async function getSalesInvoiceSummary(): Promise<SalesInvoiceSummary> {
+  const { data } = await api.get<Envelope<SalesInvoiceSummary>>("/sales-invoices/summary");
   return data.data;
 }
 

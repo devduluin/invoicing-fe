@@ -16,6 +16,7 @@ export interface DeliveryNote {
   company_id: string;
   mitra_id: string;
   sales_order_id?: string;
+  sales_invoice_id?: string;
   number: string;
   date: string;
   notes?: string;
@@ -34,6 +35,7 @@ export interface DeliveryNote {
 export interface DeliveryNoteInput {
   mitra_id: string;
   sales_order_id?: string | null;
+  sales_invoice_id?: string | null;
   number?: string;
   date: string;
   notes?: string;
@@ -76,10 +78,17 @@ export async function listAllDeliveryNotesBySalesOrder(salesOrderId: string): Pr
   return res.items;
 }
 
-/** Delivery Note is create-once — no update/delete endpoint exists (matches
- *  the seeded invoice-delivery-note-{list,create} permissions: a physical
- *  shipment log, never edited or deleted through the API). */
 export async function createDeliveryNote(input: DeliveryNoteInput): Promise<DeliveryNote> {
   const { data } = await api.post<Envelope<DeliveryNote>>("/delivery-notes", input);
   return data.data;
+}
+
+export async function updateDeliveryNote(id: string, input: DeliveryNoteInput): Promise<DeliveryNote> {
+  const { data } = await api.put<Envelope<DeliveryNote>>(`/delivery-notes/${encodeURIComponent(id)}`, input);
+  return data.data;
+}
+
+/** Soft delete — the record disappears from lists but is kept in the database. */
+export async function deleteDeliveryNote(id: string): Promise<void> {
+  await api.delete(`/delivery-notes/${encodeURIComponent(id)}`);
 }
