@@ -18,6 +18,7 @@ const ACCOUNT_TYPE = process.env.NEXT_PUBLIC_X_ACCOUNT_TYPE || "duluin_invoice";
 const AUTH_API_URL = (
   process.env.NEXT_PUBLIC_AUTH_API_URL || "https://ssodev.duluin.com/api"
 ).replace(/\/$/, "");
+const INVOICE_API_URL = (process.env.NEXT_PUBLIC_INVOICE_API_URL || "").replace(/\/$/, "");
 
 function cookieDomainVariants(hostname: string): string[] {
   if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return [""];
@@ -34,6 +35,25 @@ export async function GET(request: NextRequest) {
   const token =
     request.cookies.get("app_token")?.value ||
     request.cookies.get("APP_TOKEN")?.value;
+
+  // Best-effort audit entry — must run BEFORE the token is revoked below, while it's still valid.
+  const companyId = request.cookies.get("company_id")?.value || request.cookies.get("app_company_id")?.value;
+  if (token && companyId && INVOICE_API_URL) {
+    try {
+      await fetch(`${INVOICE_API_URL}/audit-log/session`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+          "x-callback-token": companyId,
+        },
+        body: JSON.stringify({ event: "logout" }),
+        signal: AbortSignal.timeout(4000),
+      });
+    } catch {
+      // ignore — logging out must never be blocked by this
+    }
+  }
 
   // Best-effort SSO token revoke.
   if (token) {

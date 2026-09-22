@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
+import ContactPersonSelect, { type ContactSnapshot } from "../shared/ContactPersonSelect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
@@ -11,6 +13,7 @@ import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
+import { useTr } from "@/lib/useTr";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -29,7 +32,10 @@ import {
   type PurchaseInvoiceStatus,
   type DiscountType,
 } from "@/services/purchaseInvoiceService";
-import { LineItemsEditor, LineItemsTotals, emptyLine, calcLine, type EditableLine } from "../shared/LineItemsEditor";
+import { LineItemsEditor, LineItemsTotals, emptyLine, calcLine, calcDocumentTotals, type EditableLine } from "../shared/LineItemsEditor";
+import { DocumentTemplateAside, useDocumentTemplate } from "../shared/DocumentTemplateAside";
+import type { PrintableDoc } from "@/lib/documentShape";
+import { setPurchaseInvoiceTemplate } from "@/services/purchaseInvoiceService";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
@@ -51,6 +57,7 @@ interface Props {
  *  coupling). Unlike Sales Invoice there's no Kind split. */
 export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
   const router = useRouter();
+  const tr = useTr();
   const searchParams = useSearchParams();
   const isEdit = mode === "edit";
   const permissions = useAuthStore((s) => s.permissions);
@@ -86,6 +93,9 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
 
   const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
   const [mitraId, setMitraId] = useState("");
+  const [contactPersonId, setContactPersonId] = useState("");
+  // The contact's details as shown / saved with this document (its own copy; see ContactPersonSelect).
+  const [contactInfo, setContactInfo] = useState<ContactSnapshot>({});
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState("");
@@ -103,7 +113,73 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
   const [stampDuty, setStampDuty] = useState(false);
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string; dueDate?: string }>({});
 
-  const readOnly = isEdit && status !== "draft";
+  // A document's status never makes it read-only: issued, paid or cancelled documents stay editable
+  // (permission and the server's validation are the only gates).
+  const readOnly = false;
+
+  // Layout choice: presentation only, saved with the document (see useDocumentTemplate).
+  const tpl = useDocumentTemplate({
+    docType: "purchase_invoice",
+    isEdit,
+    locked: readOnly,
+    id,
+    save: setPurchaseInvoiceTemplate,
+    skipDefault: !!searchParams.get("duplicate_from"),
+  });
+  const canChangeLockedTemplate = hasPermission(useAuthStore((st) => st.permissions), "invoice-bill-update");
+  const previewMitra = useMemo(() => mitras.find((mi) => mi.id === mitraId) ?? null, [mitras, mitraId]);
+  // The form state shaped like a saved document; totals come from the same calc as the totals panel.
+  const draftDoc = useMemo<PrintableDoc>(() => {
+    const active = lines.filter((l) => l.product_name.trim() || l.quantity || l.unit_price);
+    const totals = calcDocumentTotals(
+      active,
+      taxes,
+      { type: additionalDiscountType, value: additionalDiscountValue, onTypeChange: () => {}, onValueChange: () => {} },
+      { value: shippingCost, onChange: () => {} },
+    );
+    return {
+      id: id ?? "draft",
+      company_id: "",
+      mitra_id: mitraId,
+      contact_person_id: contactPersonId || undefined,
+      contact_name: contactInfo.name,
+      contact_position: contactInfo.position,
+      contact_phone: contactInfo.phone,
+      contact_email: contactInfo.email,
+      attachment_data: attachmentData || undefined,
+      number: number.trim() || "—",
+      date,
+      due_date: dueDate || undefined,
+      ref_no: refNo.trim() || undefined,
+      notes: notes.trim() || undefined,
+      status,
+      subtotal: totals.subtotal,
+      discount_total: totals.discountTotal,
+      additional_discount_amount: totals.additionalDiscountAmount,
+      tax_total: totals.taxTotal,
+      grand_total: totals.grandTotal,
+      shipping_cost: shippingCost ?? 0,
+      signature_data: signatureData || undefined,
+      stamp_duty: stampDuty,
+      lines: active.map((l) => ({
+        id: l.key,
+        product_name: l.product_name,
+        description: l.description,
+        quantity: l.quantity ?? 0,
+        unit_price: l.unit_price ?? 0,
+        discount_type: l.discount_type,
+        discount_value: l.discount_value ?? 0,
+        tax_ids: l.tax_ids,
+        line_total: calcLine(l, taxes).lineTotal,
+      })),
+    };
+  }, [id, mitraId, contactPersonId, contactInfo, attachmentData, number, date, dueDate, refNo, notes, status, lines, taxes, additionalDiscountType, additionalDiscountValue, shippingCost, signatureData, stampDuty]);
+
+  // New documents start from the configured defaults (existing ones keep what they have).
+  useNewDocumentDefaults("purchase_invoice", isEdit, (cfg) => {
+    setNotes((n) => n || cfg.notes.content);
+    setSignatureData((v) => v || cfg.signature.image);
+  });
 
   usePageBreadcrumb([
     { label: "Purchase Invoices", href: BASE_PATH },
@@ -167,6 +243,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
       .then((source) => {
         setMitraId(source.mitra_id);
         setNotes(source.notes ?? "");
+        tpl.adopt(source.template);
         setAdditionalDiscountType(source.additional_discount_type ?? "percent");
         setAdditionalDiscountValue(source.additional_discount_value || null);
         setShippingCost(source.shipping_cost || null);
@@ -198,11 +275,14 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
       .then((invoice) => {
         setPurchaseOrderId(invoice.purchase_order_id ?? null);
         setMitraId(invoice.mitra_id);
+        setContactPersonId(invoice.contact_person_id ?? "");
+        setContactInfo({ name: invoice.contact_name, position: invoice.contact_position, phone: invoice.contact_phone, email: invoice.contact_email });
         setNumber(invoice.number);
         setDate(invoice.date.slice(0, 10));
         setDueDate(invoice.due_date ? invoice.due_date.slice(0, 10) : "");
         setRefNo(invoice.ref_no ?? "");
         setNotes(invoice.notes ?? "");
+        tpl.adopt(invoice.template);
         setStatus(invoice.status);
         setAdditionalDiscountType(invoice.additional_discount_type ?? "percent");
         setAdditionalDiscountValue(invoice.additional_discount_value || null);
@@ -302,6 +382,8 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
     const payload: PurchaseInvoiceInput = {
       purchase_order_id: purchaseOrderId || undefined,
       mitra_id: mitraId,
+      contact_person_id: contactPersonId || null,
+      template: tpl.payloadValue,
       number: number.trim() || undefined,
       date,
       due_date: dueDate || undefined,
@@ -327,15 +409,16 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
     };
 
     setBusy(true);
+    let savedId = id;
     try {
       if (isEdit && id) {
         await updatePurchaseInvoice(id, payload);
         toast.success("Invoice updated");
       } else {
-        await createPurchaseInvoice(payload);
+        savedId = (await createPurchaseInvoice(payload)).id;
         toast.success("Invoice added");
       }
-      router.push(BASE_PATH);
+      router.push(isEdit ? `${BASE_PATH}/${savedId}` : `${BASE_PATH}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save invoice"));
     } finally {
@@ -397,66 +480,78 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
     );
   }
 
+  // Primary/secondary actions live in the page header and the sticky summary card, like Sales Invoice.
+  const saveActions = (
+    <>
+      <Button variant="primary" fullWidth onClick={submit} loading={busy} className="hidden xl:inline-flex">
+        {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
+      </Button>
+      {isEdit && status === "draft" && (
+        <Button variant="outline" fullWidth onClick={doConfirm} disabled={busy}>
+          {tr("Terbitkan", "Confirm")}
+        </Button>
+      )}
+      {status === "confirmed" && (
+        <>
+          {canCreateReceipt && (
+            <Button variant="outline" fullWidth leftIcon={<Wallet className="size-4" />} onClick={() => router.push(`/dashboard/pembelian/kuitansi/add?dari_invoice=${id}`)}>
+              {tr("Catat Pembayaran", "Record Payment")}
+            </Button>
+          )}
+          <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
+            {tr("Kembalikan ke Draf", "Move Back to Draft")}
+          </Button>
+          <Button variant="outline" fullWidth onClick={doCancel} disabled={busy}>
+            {tr("Batalkan", "Cancel")}
+          </Button>
+        </>
+      )}
+      {status === "cancelled" && (
+        <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
+          {tr("Kembalikan ke Draf", "Move Back to Draft")}
+        </Button>
+      )}
+    </>
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
-        icon={FileText}
-        title={isEdit ? "Edit Purchase Invoice" : "Add Purchase Invoice"}
-        description="Record a supplier's bill with tax-aware line items, ready to confirm."
+        title={isEdit ? tr("Ubah Invoice Pembelian", "Edit Purchase Invoice") : tr("Buat Invoice Pembelian", "New Purchase Invoice")}
+        description={
+          readOnly
+            ? tr("Dokumen ini sudah diterbitkan atau dibatalkan — hanya bisa dilihat.", "This document is issued or cancelled — view only.")
+            : tr("Isi informasi, tambahkan item, lalu simpan. Ringkasan dan template ada di sisi kanan.", "Fill in the details, add items, then save. Summary and template are on the right.")
+        }
+        meta={isEdit ? <Status status={status as StatusKey} label={PURCHASE_INVOICE_STATUS_LABEL[status]} /> : undefined}
         actions={
           <>
-            {isEdit && (
-              <Status status={status as StatusKey} label={PURCHASE_INVOICE_STATUS_LABEL[status]} />
-            )}
-            {readOnly ? (
-              <>
-                <Button variant="ghost" onClick={() => router.push(BASE_PATH)}>
-                  Close
-                </Button>
-                {status === "confirmed" && (
-                  <>
-                    {canCreateReceipt && (
-                      <Button
-                        variant="outline"
-                        onClick={() => router.push(`/dashboard/pembelian/kuitansi/add?dari_invoice=${id}`)}
-                      >
-                        <Wallet className="size-3.5" /> Create Receipt
-                      </Button>
-                    )}
-                    <Button variant="outline" onClick={doCancel} disabled={busy}>
-                      Cancel Invoice
-                    </Button>
-                    <Button variant="outline" onClick={doBackToDraft} disabled={busy}>
-                      {busy ? "Processing…" : "Move Back to Draft"}
-                    </Button>
-                  </>
-                )}
-                {status === "cancelled" && (
-                  <Button variant="outline" onClick={doBackToDraft} disabled={busy}>
-                    {busy ? "Processing…" : "Move Back to Draft"}
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => router.push(BASE_PATH)} disabled={busy}>
-                  Cancel
-                </Button>
-                <Button variant="primary" onClick={submit} disabled={busy}>
-                  {busy ? "Saving…" : "Save Invoice"}
-                </Button>
-                {isEdit && (
-                  <Button variant="outline" onClick={doConfirm} disabled={busy}>
-                    {busy ? "Processing…" : "Confirm Invoice"}
-                  </Button>
-                )}
-              </>
+            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${BASE_PATH}/${id}` : BASE_PATH)} disabled={busy}>
+              {readOnly ? tr("Tutup", "Close") : tr("Batal", "Cancel")}
+            </Button>
+            {/* The sticky summary column carries Save on wide screens; this one only shows below xl. */}
+            {!readOnly && (
+              <Button variant="primary" onClick={submit} loading={busy} className="xl:hidden">
+                {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
+              </Button>
             )}
           </>
         }
       />
 
       <DocumentFormLayout
+        summaryActions={saveActions}
+        aside={
+          <DocumentTemplateAside
+            doc="purchase_invoice"
+            draft={draftDoc}
+            mitra={previewMitra}
+            taxes={taxes}
+            template={tpl.template}
+            onChange={tpl.change}
+            disabled={readOnly && !(isEdit && canChangeLockedTemplate)}
+          />
+        }
         headerLeft={
           <AttachmentUpload
             value={{ data: attachmentData, name: attachmentName }}
@@ -485,6 +580,16 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 addNewLabel="Add new partner"
               />
             </FormField>
+            <ContactPersonSelect
+              mitraId={mitraId}
+              value={contactPersonId}
+              autoFill={!isEdit}
+              snapshot={contactInfo}
+              onChange={(cid, c) => {
+                setContactPersonId(cid);
+                setContactInfo(c ? { name: c.name, position: c.position, phone: c.phone, email: c.email } : {});
+              }}
+            />
             <FormField label="Invoice No." htmlFor="inv-number" optional>
               <Input
                 id="inv-number"

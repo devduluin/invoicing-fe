@@ -32,6 +32,7 @@ export interface Company {
   kota?: string;
   provinsi?: string;
   kode_pos?: string;
+  website?: string;
   tipe_akun?: string;
   jenis_usaha?: string;
   jumlah_karyawan?: string;
@@ -48,6 +49,9 @@ export interface CompanyProfileInput {
   kota?: string;
   provinsi?: string;
   kode_pos?: string;
+  website?: string;
+  jenis_usaha?: string;
+  jumlah_karyawan?: string;
 }
 
 /** GET /companies — every company the user can act in (drives the switcher). */

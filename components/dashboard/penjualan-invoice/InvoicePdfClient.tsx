@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { InvoicePdfPayload } from "@/lib/server/invoicePdfData";
 import type { Tax } from "@/services/taxService";
+import { docConfigTypeFor, resolveDocConfig } from "@/lib/documentConfig";
 import { InvoiceDocument, type InvoiceDocumentVariant } from "./InvoiceDocument";
 import { resolveInvoiceTemplate } from "./templates/types";
 
@@ -53,6 +54,7 @@ export default function InvoicePdfClient({ variant }: { variant: InvoiceDocument
   }, [data]);
 
   if (!data) return null;
+  const config = resolveDocConfig(docConfigTypeFor({ kind: data.invoice.kind, doc: data.doc }), data.config);
 
   // Page geometry lives here, not in the templates. No side margins (the templates pad
   // themselves, which is what lets a banner reach the edge); top/bottom margins keep
@@ -70,7 +72,8 @@ export default function InvoicePdfClient({ variant }: { variant: InvoiceDocument
       company={data.company}
       taxByID={taxByID}
       variant={variant}
-      lang={data.lang}
+      doc={data.doc}
+      config={config}
     />
     </>
   );

@@ -40,7 +40,7 @@ export default function Template3({ view }: TemplateProps) {
         />
 
         <div className="relative flex items-start justify-between px-[8.5mm] pb-[9mm] pt-[9mm] print:px-[12mm]">
-          <Logo company={view.company} tint={ORANGE} />
+          <Logo company={view.company} />
           <div className="w-[36%] text-white">
             <p className="text-right text-[19px] font-bold">{view.title}</p>
             <dl className="mt-[1.2mm]">

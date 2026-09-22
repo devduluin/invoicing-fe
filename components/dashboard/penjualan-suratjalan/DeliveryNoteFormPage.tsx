@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Truck } from "lucide-react";
 import toast from "react-hot-toast";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
+import { useTr } from "@/lib/useTr";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
 import { getSalesOrder, listAllSalesOrders, type SalesOrder } from "@/services/salesOrderService";
@@ -28,6 +30,7 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
  *  frontend convenience — no backend coupling). */
 export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
+  const tr = useTr();
   const searchParams = useSearchParams();
   const isEdit = mode === "edit" && !!id;
 
@@ -79,7 +82,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   const [pending, setPending] = useState<Set<string>>(() => {
     const s = new Set<string>(["mitras", "orders", "invoices"]);
     if (isEdit) s.add("entity");
-    else if (searchParams.get("dari_order") || searchParams.get("dari_invoice")) s.add("prefill");
+    else if (searchParams.get("dari_order") || searchParams.get("dari_invoice") || searchParams.get("duplicate_from")) s.add("prefill");
     return s;
   });
   const done = (key: string) =>
@@ -108,6 +111,11 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   const [attachmentData, setAttachmentData] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
+
+  // New documents start from the configured defaults (existing ones keep what they have).
+  useNewDocumentDefaults("delivery_note", isEdit, (cfg) => {
+    setNotes((n) => n || cfg.notes.content);
+  });
 
   usePageBreadcrumb([
     { label: "Delivery Notes", href: "/dashboard/penjualan/surat-jalan" },
@@ -142,6 +150,33 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
         toast.success(`Auto-filled from order ${order.number}`);
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load sales order")))
+      .finally(() => done("prefill"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ?duplicate_from=<id> → copy partner, lines and notes from another delivery note. Number and
+  // date start fresh; the order/invoice links are not carried over (a copy is a new shipment).
+  useEffect(() => {
+    const dupID = searchParams.get("duplicate_from");
+    if (!dupID) return;
+    getDeliveryNote(dupID)
+      .then((source) => {
+        setMitraId(source.mitra_id);
+        setNotes(source.notes ?? "");
+        if (source.lines.length) {
+          setLines(
+            source.lines.map((l) => ({
+              key: crypto.randomUUID(),
+              product_name: l.product_name,
+              description: l.description ?? "",
+              quantity: l.quantity,
+              unit: l.unit ?? "",
+            })),
+          );
+        }
+        toast.success(`Duplicated from ${source.number}`);
+      })
+      .catch((err) => toast.error(extractApiError(err, "Failed to load delivery note")))
       .finally(() => done("prefill"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -226,15 +261,16 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
     };
 
     setBusy(true);
+    let savedId = id;
     try {
       if (isEdit && id) {
         await updateDeliveryNote(id, payload);
         toast.success("Delivery Note updated");
       } else {
-        await createDeliveryNote(payload);
+        savedId = (await createDeliveryNote(payload)).id;
         toast.success("Delivery note added");
       }
-      router.push("/dashboard/penjualan/surat-jalan");
+      router.push(isEdit ? `${"/dashboard/penjualan/surat-jalan"}/${savedId}` : `${"/dashboard/penjualan/surat-jalan"}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save delivery note"));
     } finally {
@@ -246,7 +282,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="h-6 w-64 animate-pulse rounded-lg bg-muted" />
         <div className="h-36 animate-pulse rounded-2xl bg-muted" />
         <div className="h-64 animate-pulse rounded-2xl bg-muted" />
@@ -257,16 +293,15 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   return (
     <div className="space-y-4">
       <PageHeader
-        icon={Truck}
-        title={isEdit ? "Edit Delivery Note" : "Add Delivery Note"}
-        description="Record goods physically shipped to a partner, optionally linked to a sales order."
+        title={isEdit ? tr("Ubah Surat Jalan", "Edit Delivery Note") : tr("Buat Surat Jalan", "New Delivery Note")}
+        description={tr("Isi informasi dokumen, lalu simpan.", "Fill in the document details, then save.")}
         actions={
           <>
-            <Button variant="ghost" onClick={() => router.push("/dashboard/penjualan/surat-jalan")} disabled={busy}>
-              Cancel
+            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/penjualan/surat-jalan"}/${id}` : "/dashboard/penjualan/surat-jalan")} disabled={busy}>
+              {tr("Batal", "Cancel")}
             </Button>
-            <Button variant="primary" onClick={submit} disabled={busy}>
-              {busy ? "Saving…" : "Save Delivery Note"}
+            <Button variant="primary" onClick={submit} loading={busy}>
+              {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
             </Button>
           </>
         }

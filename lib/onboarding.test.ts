@@ -17,13 +17,6 @@ describe("wizard config", () => {
     expect(WIZARD_STEPS).toHaveLength(4);
   });
   it("employee buckets match the backend values", () => {
-    expect(EMPLOYEE_COUNT_OPTIONS.map((o) => o.value)).toEqual([
-      "1-5",
-      "6-10",
-      "11-25",
-      "26-50",
-      "51-100",
-      "100+",
-    ]);
+    expect(EMPLOYEE_COUNT_OPTIONS.map((o) => o.value)).toEqual(["1-10", "11-50", "51-100", "100+"]);
   });
 });

@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Copy, FilePlus2, MoreHorizontal, Package, Pencil, Plus, Printer, Truck, Wallet } from "lucide-react";
+import { ChevronRight, Copy, FilePlus2, Trash2, MoreHorizontal, Package, Pencil, Plus, Truck, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button, Card } from "@/components/ui";
@@ -20,7 +20,9 @@ import { cn } from "@/lib/utils";
 import { formatDateStyle } from "@/utils/formatDate";
 
 import {
+  deleteSalesInvoice,
   getSalesInvoice,
+  setSalesInvoiceTemplate,
   SALES_INVOICE_STATUS_LABEL,
   type SalesInvoice,
   type SalesInvoiceKind,
@@ -39,8 +41,13 @@ import {
   type SalesPayment,
 } from "@/services/salesPaymentService";
 import { PAYMENT_METHOD_LABEL, listAllSalesReceiptsForInvoice, type SalesReceipt } from "@/services/salesReceiptService";
+import ConnectedDocuments from "../shared/ConnectedDocuments";
+import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import PrintPdfActions from "../shared/PrintPdfActions";
 import { InvoiceDocument } from "./InvoiceDocument";
 import { ScaledSheet } from "./templates/ScaledSheet";
+import { InvoiceTemplatePanel } from "./templates/InvoiceTemplatePanel";
+import { resolveInvoiceTemplate, type InvoiceTemplateId } from "./templates/types";
 import SalesPaymentFormModal from "./SalesPaymentFormModal";
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
@@ -62,6 +69,8 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   const canVerifyPayment = hasPermission(permissions, "invoice-sales-payment-verify");
   const canCreateReceipt = hasPermission(permissions, "invoice-receipt-create");
   const canCreateInvoice = hasPermission(permissions, "invoice-sales-invoice-create");
+  const canDelete = hasPermission(permissions, "invoice-sales-invoice-delete");
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const canCreateDeliveryNote = hasPermission(permissions, "invoice-delivery-note-create");
 
   const [loading, setLoading] = useState(true);
@@ -76,7 +85,6 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   const [receipts, setReceipts] = useState<SalesReceipt[]>([]);
 
   const [tab, setTab] = useState<"view" | "payments">("view");
-  const [relatedOpen, setRelatedOpen] = useState(true);
   const [paymentModalOpen, setPaymentModalOpen] = useState(false);
   const [verifyTarget, setVerifyTarget] = useState<SalesPayment | null>(null);
 
@@ -145,7 +153,6 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
 
   const remaining = Math.max(0, invoice.grand_total - invoice.paid_amount);
   const effective = effectiveStatus(invoice);
-  const hasRelated = !!order || deliveryNotes.length > 0 || payments.length > 0 || receipts.length > 0;
   const amountOnThisInvoice = (r: SalesReceipt) =>
     (r.allocations ?? []).filter((a) => a.sales_invoice_id === invoice.id).reduce((sum, a) => sum + a.amount, 0);
   const paymentCount = payments.length + receipts.length;
@@ -163,25 +170,35 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
       : null,
   ].filter((a): a is { label: string; href: string; icon: typeof Wallet } => !!a);
 
+  // The layout can be changed at any time (issued or not); it never touches lines or totals.
+  const changeTemplate = async (next: InvoiceTemplateId) => {
+    const prev = invoice.template;
+    setInvoice({ ...invoice, template: next });
+    try {
+      setInvoice(await setSalesInvoiceTemplate(invoice.id, next));
+      toast.success(tr("Template disimpan", "Template saved"));
+    } catch (err) {
+      setInvoice({ ...invoice, template: prev });
+      toast.error(extractApiError(err, tr("Gagal mengganti template", "Failed to change the template")));
+    }
+  };
+
   const showManualPayment = canCreatePayment && invoice.status === "confirmed" && remaining > 0;
 
+  // Edit is available in every status (paid, partially paid, issued…); permission is the only gate.
+  // When Edit is the primary button, "Record payment" moves into More so nothing appears twice.
+  const canRecordReceipt = canCreateReceipt && invoice.status === "confirmed" && remaining > 0;
   const primaryAction =
-    canUpdate && invoice.status === "draft" ? (
+    canUpdate ? (
       <Button variant="primary" leftIcon={<Pencil className="size-4" />} onClick={() => router.push(`${cfg.basePath}/${id}/edit`)}>
         {tr("Ubah", "Edit")}
       </Button>
-    ) : canCreateReceipt && invoice.status === "confirmed" && remaining > 0 ? (
+    ) : canRecordReceipt ? (
       <Button variant="primary" leftIcon={<Wallet className="size-4" />} onClick={() => router.push(`/dashboard/penjualan/kuitansi/add?dari_invoice=${id}`)}>
         {tr("Catat Pembayaran", "Record Payment")}
       </Button>
     ) : null;
 
-  const related: { key: string; icon: typeof Package; label: string; sub: string; onClick?: () => void }[] = [
-    ...(order ? [{ key: "so", icon: Package, label: order.number, sub: tr("Pesanan Penjualan", "Sales Order"), onClick: () => router.push(`/dashboard/penjualan/order/${order.id}`) }] : []),
-    ...deliveryNotes.map((dn) => ({ key: dn.id, icon: Truck, label: dn.number, sub: tr("Surat Jalan", "Delivery Note"), onClick: undefined as (() => void) | undefined })),
-    ...receipts.map((r) => ({ key: r.id, icon: Wallet, label: r.number, sub: tr("Kuitansi", "Receipt"), onClick: () => setTab("payments") })),
-    ...payments.map((p) => ({ key: p.id, icon: Wallet, label: p.number, sub: `${tr("Pembayaran", "Payment")} · ${SALES_PAYMENT_STATUS_LABEL[p.status]}`, onClick: () => setTab("payments") })),
-  ];
 
   return (
     <div className="space-y-3">
@@ -194,10 +211,8 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
         meta={<Status status={effective} label={statusLabels[effective]} />}
         actions={
           <>
-            <Button variant="outline" leftIcon={<Printer className="size-4" />} onClick={() => router.push(`/dashboard/penjualan/cetak/${id}`)}>
-              {tr("Cetak / PDF", "Print / PDF")}
-            </Button>
-            {(createActions.length > 0 || canCreateInvoice || showManualPayment) && (
+            <PrintPdfActions kind="sales-invoice" id={id} />
+            {(createActions.length > 0 || canCreateInvoice || showManualPayment || canDelete || (canUpdate && canRecordReceipt)) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" leftIcon={<MoreHorizontal className="size-4" />}>
@@ -220,11 +235,24 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
                       </DropdownMenuItem>
                     </>
                   )}
+                  {canUpdate && canRecordReceipt && (
+                    <DropdownMenuItem onSelect={() => router.push(`/dashboard/penjualan/kuitansi/add?dari_invoice=${id}`)}>
+                      <Wallet aria-hidden /> {tr("Catat Pembayaran", "Record Payment")}
+                    </DropdownMenuItem>
+                  )}
                   {canCreateInvoice && (
                     <>
                       {(createActions.length > 0 || showManualPayment) && <DropdownMenuSeparator />}
                       <DropdownMenuItem onSelect={() => router.push(`${cfg.basePath}/add?duplicate_from=${id}`)}>
                         <Copy aria-hidden /> {tr("Duplikat", "Duplicate")}
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {canDelete && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:bg-rose-50 focus:text-rose-700 [&>svg:first-child]:bg-rose-500/10 [&>svg:first-child]:text-rose-600">
+                        <Trash2 aria-hidden /> {tr("Hapus", "Delete")}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -368,24 +396,38 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
         </div>
 
         <div className="space-y-3">
-          {related.length > 0 && (
-            <section className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
-              <div className="flex items-center justify-between border-b border-border bg-[var(--surface-2)] px-3.5 py-2">
-                <h2 className="font-display text-[13px] font-semibold text-slate-900">{tr("Dokumen Terkait", "Related Documents")}</h2>
-                <span className="rounded-full bg-primary/10 px-2 text-xs font-semibold tabular-nums text-primary-ink">{related.length}</span>
-              </div>
-              <ul className="divide-y divide-border">
-                {related.map((r) => (
-                  <li key={r.key}>
-                    <RelatedItem icon={r.icon} label={r.label} sub={r.sub} onClick={r.onClick} cta={tr("Lihat dokumen", "View document")} />
-                  </li>
-                ))}
-              </ul>
-            </section>
+          {canUpdate && (
+            <InvoiceTemplatePanel
+              value={resolveInvoiceTemplate(invoice.template)}
+              onChange={changeTemplate}
+              invoice={invoice}
+              mitra={mitra}
+              company={company}
+              taxByID={taxByID}
+            />
           )}
 
+          <ConnectedDocuments type={kind === "down_payment" ? "down_payment" : "sales_invoice"} id={id} />
         </div>
       </div>
+
+      <DeleteDocumentModal
+        open={deleteOpen}
+        title={kind === "invoice" ? tr("Hapus invoice?", "Delete invoice?") : tr("Hapus invoice uang muka?", "Delete down payment invoice?")}
+        number={invoice.number}
+        note={tr("Kuitansi yang sudah dibuat tidak ikut dihapus.", "Receipts that were already created are not deleted.")}
+        onConfirm={async () => {
+          try {
+            await deleteSalesInvoice(id);
+            toast.success(tr("Dokumen dihapus", "Document deleted"));
+            router.replace(cfg.basePath);
+          } catch (err) {
+            toast.error(extractApiError(err, tr("Gagal menghapus dokumen", "Failed to delete the document")));
+            setDeleteOpen(false);
+          }
+        }}
+        onClose={() => setDeleteOpen(false)}
+      />
 
       {paymentModalOpen && (
         <SalesPaymentFormModal
@@ -432,44 +474,5 @@ function SummaryField({ label, value }: { label: string; value: string }) {
       <div className="text-xs font-medium text-slate-500">{label}</div>
       <div className="mt-0.5 truncate text-sm font-semibold text-slate-900">{value}</div>
     </div>
-  );
-}
-
-function RelatedItem({
-  icon: Icon,
-  label,
-  sub,
-  onClick,
-  cta,
-}: {
-  icon: typeof Package;
-  label: string;
-  sub: string;
-  onClick?: () => void;
-  cta: string;
-}) {
-  const content = (
-    <>
-      <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary transition-colors group-hover/rel:bg-primary group-hover/rel:text-white">
-        <Icon className="size-4" aria-hidden />
-      </span>
-      <span className="min-w-0 flex-1">
-        <span className="block truncate font-mono text-[13px] font-semibold text-slate-900">{label}</span>
-        <span className="block text-xs text-slate-500">{sub}</span>
-      </span>
-      {onClick && (
-        <span className="flex shrink-0 items-center gap-0.5 text-xs font-semibold text-primary-ink opacity-70 transition-all group-hover/rel:translate-x-0.5 group-hover/rel:opacity-100">
-          {cta}
-          <ChevronRight className="size-3.5" aria-hidden />
-        </span>
-      )}
-    </>
-  );
-  const className = "group/rel flex w-full items-center gap-3 px-3.5 py-2.5 text-left transition-colors";
-  if (!onClick) return <div className={className}>{content}</div>;
-  return (
-    <button type="button" onClick={onClick} className={cn(className, "hover:bg-[var(--surface-2)]")}>
-      {content}
-    </button>
   );
 }

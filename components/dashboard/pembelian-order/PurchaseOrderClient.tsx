@@ -14,7 +14,7 @@ import type { TableRow } from "@/app/types/apiResponses";
 import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
-import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
+import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
@@ -135,13 +135,14 @@ export default function PurchaseOrderClient() {
         defaultSort={{ column: "date", order: "desc" }}
         emptyTitle="No purchase orders yet"
         emptyDescription="Add a purchase order to record an agreement with a supplier before it's billed."
-        onRowClick={canUpdate ? (row) => goTo(String(row.id)) : undefined}
+        onRowClick={(row) => goTo(String(row.id))}
         renderRowActions={(row) => {
           const order = row as unknown as PurchaseOrder;
           return (
             <RowActionDropdown
-              onEdit={canUpdate ? () => goTo(order.id) : undefined}
-              onDelete={canDelete && order.status === "draft" ? () => setConfirm(order) : undefined}
+              onView={() => goTo(order.id)}
+              onEdit={canUpdate ? () => goTo(`${order.id}/edit`) : undefined}
+              onDelete={canDelete ? () => setConfirm(order) : undefined}
               extra={[
                 ...(canCreate
                   ? [
@@ -182,10 +183,10 @@ export default function PurchaseOrderClient() {
         }}
       />
 
-      <ConfirmDeleteModal
+      <DeleteDocumentModal
         open={!!confirm}
         title="Delete purchase order?"
-        description={confirm ? `"${confirm.number}" will be deleted.` : undefined}
+        number={confirm?.number}
         onConfirm={remove}
         onClose={() => setConfirm(null)}
       />

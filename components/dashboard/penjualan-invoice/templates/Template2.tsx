@@ -36,7 +36,7 @@ export default function Template2({ view }: TemplateProps) {
           }}
         />
         <div className="relative flex items-center justify-between gap-6 text-white">
-          <Logo company={view.company} tint="#ffffff" />
+          <Logo company={view.company} />
           <div className="w-[46%]">
             <p className="text-right text-[19px] font-bold">{view.title}</p>
             <dl className="mt-[1.5mm]">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Wallet } from "lucide-react";
 import toast from "react-hot-toast";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
+import { useTr } from "@/lib/useTr";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
 import { listAllPurchaseInvoices, getPurchaseInvoice } from "@/services/purchaseInvoiceService";
@@ -31,8 +33,12 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 /** Create and edit share this form (`mode="edit"` + `id` loads the saved receipt). */
 export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
+  const tr = useTr();
   const searchParams = useSearchParams();
   const isEdit = mode === "edit" && !!id;
+  // What the saved payment already put on its bill: that amount is free to re-use when editing,
+  // because the server gives it back before applying the new one.
+  const [original, setOriginal] = useState<{ invoiceId: string; amount: number } | null>(null);
 
   // Tracks every initial-load fetch (base lists + number preview + the
   // ?dari_invoice prefill, if present) so the form only renders once ALL of
@@ -69,6 +75,11 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
   const [notes, setNotes] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string; amount?: string }>({});
 
+  // New documents start from the configured defaults (existing ones keep what they have).
+  useNewDocumentDefaults("purchase_receipt", isEdit, (cfg) => {
+    setNotes((n) => n || cfg.notes.content);
+  });
+
   usePageBreadcrumb([
     { label: "Purchase Receipts", href: "/dashboard/pembelian/kuitansi" },
     { label: isEdit ? "Edit Receipt" : "Add Receipt" },
@@ -92,6 +103,7 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
         setNumber(r.number);
         setDate(r.date.slice(0, 10));
         setAmount(r.amount);
+        setOriginal({ invoiceId: r.purchase_invoice_id ?? "", amount: r.amount });
         setPaymentMethod(r.payment_method);
         setBankAccountId(r.bank_account_id ?? "");
         setNotes(r.notes ?? "");
@@ -113,7 +125,8 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
       .then((invoice) => {
         setMitraId(invoice.mitra_id);
         setPurchaseInvoiceId(invoice.id);
-        setAmount(invoice.grand_total);
+        // Pay what is still owed, not the whole bill again.
+        setAmount(Math.max(0, invoice.grand_total - invoice.paid_amount) || null);
         toast.success(`Auto-filled from invoice ${invoice.number}`);
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load invoice")))
@@ -126,6 +139,13 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
     if (!mitraId) fieldErrors.mitraId = "Partner is required";
     if (!date) fieldErrors.date = "Date is required";
     if (!amount || amount <= 0) fieldErrors.amount = "Amount must be greater than 0";
+    else if (purchaseInvoiceId) {
+      const inv = invoices.find((i) => i.id === purchaseInvoiceId);
+      if (inv) {
+        const allowed = Math.max(0, inv.grand_total - inv.paid_amount) + (original?.invoiceId === inv.id ? original.amount : 0);
+        if (amount > allowed) fieldErrors.amount = `Amount exceeds the outstanding balance (${money(allowed)})`;
+      }
+    }
     setErrors(fieldErrors);
     if (fieldErrors.mitraId || fieldErrors.date || fieldErrors.amount) return;
 
@@ -141,15 +161,16 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
     };
 
     setBusy(true);
+    let savedId = id;
     try {
       if (isEdit && id) {
         await updatePurchaseReceipt(id, payload);
         toast.success("Receipt updated");
       } else {
-        await createPurchaseReceipt(payload);
+        savedId = (await createPurchaseReceipt(payload)).id;
         toast.success("Receipt added");
       }
-      router.push("/dashboard/pembelian/kuitansi");
+      router.push(isEdit ? `${"/dashboard/pembelian/kuitansi"}/${savedId}` : `${"/dashboard/pembelian/kuitansi"}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save receipt"));
     } finally {
@@ -158,9 +179,11 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
   };
 
   const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
+  // Only bills that can still take a payment (confirmed, something owed) plus the one already linked.
+  const owedOf = (i: PurchaseInvoice) => Math.max(0, i.grand_total - i.paid_amount) + (original?.invoiceId === i.id ? original.amount : 0);
   const invoiceOptions = invoices
-    .filter((i) => !mitraId || i.mitra_id === mitraId)
-    .map((i) => ({ value: i.id, label: `${i.number} — ${money(i.grand_total)}` }));
+    .filter((i) => (!mitraId || i.mitra_id === mitraId) && (i.id === purchaseInvoiceId || (i.status === "confirmed" && owedOf(i) > 0)))
+    .map((i) => ({ value: i.id, label: `${i.number} — outstanding ${money(owedOf(i))}` }));
   const bankOptions = bankAccounts.map((b) => ({
     value: b.id,
     label: `${b.bank_name} — ${b.account_number}${b.is_primary ? " (Primary)" : ""}`,
@@ -168,7 +191,7 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="h-6 w-64 animate-pulse rounded-lg bg-muted" />
         <div className="h-36 animate-pulse rounded-2xl bg-muted" />
         <div className="h-64 animate-pulse rounded-2xl bg-muted" />
@@ -179,16 +202,15 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
   return (
     <div className="space-y-4">
       <PageHeader
-        icon={Wallet}
-        title={isEdit ? "Edit Receipt" : "Add Receipt"}
-        description="Record a payment made to a supplier, optionally linked to a purchase invoice."
+        title={isEdit ? tr("Ubah Kuitansi Pembelian", "Edit Purchase Receipt") : tr("Buat Kuitansi Pembelian", "New Purchase Receipt")}
+        description={tr("Isi informasi dokumen, lalu simpan.", "Fill in the document details, then save.")}
         actions={
           <>
-            <Button variant="ghost" onClick={() => router.push("/dashboard/pembelian/kuitansi")} disabled={busy}>
-              Cancel
+            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/pembelian/kuitansi"}/${id}` : "/dashboard/pembelian/kuitansi")} disabled={busy}>
+              {tr("Batal", "Cancel")}
             </Button>
-            <Button variant="primary" onClick={submit} disabled={busy}>
-              {busy ? "Saving…" : "Save Receipt"}
+            <Button variant="primary" onClick={submit} loading={busy}>
+              {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
             </Button>
           </>
         }

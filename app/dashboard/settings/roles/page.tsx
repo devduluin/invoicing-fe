@@ -1,29 +1,33 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { useMemo, useState } from "react";
+import { Plus, ShieldCheck } from "lucide-react";
 import toast from "react-hot-toast";
 
 import PermissionGate from "@/components/auth/PermissionGate";
 import { Button } from "@/components/ui";
+import PageHeader from "@/components/layouts/page/PageHeader";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { extractApiError } from "@/lib/apiError";
 import { roleLabel } from "@/lib/onboarding";
+import { useTr } from "@/lib/useTr";
 import { hasPermission, useAuthStore } from "@/store/useAuthStore";
-import { listRoles, getRole, deleteRole, type Role } from "@/services/roleService";
+import type { TableRow } from "@/app/types/apiResponses";
+import { useMasterList } from "@/hooks/table/useMasterList";
+import MasterTable from "@/components/masterTable/MasterTable";
+import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
+import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import RoleFormModal from "@/components/dashboard/settings/RoleFormModal";
-import { useLanguageStore } from "@/store/useLanguageStore";
+import { deleteRole, getRole, listRolesTable, type Role } from "@/services/roleService";
+
+const DEFAULT_VISIBLE = ["name", "type", "permission_count"];
 
 export default function RolesPage() {
-  const isIndonesian = useLanguageStore((s) => s.language === "id");
+  const tr = useTr();
   return (
     <PermissionGate
       anyPermission={["invoice-role-list", "invoice-user-list"]}
-      fallback={
-        <p className="px-5 py-5 text-sm text-muted-foreground">
-          {isIndonesian ? "Anda tidak memiliki akses untuk mengelola peran." : "You don't have access to manage roles."}
-        </p>
-      }
+      fallback={<p className="px-5 py-5 text-sm text-muted-foreground">{tr("Anda tidak memiliki akses untuk mengelola peran.", "You don't have access to manage roles.")}</p>}
     >
       <RolesManager />
     </PermissionGate>
@@ -31,43 +35,53 @@ export default function RolesPage() {
 }
 
 function RolesManager() {
-  const isIndonesian = useLanguageStore((s) => s.language === "id");
+  const tr = useTr();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-create-role");
   const canDelete = hasPermission(permissions, "invoice-delete-role");
 
-  const [roles, setRoles] = useState<Role[]>([]);
+  const list = useMasterList(listRolesTable, {});
   const [allPermissions, setAllPermissions] = useState<string[]>([]);
-  const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<Role | "new" | null>(null);
   const [editingDetail, setEditingDetail] = useState<Role | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<Role | null>(null);
 
-  const refresh = async () => {
-    const list = await listRoles();
-    setRoles(list);
-    // The assignable permission catalog only comes back attached to a single
-    // role's detail (no standalone catalog endpoint) — any role works.
-    if (list.length > 0 && allPermissions.length === 0) {
-      const detail = await getRole(list[0].id);
-      setAllPermissions(detail.all_permissions);
-    }
-  };
+  const specs: ColumnSpec<TableRow>[] = useMemo(
+    () => [
+      {
+        id: "name",
+        header: tr("Nama", "Name"),
+        render: (_v, row) => <span className="font-medium text-slate-900">{roleLabel(String(row.name ?? ""))}</span>,
+      },
+      {
+        id: "type",
+        header: tr("Tipe", "Type"),
+        kind: "bool",
+        noSort: true,
+        render: (_v, row) => (
+          <span className="text-slate-600">{row.type === "custom" ? tr("Peran khusus", "Custom role") : tr("Peran bawaan", "Built-in role")}</span>
+        ),
+      },
+      {
+        id: "permission_count",
+        header: tr("Izin", "Permissions"),
+        noSort: true,
+        render: (v) => <span className="text-slate-600 tabular-nums">{String(v ?? 0)}</span>,
+      },
+    ],
+    [tr],
+  );
+  const columns = useMemo(() => buildColumns(specs), [specs]);
+  const labels = useMemo(() => Object.fromEntries(specs.map((s) => [s.id, s.header])), [specs]);
 
-  useEffect(() => {
-    refresh()
-      .catch((err) => toast.error(extractApiError(err, isIndonesian ? "Gagal memuat peran" : "Failed to load roles")))
-      .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const openEdit = async (role: Role) => {
+  const openEdit = async (row: Role) => {
     try {
-      const detail = await getRole(role.id);
+      const detail = await getRole(row.id);
+      if (allPermissions.length === 0) setAllPermissions(detail.all_permissions);
       setEditingDetail(detail.role);
-      setEditing(role);
+      setEditing(row);
     } catch (err) {
-      toast.error(extractApiError(err, isIndonesian ? "Gagal memuat peran" : "Failed to load role"));
+      toast.error(extractApiError(err, tr("Gagal memuat peran", "Failed to load role")));
     }
   };
 
@@ -81,97 +95,77 @@ function RolesManager() {
     setEditingDetail(null);
   };
 
-  const onSaved = async () => {
-    closeModal();
-    await refresh();
-  };
-
   const doDelete = async () => {
     if (!confirmDelete) return;
     try {
       await deleteRole(confirmDelete.id);
-      toast.success(isIndonesian ? "Peran dihapus" : "Role deleted");
+      toast.success(tr("Peran dihapus", "Role deleted"));
       setConfirmDelete(null);
-      await refresh();
+      list.refresh();
     } catch (err) {
-      toast.error(extractApiError(err, isIndonesian ? "Gagal menghapus peran" : "Failed to delete role"));
+      toast.error(extractApiError(err, tr("Gagal menghapus peran", "Failed to delete role")));
+      setConfirmDelete(null);
     }
   };
 
-  if (loading) {
-    return (
-      <div className="space-y-4 px-5 py-5">
-        <div className="h-16 animate-pulse rounded-xl bg-muted" />
-        <div className="h-48 animate-pulse rounded-xl bg-muted" />
-      </div>
-    );
-  }
-
   return (
-    <div>
-      <div className="flex items-center justify-between border-b border-border-strong px-5 py-4">
-        <h2 className="flex items-center gap-2 font-display text-sm font-bold text-slate-800">
-          <span className="size-1.5 rounded-full bg-[#6b8fff]" />
-          {isIndonesian ? "Peran" : "Roles"}
-        </h2>
-        {canCreate && (
-          <Button variant="primary" size="sm" leftIcon={<Plus className="size-4" />} onClick={openCreate}>
-            {isIndonesian ? "Tambah Peran" : "Add Role"}
-          </Button>
-        )}
-      </div>
-
-      <ul className="divide-y divide-row-border">
-        {roles.map((r) => (
-          <li key={r.id} className="flex items-center gap-3 px-5 py-3.5">
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-[13px] font-semibold text-slate-700">{roleLabel(r.name)}</p>
-              <p className="truncate text-xs text-slate-400">
-                {r.is_custom
-                  ? isIndonesian ? "Peran khusus" : "Custom role"
-                  : isIndonesian ? "Peran bawaan" : "Built-in role"}
-                {r.permissions ? ` · ${r.permissions.length} ${isIndonesian ? "izin" : "permission(s)"}` : ""}
-              </p>
-            </div>
-            <Button variant="outline" size="sm" onClick={() => openEdit(r)}>
-              {r.is_custom ? (isIndonesian ? "Ubah" : "Edit") : (isIndonesian ? "Lihat" : "View")}
-            </Button>
-            {r.is_custom && canDelete && (
-              <button
-                type="button"
-                onClick={() => setConfirmDelete(r)}
-                aria-label={`Delete ${r.name}`}
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-slate-300 transition-colors hover:bg-rose-50 hover:text-rose-400"
-              >
-                <Trash2 className="size-[15px]" />
-              </button>
-            )}
-          </li>
-        ))}
-        {roles.length === 0 && (
-          <p className="px-5 py-8 text-center text-sm text-slate-400">
-            {isIndonesian ? "Belum ada peran." : "No roles yet."}
-          </p>
-        )}
-      </ul>
+    <div className="px-5 py-5">
+      <MasterTable
+        tableKey="settings-roles"
+        header={
+          <PageHeader
+            icon={ShieldCheck}
+            title={tr("Peran", "Roles")}
+            description={tr("Peran dan izin akses untuk perusahaan ini.", "Roles and access permissions for this company.")}
+            actions={
+              canCreate && (
+                <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={openCreate}>
+                  {tr("Tambah Peran", "Add Role")}
+                </Button>
+              )
+            }
+          />
+        }
+        columns={columns}
+        data={list.data}
+        availableColumns={list.columns}
+        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        columnLabel={(id) => labels[id] ?? id}
+        meta={list.meta}
+        params={list.params}
+        updateParams={list.updateParams}
+        onRefresh={list.refresh}
+        loading={list.loading}
+        error={list.error}
+        defaultSort={{ column: "name", order: "asc" }}
+        emptyTitle={tr("Belum ada peran", "No roles yet")}
+        emptyDescription={tr("Tambahkan peran untuk mengatur izin akses tim Anda.", "Add a role to control what your team can access.")}
+        onRowClick={(row) => void openEdit(row as unknown as Role)}
+        renderRowActions={(row) => {
+          const role = row as unknown as Role;
+          const isCustom = role.is_custom;
+          return (
+            <RowActionDropdown
+              onEdit={() => void openEdit(role)}
+              onDelete={isCustom && canDelete ? () => setConfirmDelete(role) : undefined}
+            />
+          );
+        }}
+      />
 
       {editing && (
-        <RoleFormModal
-          role={editing === "new" ? null : editingDetail}
-          allPermissions={allPermissions}
-          onClose={closeModal}
-          onSaved={onSaved}
-        />
+        <RoleFormModal role={editing === "new" ? null : editingDetail} allPermissions={allPermissions} onClose={closeModal} onSaved={() => { closeModal(); list.refresh(); }} />
       )}
 
       <ConfirmDeleteModal
         open={!!confirmDelete}
-        title={isIndonesian ? "Hapus peran ini?" : "Delete this role?"}
+        title={tr("Hapus peran ini?", "Delete this role?")}
         description={
           confirmDelete
-            ? isIndonesian
-              ? `"${roleLabel(confirmDelete.name)}" akan dihapus. Anggota dengan peran ini akan kehilangan peran tersebut.`
-              : `"${roleLabel(confirmDelete.name)}" will be deleted. Members with this role will lose it.`
+            ? tr(
+                `"${roleLabel(confirmDelete.name)}" akan dihapus. Anggota dengan peran ini akan kehilangan peran tersebut.`,
+                `"${roleLabel(confirmDelete.name)}" will be deleted. Members with this role will lose it.`,
+              )
             : undefined
         }
         onConfirm={doDelete}

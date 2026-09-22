@@ -3,7 +3,7 @@
 import { htmlToPlainText } from "@/lib/richText";
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Truck, Plus } from "lucide-react";
+import { Truck, Plus, Copy } from "lucide-react";
 
 import toast from "react-hot-toast";
 
@@ -15,7 +15,7 @@ import type { TableRow } from "@/app/types/apiResponses";
 import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
-import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
+import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { listDeliveryNotes, deleteDeliveryNote } from "@/services/deliveryNoteService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -59,6 +59,7 @@ export default function DeliveryNoteClient() {
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
 
   const goTo = (id: string) => router.push(`/dashboard/penjualan/surat-jalan/${id}`);
+  const goToEdit = (id: string) => router.push(`/dashboard/penjualan/surat-jalan/${id}/edit`);
 
   const remove = async () => {
     if (!confirm) return;
@@ -107,23 +108,29 @@ export default function DeliveryNoteClient() {
       error={list.error}
       defaultSort={{ column: "date", order: "desc" }}
       emptyTitle="No delivery notes yet"
-      onRowClick={canUpdate ? (row) => goTo(String(row.id)) : undefined}
+      onRowClick={(row) => goTo(String(row.id))}
       renderRowActions={(row) => {
         const doc = row as unknown as { id: string; number: string };
         return (
           <RowActionDropdown
-            onEdit={canUpdate ? () => goTo(doc.id) : undefined}
+            onView={() => goTo(doc.id)}
+            onEdit={canUpdate ? () => goToEdit(doc.id) : undefined}
             onDelete={canDelete ? () => setConfirm({ id: doc.id, number: doc.number }) : undefined}
+            extra={
+              canCreate
+                ? [{ label: "Duplicate", icon: <Copy className="size-3.5" />, onClick: () => router.push(`/dashboard/penjualan/surat-jalan/add?duplicate_from=${doc.id}`) }]
+                : []
+            }
           />
         );
       }}
       emptyDescription="Add a delivery note to record goods shipped to a partner."
     />
 
-    <ConfirmDeleteModal
+    <DeleteDocumentModal
       open={!!confirm}
       title="Delete delivery note?"
-      description={confirm ? `"${confirm.number}" will be deleted.` : undefined}
+      number={confirm?.number}
       onConfirm={remove}
       onClose={() => setConfirm(null)}
     />

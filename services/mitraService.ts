@@ -28,6 +28,39 @@ export interface MitraInput {
   npwp?: string;
   address?: string;
   is_active?: boolean;
+  /** The partner's contact persons, saved together with the partner. On update: omit = leave alone;
+   *  a list = the partner's contacts become exactly that list. */
+  contact_persons?: ContactSync[];
+}
+
+/** A person at a partner (NOT the partner's own "Contact Name (PIC)"). A partner has many. */
+export interface ContactPerson {
+  id: string;
+  mitra_id: string;
+  name: string;
+  position?: string;
+  phone?: string;
+  email?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ContactPersonInput {
+  name: string;
+  position?: string;
+  phone?: string;
+  email?: string;
+}
+
+/** One row of the contact list saved together with a partner: with an id = update, without = new. */
+export interface ContactSync extends ContactPersonInput {
+  id?: string;
+}
+
+/** One row per partner for the partner table. */
+export interface ContactSummary {
+  mitra_id: string;
+  count: number;
 }
 
 interface Envelope<T> {
@@ -94,4 +127,31 @@ export async function lookupCompanyByCode(code: string): Promise<CompanyLookup |
     if ((err as { response?: { status?: number } })?.response?.status === 404) return null;
     throw err;
   }
+}
+
+// ── contact persons (child of a partner) ──────────────────────────────────────────────────────────
+const cp = (mitraId: string) => `/mitra/${encodeURIComponent(mitraId)}/contact-persons`;
+
+export async function listContactPersons(mitraId: string, search?: string): Promise<ContactPerson[]> {
+  const { data } = await api.get<Envelope<ContactPerson[]>>(cp(mitraId), { params: search ? { search } : undefined });
+  return data.data ?? [];
+}
+
+export async function createContactPerson(mitraId: string, input: ContactPersonInput): Promise<ContactPerson> {
+  const { data } = await api.post<Envelope<ContactPerson>>(cp(mitraId), input);
+  return data.data;
+}
+
+export async function updateContactPerson(mitraId: string, id: string, input: ContactPersonInput): Promise<ContactPerson> {
+  const { data } = await api.put<Envelope<ContactPerson>>(`${cp(mitraId)}/${encodeURIComponent(id)}`, input);
+  return data.data;
+}
+
+export async function deleteContactPerson(mitraId: string, id: string): Promise<void> {
+  await api.delete(`${cp(mitraId)}/${encodeURIComponent(id)}`);
+}
+
+export async function listContactSummaries(): Promise<ContactSummary[]> {
+  const { data } = await api.get<Envelope<ContactSummary[]>>("/mitra/contact-summary");
+  return data.data ?? [];
 }

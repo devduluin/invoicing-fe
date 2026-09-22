@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
+import DocumentLogo from "../../shared/DocumentLogo";
 import RichTextView from "../../shared/RichTextView";
 import type { InvoiceView } from "./invoiceView";
 
@@ -33,46 +34,14 @@ export function Sheet({ children, className, template }: { children: ReactNode; 
  *  the template's own padding is the margin, 12mm in print. */
 export const GUTTER = "px-[8.5mm] print:px-[12mm]";
 
-export function Logo({
-  company,
-  className,
-  tint,
-  nameClass,
-}: {
-  company: InvoiceView["company"];
-  className?: string;
-  /** Colour of the placeholder mark when the company has no logo. */
-  tint: string;
-  nameClass?: string;
-}) {
-  if (company.logo) {
-    // eslint-disable-next-line @next/next/no-img-element
-    return <img src={company.logo} alt={company.name} className={cn("h-[14mm] w-auto max-w-[52mm] object-contain", className)} />;
-  }
-  return (
-    <div className={cn("flex items-center gap-2", className)}>
-      <span
-        className="grid size-[11mm] shrink-0 place-items-center rounded-xl text-[16px] font-bold text-white"
-        style={{ background: tint }}
-      >
-        {(company.name[0] ?? "?").toUpperCase()}
-      </span>
-      <span className={cn("max-w-[42mm] truncate text-[19px] font-bold", nameClass)} style={{ color: tint }}>
-        {company.name}
-      </span>
-    </div>
-  );
+/** The company logo, or nothing (see DocumentLogo): never a placeholder, initial or company name. */
+export function Logo({ company, className }: { company: InvoiceView["company"]; className?: string }) {
+  return <DocumentLogo src={company.logo} className={cn("h-[22mm] w-auto max-w-[64mm] object-contain", className)} reserve={cn("h-[22mm] w-[22mm]", className)} />;
 }
 
-/** The (label, value) pairs of the invoice header — number, optional reference, dates. */
+/** The (label, value) pairs of the document header, already configured (labels, visible fields). */
 export function metaRows(view: InvoiceView): { key: string; label: string; value: string }[] {
-  const L = view.labels;
-  return [
-    { key: "no", label: L.invoiceNo, value: view.number },
-    ...(view.reference ? [{ key: "ref", label: L.reference, value: view.reference }] : []),
-    { key: "date", label: L.date, value: view.date },
-    ...(view.dueDate ? [{ key: "due", label: L.dueDate, value: view.dueDate }] : []),
-  ];
+  return view.meta;
 }
 
 export function contactLines(view: InvoiceView["company"] | InvoiceView["customer"], labels: InvoiceView["labels"]): string[] {
@@ -80,6 +49,7 @@ export function contactLines(view: InvoiceView["company"] | InvoiceView["custome
     ...view.addressLines,
     ...(view.phone ? [`${labels.phone}: ${view.phone}`] : []),
     ...(view.email ? [`${labels.email}: ${view.email}`] : []),
+    ...("extra" in view ? (view.extra ?? []) : []),
   ];
 }
 
@@ -92,33 +62,40 @@ export interface LinesTableStyle {
   rowSeparator: "dashed" | "none";
 }
 
-const COLS = ["30%", "11%", "14%", "11%", "16%", "18%"];
+/** Width of a numeric column; the product column takes what is left, so hiding columns widens it. */
+const COL_WIDTH: Record<string, number> = {
+  "col.quantity": 11,
+  "col.price": 14,
+  "col.discount": 11,
+  "col.tax": 16,
+  "col.amount": 18,
+};
 
 export function LinesTable({ view, style }: { view: InvoiceView; style: LinesTableStyle }) {
-  const L = view.labels;
-  const heads = [L.product, L.quantity, L.price, L.discount, L.tax, L.amount];
-  const align = ["text-left", "text-right", "text-right", "text-right", "text-right", "text-right"];
+  const cols = view.columns;
   const pill = style.head === "pill";
   const headColor = style.headText ?? (pill ? "#ffffff" : style.accent);
+  const used = cols.reduce((n, c) => n + (COL_WIDTH[c.key] ?? 0), 0);
+  const widthOf = (key: string) => (key in COL_WIDTH ? `${COL_WIDTH[key]}%` : `${Math.max(100 - used, 30)}%`);
 
   return (
     <table className="w-full table-fixed border-separate border-spacing-0 text-[12px]">
       <colgroup>
-        {COLS.map((w, i) => (
-          <col key={i} style={{ width: w }} />
+        {cols.map((c) => (
+          <col key={c.key} style={{ width: widthOf(c.key) }} />
         ))}
       </colgroup>
       <thead>
         <tr>
-          {heads.map((h, i) => (
+          {cols.map((c, i) => (
             <th
-              key={h + i}
+              key={c.key}
               className={cn(
                 "py-[2.6mm] text-[12px] font-bold",
-                align[i],
+                c.align === "left" ? "text-left" : "text-right",
                 pill ? "px-[3.2mm]" : "px-[1.4mm]",
                 pill && i === 0 && "rounded-l-full pl-[5mm]",
-                pill && i === heads.length - 1 && "rounded-r-full pr-[5mm]",
+                pill && i === cols.length - 1 && "rounded-r-full pr-[5mm]",
                 style.head === "plain" && "border-b border-slate-300",
               )}
               style={{
@@ -126,38 +103,37 @@ export function LinesTable({ view, style }: { view: InvoiceView; style: LinesTab
                 background: pill ? style.accent : undefined,
                 // closes the hairline seams between adjacent filled header cells
                 boxShadow: pill
-                  ? [i > 0 && `-1px 0 0 0 ${style.accent}`, i < heads.length - 1 && `1px 0 0 0 ${style.accent}`]
-                      .filter(Boolean)
-                      .join(",") || undefined
+                  ? [i > 0 && `-1px 0 0 0 ${style.accent}`, i < cols.length - 1 && `1px 0 0 0 ${style.accent}`].filter(Boolean).join(",") || undefined
                   : undefined,
               }}
             >
-              {h}
+              {c.label}
             </th>
           ))}
         </tr>
       </thead>
       <tbody>
-        {view.lines.map((l) => {
-          const cell = cn(
-            "py-[2.4mm] align-top",
-            pill ? "px-[3.2mm]" : "px-[1.4mm]",
-            style.rowSeparator === "dashed" && "border-b border-dashed border-slate-200",
-          );
-          return (
-            <tr key={l.key}>
-              <td className={cn(cell, pill && "pl-[5mm]")}>
-                <span className="block">{l.name}</span>
-                {l.description && <span className="block text-[10.5px] text-slate-400">{l.description}</span>}
+        {view.lines.map((l) => (
+          <tr key={l.key}>
+            {cols.map((c, i) => (
+              <td
+                key={c.key}
+                className={cn(
+                  "py-[2.4mm] align-top",
+                  pill ? "px-[3.2mm]" : "px-[1.4mm]",
+                  style.rowSeparator === "dashed" && "border-b border-dashed border-slate-200",
+                  pill && i === 0 && "pl-[5mm]",
+                  pill && i === cols.length - 1 && "pr-[5mm]",
+                  c.align === "right" && "text-right",
+                  c.align === "right" && c.key !== "col.tax" && "tabular-nums",
+                )}
+              >
+                <span className="block">{l.cells[c.key]}</span>
+                {c.key === "col.product" && l.description && <span className="block text-[10.5px] text-slate-400">{l.description}</span>}
               </td>
-              <td className={cn(cell, "text-right tabular-nums")}>{l.quantity}</td>
-              <td className={cn(cell, "text-right tabular-nums")}>{l.price}</td>
-              <td className={cn(cell, "text-right tabular-nums")}>{l.discount}</td>
-              <td className={cn(cell, "text-right")}>{l.tax}</td>
-              <td className={cn(cell, "text-right tabular-nums", pill && "pr-[5mm]")}>{l.amount}</td>
-            </tr>
-          );
-        })}
+            ))}
+          </tr>
+        ))}
       </tbody>
     </table>
   );
@@ -226,6 +202,7 @@ export function FooterBlock({
         )}
       </div>
 
+      {sig.show && (
       <div className="w-[38%] shrink-0 break-inside-avoid text-center text-[12px] text-slate-600">
         <p>{sig.dateLong}</p>
         <div className="relative mx-auto my-[2mm] flex h-[20mm] items-center justify-center">
@@ -246,6 +223,7 @@ export function FooterBlock({
         </div>
         <p className="text-[13px] font-bold text-slate-900">{sig.name}</p>
       </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Wallet, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
+import { useTr } from "@/lib/useTr";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -46,6 +48,7 @@ const emptyAllocation = (): AllocationRow => ({ key: crypto.randomUUID(), salesI
  *  invoice's remaining balance PLUS what this receipt already allocated to it. */
 export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
+  const tr = useTr();
   const searchParams = useSearchParams();
   const isEdit = mode === "edit" && !!id;
 
@@ -88,6 +91,11 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   // What the saved receipt already allocated per invoice (edit only) — that amount is
   // free to re-use, because the server gives it back before applying the new rows.
   const [originalAllocated, setOriginalAllocated] = useState<Map<string, number>>(new Map());
+
+  // New documents start from the configured defaults (existing ones keep what they have).
+  useNewDocumentDefaults("sales_receipt", isEdit, (cfg) => {
+    setNotes((n) => n || cfg.notes.content);
+  });
 
   usePageBreadcrumb([
     { label: "Sales Receipts", href: "/dashboard/penjualan/kuitansi" },
@@ -199,15 +207,16 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
     };
 
     setBusy(true);
+    let savedId = id;
     try {
       if (isEdit && id) {
         await updateSalesReceipt(id, payload);
         toast.success("Receipt updated");
       } else {
-        await createSalesReceipt(payload);
+        savedId = (await createSalesReceipt(payload)).id;
         toast.success("Receipt added");
       }
-      router.push("/dashboard/penjualan/kuitansi");
+      router.push(isEdit ? `${"/dashboard/penjualan/kuitansi"}/${savedId}` : `${"/dashboard/penjualan/kuitansi"}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save receipt"));
     } finally {
@@ -223,7 +232,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="h-6 w-64 animate-pulse rounded-lg bg-muted" />
         <div className="h-36 animate-pulse rounded-2xl bg-muted" />
         <div className="h-64 animate-pulse rounded-2xl bg-muted" />
@@ -234,16 +243,15 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   return (
     <div className="space-y-4">
       <PageHeader
-        icon={Wallet}
-        title={isEdit ? "Edit Receipt" : "Add Receipt"}
-        description="Record a payment received from a partner against one or more sales invoices."
+        title={isEdit ? tr("Ubah Kuitansi Penjualan", "Edit Sales Receipt") : tr("Buat Kuitansi Penjualan", "New Sales Receipt")}
+        description={tr("Isi informasi dokumen, lalu simpan.", "Fill in the document details, then save.")}
         actions={
           <>
-            <Button variant="ghost" onClick={() => router.push("/dashboard/penjualan/kuitansi")} disabled={busy}>
-              Cancel
+            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/penjualan/kuitansi"}/${id}` : "/dashboard/penjualan/kuitansi")} disabled={busy}>
+              {tr("Batal", "Cancel")}
             </Button>
-            <Button variant="primary" onClick={submit} disabled={busy}>
-              {busy ? "Saving…" : "Save Receipt"}
+            <Button variant="primary" onClick={submit} loading={busy}>
+              {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
             </Button>
           </>
         }

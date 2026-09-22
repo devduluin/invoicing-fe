@@ -15,7 +15,7 @@ import type { GetAllPayload, TableRow } from "@/app/types/apiResponses";
 import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
-import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
+import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { listSalesInvoices, deleteSalesInvoice, type SalesInvoice, type SalesInvoiceKind } from "@/services/salesInvoiceService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -50,7 +50,7 @@ function currentView(p: GetAllPayload): View {
 const TABLE_KEY: Record<SalesInvoiceKind, string> = { invoice: "sales-invoices", down_payment: "sales-invoices-dp" };
 const BASE_PATH: Record<SalesInvoiceKind, string> = { invoice: "/dashboard/penjualan/invoice", down_payment: "/dashboard/penjualan/uang-muka" };
 
-const DEFAULT_VISIBLE = ["number", "mitra_id", "date", "due_date", "status", "grand_total"];
+const DEFAULT_VISIBLE = ["number", "mitra_id", "date", "due_date", "status", "grand_total", "outstanding"];
 
 export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind }) {
   const tr = useTr();
@@ -116,6 +116,18 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
       { id: "status", header: "Status", render: (_v, row) => <InvoiceStatusBadge invoice={row as unknown as SalesInvoice} /> },
       { id: "payment_status", header: tr("Status Bayar", "Payment Status"), render: (_v, row) => <InvoiceStatusBadge invoice={row as unknown as SalesInvoice} /> },
       { id: "grand_total", header: "Total", align: "right", render: (v) => <span className="font-medium tabular-nums text-slate-900">{money.format(Number(v ?? 0))}</span> },
+      {
+        id: "outstanding",
+        header: tr("Sisa Tagihan", "Outstanding"),
+        align: "right",
+        noSort: true,
+        render: (_v, row) => {
+          const inv = row as unknown as SalesInvoice;
+          if (inv.status !== "confirmed") return <span className="text-slate-400">—</span>;
+          const out = inv.outstanding_amount ?? Math.max(0, inv.grand_total - inv.paid_amount);
+          return <span className={out > 0 ? "font-medium tabular-nums text-slate-900" : "tabular-nums text-slate-500"}>{money.format(out)}</span>;
+        },
+      },
       { id: "created_at", header: tr("Dibuat", "Created At"), kind: "datetime" },
     ],
     // labels are re-derived when the language changes
@@ -156,7 +168,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         }
         columns={columns}
         data={list.data}
-        availableColumns={list.columns}
+        availableColumns={[...list.columns, "outstanding"]}
         attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
@@ -204,8 +216,9 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
           const invoice = row as unknown as SalesInvoice;
           return (
             <RowActionDropdown
+              onView={() => goTo(invoice.id)}
               onEdit={canUpdate ? () => goToEdit(invoice.id) : undefined}
-              onDelete={canDelete && invoice.status === "draft" ? () => setConfirm(invoice) : undefined}
+              onDelete={canDelete ? () => setConfirm(invoice) : undefined}
               extra={
                 canCreate
                   ? [
@@ -222,10 +235,10 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         }}
       />
 
-      <ConfirmDeleteModal
+      <DeleteDocumentModal
         open={!!confirm}
         title={tr("Hapus invoice?", "Delete invoice?")}
-        description={confirm ? tr(`"${confirm.number}" akan dihapus.`, `"${confirm.number}" will be deleted.`) : undefined}
+        number={confirm?.number}
         onConfirm={remove}
         onClose={() => setConfirm(null)}
       />

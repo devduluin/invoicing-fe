@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
+import ContactPersonSelect, { type ContactSnapshot } from "../shared/ContactPersonSelect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
 import toast from "react-hot-toast";
@@ -27,6 +29,7 @@ import {
   confirmSalesInvoice,
   cancelSalesInvoice,
   draftSalesInvoice,
+  setSalesInvoiceTemplate,
   SALES_INVOICE_STATUS_LABEL,
   type SalesInvoice,
   type SalesInvoiceKind,
@@ -43,6 +46,8 @@ import {
   type EditableLine,
 } from "../shared/LineItemsEditor";
 import { InvoiceTemplatePanel } from "./templates/InvoiceTemplatePanel";
+import { hasPermission, useAuthStore } from "@/store/useAuthStore";
+import { listDocumentTemplates } from "@/services/documentTemplateService";
 import { DEFAULT_INVOICE_TEMPLATE, resolveInvoiceTemplate, type InvoiceTemplateId } from "./templates/types";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
@@ -122,6 +127,9 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const [salesOrderId, setSalesOrderId] = useState<string | null>(null);
   const [linkedInvoiceId, setLinkedInvoiceId] = useState<string | null>(null);
   const [mitraId, setMitraId] = useState("");
+  const [contactPersonId, setContactPersonId] = useState("");
+  // The contact's details as shown / saved with this document (its own copy; see ContactPersonSelect).
+  const [contactInfo, setContactInfo] = useState<ContactSnapshot>({});
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState("");
@@ -141,10 +149,52 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const [stampDuty, setStampDuty] = useState(false);
   // Layout choice — presentation only; saved with the invoice. Switching it never touches the fields above.
   const [template, setTemplate] = useState<InvoiceTemplateId>(DEFAULT_INVOICE_TEMPLATE);
+  // Until the user picks one on a NEW invoice, the template is not sent: the server applies the
+  // company's default. Once picked (or copied from a source invoice) it is saved as chosen.
+  const templateTouched = useRef(false);
+  const permissions = useAuthStore((st) => st.permissions);
+  const activeCompanyId = useAuthStore((st) => st.activeCompanyId);
+  const canChangeIssuedTemplate = hasPermission(permissions, "invoice-sales-invoice-update");
   const [paidAmount, setPaidAmount] = useState(0);
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string; dueDate?: string }>({});
 
-  const readOnly = isEdit && status !== "draft";
+  // A document's status never makes it read-only: issued, paid or cancelled documents stay editable
+  // (permission and the server's validation are the only gates).
+  const readOnly = false;
+
+  // New invoice: start from the ACTIVE company's default for this document type.
+  useEffect(() => {
+    if (isEdit || searchParams.get("duplicate_from") || !hasPermission(permissions, "invoice-template-list")) return;
+    let alive = true;
+    listDocumentTemplates()
+      .then((items) => {
+        if (!alive || templateTouched.current) return;
+        const d = items.find((i) => i.doc_type === (kind === "down_payment" ? "down_payment" : "sales_invoice"));
+        if (d) setTemplate(resolveInvoiceTemplate(d.template));
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit, kind, activeCompanyId]);
+
+  // Draft: the choice is saved with the form. Issued/cancelled: it is presentation only, so it
+  // is saved right away (the rest of the document is locked).
+  const changeTemplate = async (next: InvoiceTemplateId) => {
+    const prev = template;
+    setTemplate(next);
+    templateTouched.current = true;
+    if (isEdit && readOnly && id) {
+      try {
+        await setSalesInvoiceTemplate(id, next);
+        toast.success(tr("Template disimpan", "Template saved"));
+      } catch (err) {
+        setTemplate(prev);
+        toast.error(extractApiError(err, tr("Gagal mengganti template", "Failed to change the template")));
+      }
+    }
+  };
 
   // ── live preview: the form state shaped like a saved invoice ──
   // Amounts come from the SAME calcLine / calcDocumentTotals the totals panel uses, so
@@ -164,6 +214,12 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       id: id ?? "draft",
       company_id: company?.id ?? "",
       mitra_id: mitraId,
+      contact_person_id: contactPersonId || undefined,
+      contact_name: contactInfo.name,
+      contact_position: contactInfo.position,
+      contact_phone: contactInfo.phone,
+      contact_email: contactInfo.email,
+      attachment_data: attachmentData || undefined,
       kind,
       number: number.trim() || "—",
       date,
@@ -182,6 +238,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       signature_data: signatureData || undefined,
       stamp_duty: stampDuty,
       paid_amount: paidAmount,
+      outstanding_amount: Math.max(0, totals.grandTotal - paidAmount),
       payment_status: "unpaid",
       lines: active.map((l) => ({
         id: l.key,
@@ -198,9 +255,16 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       updated_at: "",
     };
   }, [
-    id, company, mitraId, kind, number, date, dueDate, refNo, notes, terms, template, status, lines, taxes,
+    id, company, mitraId, contactPersonId, contactInfo, attachmentData, kind, number, date, dueDate, refNo, notes, terms, template, status, lines, taxes,
     additionalDiscountType, additionalDiscountValue, shippingCost, signatureData, stampDuty, paidAmount,
   ]);
+
+  // New documents start from the configured defaults (existing ones keep what they have).
+  useNewDocumentDefaults(kind === "down_payment" ? "down_payment" : "sales_invoice", isEdit, (cfg) => {
+    setNotes((n) => n || cfg.notes.content);
+    setTerms((v) => v || cfg.terms.content);
+    setSignatureData((v) => v || cfg.signature.image);
+  });
 
   usePageBreadcrumb([
     { label: label.breadcrumb, href: label.basePath },
@@ -345,6 +409,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
             : [emptyLine()],
         );
         setTemplate(resolveInvoiceTemplate(source.template));
+        templateTouched.current = true;
         toast.success(`Duplicated from ${source.number}`);
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load invoice")))
@@ -359,6 +424,8 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         setSalesOrderId(invoice.sales_order_id ?? null);
         setLinkedInvoiceId(invoice.linked_invoice_id ?? null);
         setMitraId(invoice.mitra_id);
+        setContactPersonId(invoice.contact_person_id ?? "");
+        setContactInfo({ name: invoice.contact_name, position: invoice.contact_position, phone: invoice.contact_phone, email: invoice.contact_email });
         setNumber(invoice.number);
         setDate(invoice.date.slice(0, 10));
         setDueDate(invoice.due_date ? invoice.due_date.slice(0, 10) : "");
@@ -470,13 +537,14 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       sales_order_id: salesOrderId || undefined,
       linked_invoice_id: linkedInvoiceId || undefined,
       mitra_id: mitraId,
+      contact_person_id: contactPersonId || null,
       number: number.trim() || undefined,
       date,
       due_date: dueDate || undefined,
       ref_no: refNo.trim() || undefined,
       notes: notes.trim() || undefined,
       terms: terms.trim() || undefined,
-      template,
+      template: isEdit || templateTouched.current ? template : undefined,
       additional_discount_type: additionalDiscountType,
       additional_discount_value: additionalDiscountValue ?? 0,
       shipping_cost: shippingCost ?? 0,
@@ -498,15 +566,16 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     };
 
     setBusy(true);
+    let savedId = id;
     try {
       if (isEdit && id) {
         await updateSalesInvoice(id, payload);
         toast.success("Invoice updated");
       } else {
-        await createSalesInvoice(payload);
+        savedId = (await createSalesInvoice(payload)).id;
         toast.success("Invoice added");
       }
-      router.push(label.basePath);
+      router.push(isEdit ? `${label.basePath}/${savedId}` : `${label.basePath}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save invoice"));
     } finally {
@@ -574,8 +643,16 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
 
   // Primary/secondary actions live in two places on purpose: the page header, and the sticky
   // summary card — so "Save" is always one glance away on a long form.
-  const saveActions = readOnly ? (
+  const saveActions = (
     <>
+      <Button variant="primary" fullWidth onClick={submit} loading={busy} className="hidden xl:inline-flex">
+        {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan Invoice", "Save Invoice")}
+      </Button>
+      {isEdit && status === "draft" && (
+        <Button variant="outline" fullWidth onClick={doConfirm} disabled={busy}>
+          {tr("Terbitkan Invoice", "Confirm Invoice")}
+        </Button>
+      )}
       {status === "confirmed" && (
         <>
           <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
@@ -589,17 +666,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       {status === "cancelled" && (
         <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
           {tr("Kembalikan ke Draf", "Move Back to Draft")}
-        </Button>
-      )}
-    </>
-  ) : (
-    <>
-      <Button variant="primary" fullWidth onClick={submit} loading={busy} className="hidden xl:inline-flex">
-        {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan Invoice", "Save Invoice")}
-      </Button>
-      {isEdit && (
-        <Button variant="outline" fullWidth onClick={doConfirm} disabled={busy}>
-          {tr("Terbitkan Invoice", "Confirm Invoice")}
         </Button>
       )}
     </>
@@ -617,12 +683,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         meta={isEdit ? <Status status={status === "confirmed" ? "confirmed" : status === "cancelled" ? "cancelled" : "draft"} label={status === "confirmed" ? statusLabels.confirmed : status === "cancelled" ? statusLabels.cancelled : statusLabels.draft} /> : undefined}
         actions={
           <>
-            {isEdit && (
-              <Button variant="outline" onClick={() => router.push(`/dashboard/penjualan/cetak/${id}`)}>
-                {tr("Cetak / PDF", "Print / PDF")}
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => router.push(label.basePath)} disabled={busy}>
+            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${label.basePath}/${id}` : label.basePath)} disabled={busy}>
               {readOnly ? tr("Tutup", "Close") : tr("Batal", "Cancel")}
             </Button>
             {/* The sticky summary column carries Save on wide screens; this one only shows when that
@@ -641,8 +702,8 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         aside={
           <InvoiceTemplatePanel
             value={template}
-            onChange={setTemplate}
-            disabled={readOnly}
+            onChange={changeTemplate}
+            disabled={readOnly && !(isEdit && canChangeIssuedTemplate)}
             invoice={draftInvoice}
             mitra={previewMitra}
             company={company}
@@ -678,6 +739,16 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 addNewLabel={tr("Tambah mitra baru", "Add new partner")}
               />
             </FormField>
+            <ContactPersonSelect
+              mitraId={mitraId}
+              value={contactPersonId}
+              autoFill={!isEdit}
+              snapshot={contactInfo}
+              onChange={(cid, c) => {
+                setContactPersonId(cid);
+                setContactInfo(c ? { name: c.name, position: c.position, phone: c.phone, email: c.email } : {});
+              }}
+            />
             <FormField label={tr("No. Invoice", "Invoice No.")} htmlFor="inv-number" optional>
               <Input
                 id="inv-number"

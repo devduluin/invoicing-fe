@@ -1,8 +1,11 @@
 import api from "./apiClient";
+import type { InvoiceTemplateId } from "@/components/dashboard/penjualan-invoice/templates/types";
 import { fetchList } from "./masterList";
 import type { GetAllPayload, ListResult, TableRow } from "@/app/types/apiResponses";
 
 export type PurchaseInvoiceStatus = "draft" | "confirmed" | "cancelled";
+/** Derived on the server from paid_amount vs grand_total. Outstanding = grand_total - paid_amount. */
+export type PurchaseInvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
 export type DiscountType = "percent" | "amount";
 
 export interface PurchaseInvoiceLine {
@@ -21,6 +24,13 @@ export interface PurchaseInvoiceLine {
 }
 
 export interface PurchaseInvoice {
+  /** Contact person of the partner; the four contact_* fields are the document\'s own copy. */
+  contact_person_id?: string;
+  contact_name?: string;
+  contact_position?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  template?: InvoiceTemplateId;
   id: string;
   company_id: string;
   purchase_order_id?: string;
@@ -35,6 +45,11 @@ export interface PurchaseInvoice {
   discount_total: number;
   tax_total: number;
   grand_total: number;
+  /** Sum of the payments (purchase receipts) applied to this bill; maintained by the server. */
+  paid_amount: number;
+  /** max(grand_total - paid_amount, 0), computed by the server on every read. */
+  outstanding_amount: number;
+  payment_status: PurchaseInvoicePaymentStatus;
   additional_discount_type?: DiscountType;
   additional_discount_value?: number;
   additional_discount_amount?: number;
@@ -50,6 +65,8 @@ export interface PurchaseInvoice {
 }
 
 export interface PurchaseInvoiceInput {
+  contact_person_id?: string | null;
+  template?: InvoiceTemplateId;
   purchase_order_id?: string | null;
   mitra_id: string;
   number?: string;
@@ -131,3 +148,28 @@ export const PURCHASE_INVOICE_STATUS_LABEL: Record<PurchaseInvoiceStatus, string
   confirmed: "Confirmed",
   cancelled: "Cancelled",
 };
+
+/** Change only the printable layout (any status). Used by the template picker on the detail page. */
+export async function setPurchaseInvoiceTemplate(id: string, template: InvoiceTemplateId): Promise<PurchaseInvoice> {
+  const { data } = await api.put<Envelope<PurchaseInvoice>>(`/purchase-invoices/${encodeURIComponent(id)}/template`, { template });
+  return data.data;
+}
+
+export interface PurchaseInvoiceSummaryFigure {
+  amount: number;
+  count: number;
+}
+
+/** Dashboard numbers for purchase invoices — computed by the backend from the same columns the list
+ *  and the detail page use (paid_amount, payment_status, due_date, status). */
+export interface PurchaseInvoiceSummary {
+  outstanding: PurchaseInvoiceSummaryFigure;
+  overdue: PurchaseInvoiceSummaryFigure;
+  this_month: PurchaseInvoiceSummaryFigure;
+  drafts: number;
+}
+
+export async function getPurchaseInvoiceSummary(): Promise<PurchaseInvoiceSummary> {
+  const { data } = await api.get<Envelope<PurchaseInvoiceSummary>>("/purchase-invoices/summary");
+  return data.data;
+}

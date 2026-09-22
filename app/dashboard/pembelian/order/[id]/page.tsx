@@ -3,22 +3,22 @@
 import { useParams } from "next/navigation";
 
 import PermissionGate from "@/components/auth/PermissionGate";
-import PurchaseOrderFormPage from "@/components/dashboard/pembelian-order/PurchaseOrderFormPage";
+import OrderDetailPage from "@/components/dashboard/shared/OrderDetailPage";
 
-export default function EditPurchaseOrderPage() {
+export default function PurchaseOrderDetailRoute() {
   const params = useParams<{ id: string }>();
   const id = Array.isArray(params.id) ? params.id[0] : params.id;
 
   return (
     <PermissionGate
-      anyPermission={["invoice-purchase-order-update"]}
+      anyPermission={["invoice-purchase-order-list"]}
       fallback={
         <div className="py-16 text-center text-sm text-muted-foreground">
-          You don't have access to edit purchase orders.
+          You don't have access to purchase orders.
         </div>
       }
     >
-      <PurchaseOrderFormPage mode="edit" id={id} />
+      <OrderDetailPage kind="purchase_order" id={id} />
     </PermissionGate>
   );
 }

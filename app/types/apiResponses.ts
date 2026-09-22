@@ -58,10 +58,18 @@ export type GetAllPayload = {
   mitra_id?: string;
   sales_order_id?: string;
   sales_invoice_id?: string;
+  purchase_invoice_id?: string;
   status?: string;
   payment_status?: string;
   /** "true" → confirmed, not fully paid, past due date */
   overdue?: string;
+  // Audit Log filters
+  /** one AUDIT_ACTION_FILTER_OPTIONS value (expanded to the backend's comma-separated action list
+   *  by listAuditLogTable) */
+  action?: string;
+  module?: string;
+  from?: string;
+  to?: string;
 };
 
 export function toListResult<T>(res: ListResponse<T>): ListResult<T> {

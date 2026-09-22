@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
+import ContactPersonSelect, { type ContactSnapshot } from "../shared/ContactPersonSelect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Receipt } from "lucide-react";
 import toast from "react-hot-toast";
@@ -10,6 +12,8 @@ import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
+import { useTr } from "@/lib/useTr";
+import { hasPermission, useAuthStore } from "@/store/useAuthStore";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -27,7 +31,10 @@ import {
   type SalesOrderStatus,
   type DiscountType,
 } from "@/services/salesOrderService";
-import { LineItemsEditor, LineItemsTotals, emptyLine, calcLine, type EditableLine } from "../shared/LineItemsEditor";
+import { LineItemsEditor, LineItemsTotals, emptyLine, calcLine, calcDocumentTotals, type EditableLine } from "../shared/LineItemsEditor";
+import { DocumentTemplateAside, useDocumentTemplate } from "../shared/DocumentTemplateAside";
+import type { PrintableDoc } from "@/lib/documentShape";
+import { setSalesOrderTemplate } from "@/services/salesOrderService";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
@@ -45,6 +52,7 @@ interface Props {
  *  cancelled lifecycle that locks the form once it leaves draft. */
 export default function SalesOrderFormPage({ mode, id }: Props) {
   const router = useRouter();
+  const tr = useTr();
   const searchParams = useSearchParams();
   const isEdit = mode === "edit";
 
@@ -77,6 +85,9 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
   const [addMitraOpen, setAddMitraOpen] = useState(false);
 
   const [mitraId, setMitraId] = useState("");
+  const [contactPersonId, setContactPersonId] = useState("");
+  // The contact's details as shown / saved with this document (its own copy; see ContactPersonSelect).
+  const [contactInfo, setContactInfo] = useState<ContactSnapshot>({});
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(todayISO());
   const [refNo, setRefNo] = useState("");
@@ -93,7 +104,73 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
   const [stampDuty, setStampDuty] = useState(false);
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
 
-  const readOnly = isEdit && status !== "draft";
+  // A document's status never makes it read-only: issued, paid or cancelled documents stay editable
+  // (permission and the server's validation are the only gates).
+  const readOnly = false;
+
+  // Layout choice: presentation only, saved with the document (see useDocumentTemplate).
+  const tpl = useDocumentTemplate({
+    docType: "sales_order",
+    isEdit,
+    locked: readOnly,
+    id,
+    save: setSalesOrderTemplate,
+    skipDefault: !!searchParams.get("duplicate_from"),
+  });
+  const canChangeLockedTemplate = hasPermission(useAuthStore((st) => st.permissions), "invoice-sales-order-update");
+  const previewMitra = useMemo(() => mitras.find((mi) => mi.id === mitraId) ?? null, [mitras, mitraId]);
+  // The form state shaped like a saved document; totals come from the same calc as the totals panel.
+  const draftDoc = useMemo<PrintableDoc>(() => {
+    const active = lines.filter((l) => l.product_name.trim() || l.quantity || l.unit_price);
+    const totals = calcDocumentTotals(
+      active,
+      taxes,
+      { type: additionalDiscountType, value: additionalDiscountValue, onTypeChange: () => {}, onValueChange: () => {} },
+      undefined,
+    );
+    return {
+      id: id ?? "draft",
+      company_id: "",
+      mitra_id: mitraId,
+      contact_person_id: contactPersonId || undefined,
+      contact_name: contactInfo.name,
+      contact_position: contactInfo.position,
+      contact_phone: contactInfo.phone,
+      contact_email: contactInfo.email,
+      attachment_data: attachmentData || undefined,
+      number: number.trim() || "—",
+      date,
+      
+      ref_no: refNo.trim() || undefined,
+      notes: notes.trim() || undefined,
+      status,
+      subtotal: totals.subtotal,
+      discount_total: totals.discountTotal,
+      additional_discount_amount: totals.additionalDiscountAmount,
+      tax_total: totals.taxTotal,
+      grand_total: totals.grandTotal,
+      
+      signature_data: signatureData || undefined,
+      stamp_duty: stampDuty,
+      lines: active.map((l) => ({
+        id: l.key,
+        product_name: l.product_name,
+        description: l.description,
+        quantity: l.quantity ?? 0,
+        unit_price: l.unit_price ?? 0,
+        discount_type: l.discount_type,
+        discount_value: l.discount_value ?? 0,
+        tax_ids: l.tax_ids,
+        line_total: calcLine(l, taxes).lineTotal,
+      })),
+    };
+  }, [id, mitraId, contactPersonId, contactInfo, attachmentData, number, date, refNo, notes, status, lines, taxes, additionalDiscountType, additionalDiscountValue, signatureData, stampDuty]);
+
+  // New documents start from the configured defaults (existing ones keep what they have).
+  useNewDocumentDefaults("sales_order", isEdit, (cfg) => {
+    setNotes((n) => n || cfg.notes.content);
+    setSignatureData((v) => v || cfg.signature.image);
+  });
 
   usePageBreadcrumb([
     { label: "Sales Orders", href: "/dashboard/penjualan/order" },
@@ -126,6 +203,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
       .then((source) => {
         setMitraId(source.mitra_id);
         setNotes(source.notes ?? "");
+        tpl.adopt(source.template);
         setAdditionalDiscountType(source.additional_discount_type ?? "percent");
         setAdditionalDiscountValue(source.additional_discount_value || null);
         setShipFrom(source.ship_from ?? "");
@@ -156,10 +234,13 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
     getSalesOrder(id)
       .then((order) => {
         setMitraId(order.mitra_id);
+        setContactPersonId(order.contact_person_id ?? "");
+        setContactInfo({ name: order.contact_name, position: order.contact_position, phone: order.contact_phone, email: order.contact_email });
         setNumber(order.number);
         setDate(order.date.slice(0, 10));
         setRefNo(order.ref_no ?? "");
         setNotes(order.notes ?? "");
+        tpl.adopt(order.template);
         setStatus(order.status);
         setAdditionalDiscountType(order.additional_discount_type ?? "percent");
         setAdditionalDiscountValue(order.additional_discount_value || null);
@@ -253,6 +334,8 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
 
     const payload: SalesOrderInput = {
       mitra_id: mitraId,
+      contact_person_id: contactPersonId || null,
+      template: tpl.payloadValue,
       number: number.trim() || undefined,
       date,
       ref_no: refNo.trim() || undefined,
@@ -277,15 +360,16 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
     };
 
     setBusy(true);
+    let savedId = id;
     try {
       if (isEdit && id) {
         await updateSalesOrder(id, payload);
         toast.success("Sales order updated");
       } else {
-        await createSalesOrder(payload);
+        savedId = (await createSalesOrder(payload)).id;
         toast.success("Sales order added");
       }
-      router.push("/dashboard/penjualan/order");
+      router.push(isEdit ? `${"/dashboard/penjualan/order"}/${savedId}` : `${"/dashboard/penjualan/order"}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save sales order"));
     } finally {
@@ -347,64 +431,73 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
     );
   }
 
+  // Primary/secondary actions live in the page header and the sticky summary card, like Sales Invoice.
+  const saveActions = (
+    <>
+      <Button variant="primary" fullWidth onClick={submit} loading={busy} className="hidden xl:inline-flex">
+        {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
+      </Button>
+      {isEdit && status === "draft" && (
+        <Button variant="outline" fullWidth onClick={doConfirm} disabled={busy}>
+          {tr("Terbitkan", "Confirm")}
+        </Button>
+      )}
+      {status === "confirmed" && (
+        <>
+          <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
+            {tr("Kembalikan ke Draf", "Move Back to Draft")}
+          </Button>
+          <Button variant="outline" fullWidth onClick={doCancel} disabled={busy}>
+            {tr("Batalkan", "Cancel")}
+          </Button>
+        </>
+      )}
+      {status === "cancelled" && (
+        <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
+          {tr("Kembalikan ke Draf", "Move Back to Draft")}
+        </Button>
+      )}
+    </>
+  );
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <PageHeader
-        icon={Receipt}
-        title={isEdit ? "Edit Sales Order" : "Add Sales Order"}
-        description="Record a sales order with line items, ready to be confirmed and invoiced."
+        title={isEdit ? tr("Ubah Pesanan Penjualan", "Edit Sales Order") : tr("Buat Pesanan Penjualan", "New Sales Order")}
+        description={
+          readOnly
+            ? tr("Dokumen ini sudah diterbitkan atau dibatalkan — hanya bisa dilihat.", "This document is issued or cancelled — view only.")
+            : tr("Isi informasi, tambahkan item, lalu simpan. Ringkasan dan template ada di sisi kanan.", "Fill in the details, add items, then save. Summary and template are on the right.")
+        }
+        meta={isEdit ? <Status status={status as StatusKey} label={SALES_ORDER_STATUS_LABEL[status]} /> : undefined}
         actions={
           <>
-            {isEdit && (
-              <Status status={status as StatusKey} label={SALES_ORDER_STATUS_LABEL[status]} />
-            )}
-            {readOnly ? (
-              <>
-                <Button variant="ghost" onClick={() => router.push("/dashboard/penjualan/order")}>
-                  Close
-                </Button>
-                {status === "confirmed" && (
-                  <>
-                    <Button variant="outline" onClick={doCancel} disabled={busy}>
-                      Cancel Order
-                    </Button>
-                    <Button variant="outline" onClick={doBackToDraft} disabled={busy}>
-                      {busy ? "Processing…" : "Move Back to Draft"}
-                    </Button>
-                    <Button
-                      variant="primary"
-                      onClick={() => router.push(`/dashboard/penjualan/invoice/add?dari_order=${id}`)}
-                    >
-                      Create Invoice
-                    </Button>
-                  </>
-                )}
-                {status === "cancelled" && (
-                  <Button variant="outline" onClick={doBackToDraft} disabled={busy}>
-                    {busy ? "Processing…" : "Move Back to Draft"}
-                  </Button>
-                )}
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={() => router.push("/dashboard/penjualan/order")} disabled={busy}>
-                  Cancel
-                </Button>
-                <Button variant="primary" onClick={submit} disabled={busy}>
-                  {busy ? "Saving…" : "Save Order"}
-                </Button>
-                {isEdit && (
-                  <Button variant="outline" onClick={doConfirm} disabled={busy}>
-                    {busy ? "Processing…" : "Confirm Order"}
-                  </Button>
-                )}
-              </>
+            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/penjualan/order"}/${id}` : "/dashboard/penjualan/order")} disabled={busy}>
+              {readOnly ? tr("Tutup", "Close") : tr("Batal", "Cancel")}
+            </Button>
+            {/* The sticky summary column carries Save on wide screens; this one only shows below xl. */}
+            {!readOnly && (
+              <Button variant="primary" onClick={submit} loading={busy} className="xl:hidden">
+                {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
+              </Button>
             )}
           </>
         }
       />
 
       <DocumentFormLayout
+        summaryActions={saveActions}
+        aside={
+          <DocumentTemplateAside
+            doc="sales_order"
+            draft={draftDoc}
+            mitra={previewMitra}
+            taxes={taxes}
+            template={tpl.template}
+            onChange={tpl.change}
+            disabled={readOnly && !(isEdit && canChangeLockedTemplate)}
+          />
+        }
         headerLeft={
           <AttachmentUpload
             value={{ data: attachmentData, name: attachmentName }}
@@ -433,6 +526,16 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
                 addNewLabel="Add new partner"
               />
             </FormField>
+            <ContactPersonSelect
+              mitraId={mitraId}
+              value={contactPersonId}
+              autoFill={!isEdit}
+              snapshot={contactInfo}
+              onChange={(cid, c) => {
+                setContactPersonId(cid);
+                setContactInfo(c ? { name: c.name, position: c.position, phone: c.phone, email: c.email } : {});
+              }}
+            />
             <FormField label="Order No." htmlFor="so-number" optional>
               <Input
                 id="so-number"

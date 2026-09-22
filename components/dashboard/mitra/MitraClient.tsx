@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Plus, Users } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -21,12 +21,14 @@ import {
   listMitra,
   deleteMitra,
   MITRA_TYPE_LABEL,
+  listContactSummaries,
+  type ContactSummary,
   type Mitra,
   type MitraType,
 } from "@/services/mitraService";
 
 const TABLE_KEY = "mitra";
-const DEFAULT_VISIBLE = ["name", "type", "email", "phone", "is_active"];
+const DEFAULT_VISIBLE = ["name", "contact_name", "type", "email", "phone", "is_active"];
 
 const SPECS: ColumnSpec<TableRow>[] = [
   {
@@ -34,7 +36,6 @@ const SPECS: ColumnSpec<TableRow>[] = [
     header: "Name",
     render: (_v, row) => <span className="font-semibold text-slate-700">{String(row.name ?? "—")}</span>,
   },
-  { id: "contact_name", header: "Contact (PIC)" },
   { id: "type", header: "Type", render: (v) => <MitraTypeBadge type={(v as MitraType) ?? "customer"} /> },
   { id: "email", header: "Email" },
   { id: "phone", header: "Phone" },
@@ -44,7 +45,7 @@ const SPECS: ColumnSpec<TableRow>[] = [
   { id: "created_at", header: "Created At", kind: "datetime" },
   { id: "updated_at", header: "Updated At", kind: "datetime" },
 ];
-const LABELS = Object.fromEntries(SPECS.map((s) => [s.id, s.header]));
+const LABELS = Object.fromEntries([...SPECS.map((s) => [s.id, s.header]), ["contact_name", "Contact (PIC)"]]);
 
 export default function MitraClient() {
   const permissions = useAuthStore((s) => s.permissions);
@@ -57,7 +58,35 @@ export default function MitraClient() {
   const [confirm, setConfirm] = useState<Mitra | null>(null);
 
   const list = useMasterList(listMitra, {});
-  const columns = useMemo(() => buildColumns(SPECS), []);
+  const [summaries, setSummaries] = useState<Record<string, ContactSummary>>({});
+  useEffect(() => {
+    listContactSummaries()
+      .then((rows) => setSummaries(Object.fromEntries(rows.map((r) => [r.mitra_id, r]))))
+      .catch(() => setSummaries({}));
+  }, [list.data]);
+
+  // Contact (PIC) as before, plus how many contact persons the partner has.
+  const columns = useMemo(
+    () =>
+      buildColumns([
+        SPECS[0],
+        {
+          id: "contact_name",
+          header: "Contact (PIC)",
+          render: (v, row) => {
+            const n = summaries[String(row.id)]?.count ?? 0;
+            return (
+              <div className="leading-tight">
+                <span className={v ? "text-slate-700" : "text-slate-400"}>{v ? String(v) : "—"}</span>
+                <span className="block text-xs text-slate-500">{n ? `${n} ${n === 1 ? "contact person" : "contact persons"}` : "No contact person"}</span>
+              </div>
+            );
+          },
+        },
+        ...SPECS.slice(1),
+      ]),
+    [summaries],
+  );
 
   const setFilter = (_key: string, value: string) => {
     setTypeFilter(value);

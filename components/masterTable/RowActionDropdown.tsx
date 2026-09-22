@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import type { ReactNode } from "react";
-import { FilePlus2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Eye, FilePlus2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
 
 import { useTr } from "@/lib/useTr";
 import {
@@ -33,11 +33,13 @@ const DANGER = "text-rose-600 focus:bg-rose-50 focus:text-rose-700 focus-visible
  *  then related documents, then Delete on its own. All styling comes from the shared dropdown
  *  primitive, so it matches every other menu in the app. */
 export default function RowActionDropdown({
+  onView,
   onEdit,
   onDelete,
   deleteLabel,
   extra = [],
 }: {
+  onView?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
   deleteLabel?: string;
@@ -47,7 +49,7 @@ export default function RowActionDropdown({
   const visible = extra.filter((a) => !a.hidden);
   const direct = visible.filter((a) => a.section !== "related");
   const related = visible.filter((a) => a.section === "related");
-  const hasDirect = !!onEdit || direct.length > 0;
+  const hasDirect = !!onView || !!onEdit || direct.length > 0;
   if (!hasDirect && related.length === 0 && !onDelete) return null;
 
   const item = (a: RowAction) => (
@@ -73,6 +75,12 @@ export default function RowActionDropdown({
         </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
+        {onView && (
+          <DropdownMenuItem onSelect={onView}>
+            <Eye aria-hidden />
+            {tr("Lihat", "View")}
+          </DropdownMenuItem>
+        )}
         {onEdit && (
           <DropdownMenuItem onSelect={onEdit}>
             <Pencil aria-hidden />

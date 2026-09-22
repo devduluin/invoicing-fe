@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Receipt,
   Ruler,
+  UserCog,
   Settings,
   ShoppingCart,
   Users,
@@ -39,16 +40,24 @@ export const NAV: NavGroup[] = [
     items: [{ label: { id: "Ringkasan", en: "Overview" }, icon: LayoutDashboard, href: "/dashboard" }],
   },
   {
+    label: { id: "Data Master", en: "Master Data" },
+    items: [
+      { label: { id: "Mitra", en: "Partners" }, icon: Users, href: "/dashboard/mitra", permission: "invoice-mitra-list" },
+      { label: { id: "Satuan", en: "Units" }, icon: Ruler, href: "/dashboard/units", permission: "invoice-unit-list" },
+      // { label: { id: "Pengguna", en: "Users" }, icon: UserCog, href: "/dashboard/users", permission: "invoice-user-list" },
+    ],
+  },
+  {
     label: { id: "Transaksi", en: "Transactions" },
     items: [
       {
         label: { id: "Penjualan", en: "Sales" },
         icon: Receipt,
         children: [
-          { label: { id: "Invoice Penjualan", en: "Sales Invoices" }, href: "/dashboard/penjualan/invoice", permission: "invoice-sales-invoice-list" },
           { label: { id: "Pesanan Penjualan", en: "Sales Orders" }, href: "/dashboard/penjualan/order", permission: "invoice-sales-order-list" },
           { label: { id: "Invoice Uang Muka", en: "Down Payments" }, href: "/dashboard/penjualan/uang-muka", permission: "invoice-sales-invoice-list" },
-          { label: { id: "Kuitansi", en: "Receipts" }, href: "/dashboard/penjualan/kuitansi", permission: "invoice-receipt-list" },
+          { label: { id: "Invoice Penjualan", en: "Sales Invoices" }, href: "/dashboard/penjualan/invoice", permission: "invoice-sales-invoice-list" },
+          { label: { id: "Kuitansi Penjualan", en: "Sales Receipts" }, href: "/dashboard/penjualan/kuitansi", permission: "invoice-receipt-list" },
           { label: { id: "Surat Jalan", en: "Delivery Notes" }, href: "/dashboard/penjualan/surat-jalan", permission: "invoice-delivery-note-list" },
         ],
       },
@@ -56,19 +65,16 @@ export const NAV: NavGroup[] = [
         label: { id: "Pembelian", en: "Purchases" },
         icon: ShoppingCart,
         children: [
-          { label: { id: "Invoice Pembelian", en: "Purchase Invoices" }, href: "/dashboard/pembelian/invoice", permission: "invoice-bill-list" },
           { label: { id: "Pesanan Pembelian", en: "Purchase Orders" }, href: "/dashboard/pembelian/order", permission: "invoice-purchase-order-list" },
+          { label: { id: "Invoice Pembelian", en: "Purchase Invoices" }, href: "/dashboard/pembelian/invoice", permission: "invoice-bill-list" },
           { label: { id: "Kuitansi Pembelian", en: "Purchase Receipts" }, href: "/dashboard/pembelian/kuitansi", permission: "invoice-purchase-receipt-list" },
           { label: { id: "Penerimaan Barang", en: "Goods Receipts" }, href: "/dashboard/pembelian/penerimaan", permission: "invoice-goods-receipt-list" },
         ],
       },
     ],
-  },
-  {
-    label: { id: "Data Master", en: "Master Data" },
+  },  {
     items: [
-      { label: { id: "Mitra", en: "Partners" }, icon: Users, href: "/dashboard/mitra", permission: "invoice-mitra-list" },
-      { label: { id: "Satuan", en: "Units" }, icon: Ruler, href: "/dashboard/units", permission: "invoice-unit-list" },
+      { label: { id: "Pengaturan", en: "Settings" }, icon: Settings, href: "/dashboard/settings/company" },
     ],
   },
 ];
@@ -83,6 +89,7 @@ const KNOWN_TITLES: Record<string, string> = {
   "/dashboard": "Overview",
   "/dashboard/settings/company": "Settings",
   "/dashboard/settings/team": "Settings",
+  "/dashboard/users": "User Management",
 };
 
 /** Best-effort page title from the path (for the mobile header / document). */

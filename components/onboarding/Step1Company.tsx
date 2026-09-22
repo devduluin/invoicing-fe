@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { Button, TextField } from "@/components/ui";
+import { Button } from "@/components/ui";
+import { FormField, Input } from "@/components/form";
 import { useOnb } from "@/lib/onboardingText";
 import type { OnboardingDraft } from "@/store/useOnboardingStore";
 
@@ -40,19 +41,20 @@ export default function Step1Company({
         </p>
       </div>
 
-      <TextField
-        id="companyName"
-        label={t("Company Name")}
-        placeholder={t("e.g. PT Maju Bersama")}
-        value={name}
-        error={error}
-        maxLength={255}
-        autoFocus
-        onChange={(e) => {
-          setName(e.target.value);
-          if (error) setError(undefined);
-        }}
-      />
+      <FormField label={t("Company Name")} htmlFor="companyName" error={error}>
+        <Input
+          id="companyName"
+          placeholder={t("e.g. PT Maju Bersama")}
+          value={name}
+          error={error}
+          maxLength={255}
+          autoFocus
+          onChange={(e) => {
+            setName(e.target.value);
+            if (error) setError(undefined);
+          }}
+        />
+      </FormField>
 
       <Button type="submit" fullWidth className="group">
         {t("Continue")}

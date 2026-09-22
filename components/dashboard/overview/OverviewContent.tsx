@@ -15,16 +15,21 @@ import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { useTr } from "@/lib/useTr";
 import { useCountUp } from "@/lib/useCountUp";
 import { EcosystemSection } from "./EcosystemSection";
+import ActivationChecklist from "./ActivationChecklist";
 import { formatDateStyle } from "@/utils/formatDate";
 import { cn } from "@/lib/utils";
+import { getPurchaseInvoiceSummary, type PurchaseInvoiceSummary } from "@/services/purchaseInvoiceService";
 import { getSalesInvoiceSummary, listSalesInvoices, type SalesInvoice, type SalesInvoiceSummary } from "@/services/salesInvoiceService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
 import { InvoiceStatusBadge, daysOverdue } from "../penjualan-invoice/statusBadges";
+
+const EMPTY_SUMMARY: SalesInvoiceSummary = { outstanding: { amount: 0, count: 0 }, overdue: { amount: 0, count: 0 }, this_month: { amount: 0, count: 0 }, drafts: 0 };
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
 interface Data {
   summary: SalesInvoiceSummary;
+  purchase: PurchaseInvoiceSummary | null;
   overdue: SalesInvoice[];
   recent: SalesInvoice[];
   mitras: Mitra[];
@@ -39,7 +44,9 @@ export default function OverviewContent() {
   const { name, companyName, isLoaded: identityLoaded, status, permissions, activeCompanyId } = useAuthStore();
   // Wait for "ready": before that the active company may still be invalid and a redirect is on its way.
   const isLoaded = identityLoaded && status === "ready";
-  const canList = hasPermission(permissions, "invoice-sales-invoice-list");
+  const canListSales = hasPermission(permissions, "invoice-sales-invoice-list");
+  const canListPurchase = hasPermission(permissions, "invoice-bill-list");
+  const canList = canListSales || canListPurchase;
   const canCreate = hasPermission(permissions, "invoice-sales-invoice-create");
   const canPartners = hasPermission(permissions, "invoice-mitra-list");
   const firstName = name?.trim().split(" ")[0];
@@ -59,25 +66,25 @@ export default function OverviewContent() {
     setLoading(true);
     setFailed(false);
     Promise.all([
-      getSalesInvoiceSummary(),
-      listSalesInvoices({ kind: "invoice", overdue: "true", sort: "due_date", order: "ASC", limit: 5, page: 1 }),
-      listSalesInvoices({ kind: "invoice", sort: "date", order: "DESC", limit: 6, page: 1 }),
+      canListSales ? getSalesInvoiceSummary() : Promise.resolve(EMPTY_SUMMARY),
+      canListSales ? listSalesInvoices({ kind: "invoice", overdue: "true", sort: "due_date", order: "ASC", limit: 5, page: 1 }) : Promise.resolve({ items: [] }),
+      canListSales ? listSalesInvoices({ kind: "invoice", sort: "date", order: "DESC", limit: 6, page: 1 }) : Promise.resolve({ items: [] }),
       canPartners ? listAllMitra().catch(() => [] as Mitra[]) : Promise.resolve([] as Mitra[]),
+      canListPurchase ? getPurchaseInvoiceSummary() : Promise.resolve(null),
     ])
-      .then(([summary, overdue, recent, mitras]) =>
-        setData({ summary, overdue: overdue.items as unknown as SalesInvoice[], recent: recent.items as unknown as SalesInvoice[], mitras }),
+      .then(([summary, overdue, recent, mitras, purchase]) =>
+        setData({ summary, purchase, overdue: overdue.items as unknown as SalesInvoice[], recent: recent.items as unknown as SalesInvoice[], mitras }),
       )
       .catch(() => setFailed(true))
       .finally(() => setLoading(false));
-  }, [isLoaded, canList, canPartners, activeCompanyId]);
+  }, [isLoaded, canList, canListSales, canListPurchase, canPartners, activeCompanyId]);
 
   useEffect(load, [load]);
 
   const mitraName = (id: string) => data?.mitras.find((m) => m.id === id)?.name ?? "—";
   const outstandingOf = (i: SalesInvoice) => Math.max(0, i.grand_total - i.paid_amount);
 
-  const noInvoicesYet = !!data && data.recent.length === 0 && data.summary.drafts === 0;
-  const setupDone = !!data && data.mitras.length > 0 && data.recent.length > 0;
+  const canCreateSales = canCreate && canListSales;
 
   return (
     <div>
@@ -85,7 +92,7 @@ export default function OverviewContent() {
         <PageHeader
           className="mb-4"
           title={firstName ? tr(`Halo, ${firstName}`, `Hello, ${firstName}`) : tr("Ringkasan", "Overview")}
-          description={tr(`Ringkasan piutang dan aktivitas ${companyName || "bisnis Anda"}.`, `Receivables and activity for ${companyName || "your business"}.`)}
+          description={tr(`Ringkasan piutang, hutang, dan aktivitas ${companyName || "bisnis Anda"}.`, `Receivables, payables and activity for ${companyName || "your business"}.`)}
           actions={
             canCreate && (
               <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={() => router.push("/dashboard/penjualan/invoice/add")}>
@@ -97,6 +104,10 @@ export default function OverviewContent() {
       ) : (
         <Skeleton className="mb-4 h-14 w-72" />
       )}
+
+      {/* Independent of the summary/invoice/partner calls below — its own fetch, its own loading
+         state, so it never waits on (or is waited on by) the rest of the dashboard. */}
+      <ActivationChecklist />
 
       {!canList ? (
         <Card>
@@ -112,40 +123,36 @@ export default function OverviewContent() {
         </Card>
       ) : (
         <>
-          {/* One financial panel: the number that matters (tinted) beside three quieter figures. */}
-          <section aria-label={tr("Ringkasan piutang", "Receivables summary")} className="overview-gradient mb-3 grid overflow-hidden rounded-xl border border-[var(--tint-border)] bg-card shadow-card transition-shadow duration-200 hover:shadow-[0_6px_20px_-8px_rgba(72,99,230,0.3)] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,2fr)]">
-            {loading || !data ? (
-              <Skeleton className="col-span-full h-[132px] rounded-none" />
-            ) : (
-              <>
-                <Link href="/dashboard/penjualan/invoice?view=outstanding" className="group border-b border-[var(--tint-border)] px-5 py-5 lg:border-r lg:border-b-0">
-                  <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-primary-ink uppercase">
-                    <Hourglass className="size-3.5" aria-hidden />
-                    {tr("Piutang berjalan", "Outstanding")}
-                  </p>
-                  <p className="mt-1.5 font-display text-[34px] leading-10 font-semibold tracking-tight text-slate-900 tabular-nums"><Money value={data.summary.outstanding.amount} /></p>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {tr(`${data.summary.outstanding.count} invoice belum lunas`, `${data.summary.outstanding.count} unpaid invoices`)}
-                  </p>
-                  <div className="mt-3" aria-hidden>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-primary/15">
-                      <div className="bar-grow h-full rounded-full bg-primary" style={{ width: `${data.summary.outstanding.amount > 0 ? Math.min(100, Math.round((data.summary.overdue.amount / data.summary.outstanding.amount) * 100)) : 0}%` }} />
-                    </div>
-                  </div>
-                  <p className="mt-1 text-xs text-slate-600">
-                    {tr("Bagian yang sudah jatuh tempo", "Share already overdue")}:{" "}
-                    <span className="font-semibold text-slate-900">{data.summary.outstanding.amount > 0 ? Math.round((data.summary.overdue.amount / data.summary.outstanding.amount) * 100) : 0}%</span>
-                  </p>
-                </Link>
-                <div className="grid grid-cols-3 divide-x divide-[var(--tint-border)] bg-white/55">
-                  <Figure href="/dashboard/penjualan/invoice?view=overdue" label={tr("Jatuh tempo", "Overdue")} value={data.summary.overdue.amount} hint={data.summary.overdue.count > 0 ? tr(`${data.summary.overdue.count} invoice terlambat`, `${data.summary.overdue.count} late`) : tr("Tidak ada", "None")} strong={data.summary.overdue.count > 0} />
-                  <Figure href="/dashboard/penjualan/invoice" label={tr("Bulan ini", "This month")} value={data.summary.this_month.amount} hint={tr(`${data.summary.this_month.count} invoice terbit`, `${data.summary.this_month.count} issued`)} />
-                  <Figure href="/dashboard/penjualan/invoice?view=draft" label={tr("Draf", "Drafts")} value={data.summary.drafts} plain hint={data.summary.drafts > 0 ? tr("Belum diterbitkan", "Not issued") : tr("Tidak ada", "None")} />
-                </div>
-              </>
-            )}
-          </section>
+          {canListSales && (
+            <>
+              <SectionLabel>{tr("Ringkasan Penjualan", "Sales Overview")}</SectionLabel>
+              <KpiPanel
+                ariaLabel={tr("Ringkasan piutang", "Receivables summary")}
+                loading={loading || !data}
+                summary={data?.summary ?? null}
+                basePath="/dashboard/penjualan/invoice"
+                outstandingLabel={tr("Piutang berjalan", "Outstanding")}
+                unpaidText={(n) => tr(`${n} invoice belum lunas`, `${n} unpaid invoices`)}
+              />
+            </>
+          )}
 
+          {canListPurchase && (
+            <>
+              <SectionLabel>{tr("Ringkasan Pembelian", "Purchase Overview")}</SectionLabel>
+              <KpiPanel
+                ariaLabel={tr("Ringkasan hutang", "Payables summary")}
+                loading={loading || !data}
+                summary={data?.purchase ?? null}
+                basePath="/dashboard/pembelian/invoice"
+                outstandingLabel={tr("Hutang berjalan", "Purchase Outstanding")}
+                unpaidText={(n) => tr(`${n} invoice belum lunas`, `${n} unpaid invoices`)}
+                overdueLabel={tr("Jatuh tempo", "Overdue")}
+              />
+            </>
+          )}
+
+          {canListSales && (
           <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1.7fr)_minmax(340px,1fr)]">
             <div className="min-w-0">
               <section className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
@@ -231,18 +238,9 @@ export default function OverviewContent() {
                   </ul>
                 )}
               </section>
-              {data && !setupDone && (
-                <Card tone="tint" className="p-3.5">
-                  <SectionTitle title={tr("Mulai cepat", "Get started")} hint={tr("Tiga langkah menuju tagihan pertama", "Three steps to your first bill")} />
-                  <ol className="mt-2.5 space-y-2">
-                    <Step done label={tr("Profil bisnis dibuat", "Business profile created")} />
-                    <Step done={data.mitras.length > 0} label={tr("Tambahkan pelanggan pertama", "Add your first customer")} href="/dashboard/mitra" />
-                    <Step done={!noInvoicesYet} label={tr("Buat invoice pertama", "Create your first invoice")} href="/dashboard/penjualan/invoice/add" />
-                  </ol>
-                </Card>
-              )}
             </div>
           </div>
+          )}
         </>
       )}
 
@@ -306,13 +304,69 @@ function Shortcut({ href, icon: Icon, label }: { href: string; icon: typeof User
   );
 }
 
-function Step({ done, label, href }: { done?: boolean; label: string; href?: string }) {
-  const body = (
-    <span className="flex items-center gap-2.5 text-[13px]">
-      {done ? <CheckCircle2 className="size-[18px] shrink-0 text-primary" aria-hidden /> : <span className="size-[18px] shrink-0 rounded-full border-2 border-slate-300" aria-hidden />}
-      <span className={cn(done ? "text-slate-500 line-through" : "font-medium text-slate-800")}>{label}</span>
-      {done && <span className="sr-only"> (selesai / done)</span>}
-    </span>
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <h2 className="mt-4 mb-1.5 first:mt-0 font-display text-[11px] font-semibold tracking-wider text-slate-500 uppercase">{children}</h2>;
+}
+
+interface KpiSummary {
+  outstanding: { amount: number; count: number };
+  overdue: { amount: number; count: number };
+  this_month: { amount: number; count: number };
+  drafts: number;
+}
+
+/** The KPI panel used for Sales and for Purchase: the number that matters (tinted) beside three
+ *  quieter figures. Same component, same layout, so the two read as one dashboard. */
+function KpiPanel({
+  ariaLabel,
+  loading,
+  summary,
+  basePath,
+  outstandingLabel,
+  unpaidText,
+  overdueLabel,
+}: {
+  ariaLabel: string;
+  loading: boolean;
+  summary: KpiSummary | null;
+  basePath: string;
+  outstandingLabel: string;
+  unpaidText: (n: number) => string;
+  overdueLabel?: string;
+}) {
+  const tr = useTr();
+  const share = summary && summary.outstanding.amount > 0 ? Math.min(100, Math.round((summary.overdue.amount / summary.outstanding.amount) * 100)) : 0;
+  return (
+    <section aria-label={ariaLabel} className="overview-gradient mb-3 grid overflow-hidden rounded-xl border border-[var(--tint-border)] bg-card shadow-card transition-shadow duration-200 hover:shadow-[0_6px_20px_-8px_rgba(72,99,230,0.3)] lg:grid-cols-[minmax(0,1.5fr)_minmax(0,2fr)]">
+      {loading || !summary ? (
+        <Skeleton className="col-span-full h-[132px] rounded-none" />
+      ) : (
+        <>
+          <Link href={`${basePath}?view=outstanding`} className="group border-b border-[var(--tint-border)] px-5 py-5 lg:border-r lg:border-b-0">
+            <p className="flex items-center gap-1.5 text-xs font-semibold tracking-wide text-primary-ink uppercase">
+              <Hourglass className="size-3.5" aria-hidden />
+              {outstandingLabel}
+            </p>
+            <p className="mt-1.5 font-display text-[34px] leading-10 font-semibold tracking-tight text-slate-900 tabular-nums">
+              <Money value={summary.outstanding.amount} />
+            </p>
+            <p className="mt-1 text-xs text-slate-600">{unpaidText(summary.outstanding.count)}</p>
+            <div className="mt-3" aria-hidden>
+              <div className="h-1.5 overflow-hidden rounded-full bg-primary/15">
+                <div className="bar-grow h-full rounded-full bg-primary" style={{ width: `${share}%` }} />
+              </div>
+            </div>
+            <p className="mt-1 text-xs text-slate-600">
+              {tr("Bagian yang sudah jatuh tempo", "Share already overdue")}: <span className="font-semibold text-slate-900">{share}%</span>
+            </p>
+          </Link>
+          <div className="grid grid-cols-3 divide-x divide-[var(--tint-border)] bg-white/55">
+            <Figure href={`${basePath}?view=overdue`} label={overdueLabel ?? tr("Jatuh tempo", "Overdue")} value={summary.overdue.amount} hint={summary.overdue.count > 0 ? tr(`${summary.overdue.count} invoice terlambat`, `${summary.overdue.count} late`) : tr("Tidak ada", "None")} strong={summary.overdue.count > 0} />
+            <Figure href={basePath} label={tr("Bulan ini", "This month")} value={summary.this_month.amount} hint={tr(`${summary.this_month.count} invoice terbit`, `${summary.this_month.count} issued`)} />
+            <Figure href={`${basePath}?view=draft`} label={tr("Draf", "Drafts")} value={summary.drafts} plain hint={summary.drafts > 0 ? tr("Belum diterbitkan", "Not issued") : tr("Tidak ada", "None")} />
+          </div>
+        </>
+      )}
+    </section>
   );
-  return <li>{href && !done ? <Link href={href} className="block rounded-md hover:text-primary-ink">{body}</Link> : body}</li>;
 }

@@ -25,7 +25,7 @@ export default function Template1({ view }: TemplateProps) {
       <div className={`${GUTTER} py-[9mm] print:py-0`}>
         <header className="flex items-start justify-between gap-6">
           <div className="pt-[7mm]">
-            <Logo company={view.company} tint={ACCENT} />
+            <Logo company={view.company} />
           </div>
           <div className="w-[47%]">
             <p className="text-right text-[19px] font-bold" style={{ color: ACCENT }}>

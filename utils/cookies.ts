@@ -47,3 +47,11 @@ export function deleteCookie(name: string, domain?: string) {
   document.cookie = `${name}=; Path=/${domainPart}; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax`;
   document.cookie = `${name}=; Path=/${domainPart}; Max-Age=0; Expires=Thu, 01 Jan 1970 00:00:01 GMT; SameSite=Lax; Secure`;
 }
+
+/** Forget the active company (both cookie names, both scopes). Used when the pointer is no longer valid. */
+export function clearActiveCompanyCookie(domain?: string) {
+  for (const name of ["company_id", "app_company_id"]) {
+    deleteCookie(name);
+    if (domain) deleteCookie(name, domain);
+  }
+}

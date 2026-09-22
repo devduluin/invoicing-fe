@@ -20,6 +20,8 @@ import { useOnb } from "@/lib/onboardingText";
 import { APP_NAME, TOTAL_STEPS, WIZARD_STEPS } from "@/lib/onboarding";
 import { extractApiError } from "@/lib/apiError";
 import { getMe } from "@/services/authService";
+import { setActiveCompanyCookie } from "@/utils/cookies";
+import { getRootCookieDomain } from "@/utils/cookieDomain";
 import { submitOnboarding } from "@/services/onboardingService";
 
 export default function OnboardingWizard() {
@@ -88,6 +90,8 @@ export default function OnboardingWizard() {
       if (res.failed_invites?.length) {
         toast.error(`${res.failed_invites.length} invitation(s) failed to send — you can retry from the Team menu.`);
       }
+      // The company just created is the active one from now on.
+      setActiveCompanyCookie(res.company.id, getRootCookieDomain());
       setDoneCompanyName(res.company.name);
       reset();
     } catch (err) {
@@ -176,7 +180,7 @@ export default function OnboardingWizard() {
       {doneCompanyName && (
         <SetupTemplateModal
           companyName={doneCompanyName}
-          onYes={() => leave("/dashboard?setup=invoice-template")}
+          onYes={() => leave("/dashboard/settings/documents")}
           onNo={() => leave("/dashboard")}
         />
       )}

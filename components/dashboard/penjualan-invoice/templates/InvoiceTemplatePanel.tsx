@@ -13,14 +13,20 @@ import type { Company } from "@/services/companyService";
 import type { Tax } from "@/services/taxService";
 import { InvoiceDocument, type InvoiceDocumentVariant } from "../InvoiceDocument";
 import { ScaledSheet } from "./ScaledSheet";
+import type { PrintableDocKind } from "@/lib/documentShape";
+import type { ResolvedDocConfig } from "@/lib/documentConfig";
 import { INVOICE_TEMPLATES, resolveInvoiceTemplate, type InvoiceTemplateId } from "./types";
 
-interface PreviewProps {
+export interface PreviewProps {
   invoice: SalesInvoice;
   mitra: Mitra | null;
   company: Company | null;
   taxByID: Map<string, Tax>;
   variant?: InvoiceDocumentVariant;
+  /** Which document is being previewed (omit for sales / down-payment invoices). */
+  doc?: PrintableDocKind;
+  /** Render with this configuration instead of the saved one (settings preview). */
+  config?: ResolvedDocConfig;
 }
 
 /** The real template component, scaled to the width it's given. */
@@ -32,7 +38,9 @@ export function InvoicePreview({ template, ...doc }: PreviewProps & { template: 
   );
 }
 
-function TemplateChoices({
+/** The template picker (real thumbnails, radio semantics). Shared by the invoice form, the detail page
+ *  and the default-template settings, so there is exactly one implementation. */
+export function TemplateChoices({
   value,
   onChange,
   disabled,
@@ -104,6 +112,8 @@ export function InvoiceTemplatePanel({
   const tr = useTr();
   const [open, setOpen] = useState(false);
   const selected = resolveInvoiceTemplate(value);
+  const isOrder = doc.doc === "sales_order" || doc.doc === "purchase_order";
+  const noun = isOrder ? tr("pesanan", "order") : tr("invoice", "invoice");
 
   // Typing shouldn't re-render five A4 pages per keystroke.
   const invoice = useDeferredValue(doc.invoice);
@@ -113,10 +123,10 @@ export function InvoiceTemplatePanel({
     <>
       <Card className="p-4 sm:p-5">
         <SectionTitle
-          title={tr("Template invoice", "Invoice template")}
+          title={isOrder ? tr("Template pesanan", "Order template") : tr("Template invoice", "Invoice template")}
           hint={
             disabled
-              ? tr("Invoice sudah diterbitkan — template tidak bisa diubah.", "This invoice is already issued — its template can't be changed.")
+              ? tr(`Anda tidak punya izin mengubah template ${noun} ini.`, `You don't have permission to change this ${noun}'s template.`)
               : tr("Dipakai juga di halaman detail dan PDF.", "Also used on the detail page and the PDF.")
           }
         />
@@ -130,7 +140,7 @@ export function InvoiceTemplatePanel({
 
       {open && (
         <Drawer
-          title={tr("Pratinjau invoice", "Invoice preview")}
+          title={isOrder ? tr("Pratinjau pesanan", "Order preview") : tr("Pratinjau invoice", "Invoice preview")}
           description={tr("Tampilan ini sama dengan halaman detail dan PDF.", "This is exactly what the detail page and the PDF show.")}
           onClose={() => setOpen(false)}
         >

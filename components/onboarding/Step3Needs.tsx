@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
-import { Button, FieldError, OptionToggle } from "@/components/ui";
+import { Button } from "@/components/ui";
+import { CheckboxField } from "@/components/form";
+import { cn } from "@/lib/utils";
 import { useOnb } from "@/lib/onboardingText";
 import { NEED_OPTIONS } from "@/lib/onboarding";
 import type { OnboardingDraft } from "@/store/useOnboardingStore";
@@ -48,18 +50,24 @@ export default function Step3Needs({
         </p>
       </div>
 
-      <div className="grid gap-2">
-        {NEED_OPTIONS.map((opt) => (
-          <OptionToggle
-            key={opt.value}
-            label={t(opt.label)}
-            selected={selected.includes(opt.value)}
-            onToggle={() => toggle(opt.value)}
-          />
-        ))}
+      <div className="grid gap-2" role="group" aria-label={t("What do you need most?")}>
+        {NEED_OPTIONS.map((opt) => {
+          const on = selected.includes(opt.value);
+          return (
+            <div
+              key={opt.value}
+              className={cn(
+                "rounded-xl border px-4 py-3 transition-colors",
+                on ? "border-primary bg-accent ring-2 ring-primary/15" : "border-border-strong bg-card hover:border-primary/40",
+              )}
+            >
+              <CheckboxField id={`need-${opt.value}`} checked={on} onChange={() => toggle(opt.value)} label={<span className="text-sm font-medium text-foreground">{t(opt.label)}</span>} />
+            </div>
+          );
+        })}
       </div>
 
-      <FieldError>{error}</FieldError>
+      {error && <p className="-mt-3 text-[11px] font-medium text-rose-500">{error}</p>}
 
       <Button type="submit" fullWidth className="group">
         {t("Continue")}

@@ -1,16 +1,22 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Mail, Plus } from "lucide-react";
-import { Button, FieldError, Input, Label, Select } from "@/components/ui";
+import { Loader2, Mail, Plus } from "lucide-react";
+import { Button } from "@/components/ui";
+import { FormLabel, Input, Select } from "@/components/form";
+import { extractApiError } from "@/lib/apiError";
 import { useOnb } from "@/lib/onboardingText";
 import InviteRow from "./InviteRow";
 import { FALLBACK_INVITE_ROLE_NAMES, roleLabel } from "@/lib/onboarding";
 import { listRoles, type Role } from "@/services/roleService";
+import { validateInviteEmail } from "@/services/memberService";
 import type { OnboardingDraft, OnboardingInvite } from "@/store/useOnboardingStore";
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-const FREE_QUOTA = 9;
+// Mirrors app/domain/activation.InitialLimits.Users (8, owner included) on the backend, which is
+// what the onboarding invite path actually enforces (a company isn't activated yet at this step) —
+// keep the two in sync.
+const FREE_QUOTA = 7;
 
 export default function Step4Invite({
   draft,
@@ -28,6 +34,7 @@ export default function Step4Invite({
   const [roleId, setRoleId] = useState(draft.invites[0]?.role_id ?? "");
   const [roles, setRoles] = useState<Role[]>([]);
   const [error, setError] = useState<string>();
+  const [checking, setChecking] = useState(false);
 
   useEffect(() => {
     listRoles()
@@ -50,7 +57,7 @@ export default function Step4Invite({
   const invites = draft.invites;
   const remaining = FREE_QUOTA - invites.length;
 
-  const addInvite = () => {
+  const addInvite = async () => {
     const value = email.trim().toLowerCase();
     if (!value) return setError(t("Enter an email address."));
     if (!EMAIL_RE.test(value)) return setError(t("Invalid email format."));
@@ -58,10 +65,28 @@ export default function Step4Invite({
     if (remaining <= 0) return setError(t("The free invitation quota is full."));
     if (invites.some((i) => i.email === value)) return setError(t("This email is already in the list."));
 
-    const entry: OnboardingInvite = { email: value, role_id: roleId, role_label: roleName(roleId) };
+    // Same check Settings → Users runs, done here inline (no separate "Verify" step) so a self-
+    // invite or a typo is caught immediately, and a known person's name is filled in for free.
+    setChecking(true);
+    setError(undefined);
+    let name: string | undefined;
+    try {
+      const result = await validateInviteEmail(value);
+      if (!result.can_invite) {
+        setError(t("You can't invite your own email."));
+        return;
+      }
+      name = result.user_name || undefined;
+    } catch (err) {
+      // The check failing must never block onboarding — add the invite anyway.
+      void extractApiError(err, "");
+    } finally {
+      setChecking(false);
+    }
+
+    const entry: OnboardingInvite = { email: value, name, role_id: roleId, role_label: roleName(roleId) };
     patch({ invites: [...invites, entry] });
     setEmail("");
-    setError(undefined);
   };
 
   const removeInvite = (target: string) => {
@@ -79,7 +104,7 @@ export default function Step4Invite({
 
       <div className="flex flex-col gap-3">
         <div>
-          <Label htmlFor="invite-email">{t("Member email")}</Label>
+          <FormLabel htmlFor="invite-email">{t("Member email")}</FormLabel>
           <div className="flex flex-col gap-2 sm:flex-row">
             <div className="flex-1">
               <Input
@@ -87,40 +112,40 @@ export default function Step4Invite({
                 type="email"
                 inputMode="email"
                 placeholder="name@company.com"
-                leftIcon={<Mail className="size-4" />}
-                invalid={!!error}
+                prefix={<Mail className="size-4" />}
+                error={!!error}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") {
                     e.preventDefault();
-                    addInvite();
+                    void addInvite();
                   }
                 }}
               />
             </div>
             <div className="sm:w-44">
               <Select
-                aria-label={t("Member role")}
+                id="invite-role"
                 options={roleOptions}
                 value={roleId}
-                onChange={(e) => setRoleId(e.target.value)}
+                onChange={(v) => setRoleId(v)}
                 disabled={roleOptions.length === 0}
               />
             </div>
           </div>
-          <FieldError>{error}</FieldError>
+          {error && <p className="mt-1 text-[11px] font-medium text-rose-500">{error}</p>}
         </div>
 
         <Button
           variant="outline"
           fullWidth
-          leftIcon={<Plus className="size-4" strokeWidth={2.5} />}
+          leftIcon={checking ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" strokeWidth={2.5} />}
           className="border-dashed border-primary/40"
-          onClick={addInvite}
-          disabled={remaining <= 0}
+          onClick={() => void addInvite()}
+          disabled={remaining <= 0 || checking}
         >
-          {t("Add invitation")}
+          {checking ? t("Checking…") : t("Add invitation")}
         </Button>
 
         <p className="text-xs text-muted-foreground">

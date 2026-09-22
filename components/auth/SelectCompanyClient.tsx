@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowRight, Building2, Check, FileText, Loader2, LogOut, Plus, Search, SearchX, X } from "lucide-react";
 import toast from "react-hot-toast";
@@ -20,6 +20,7 @@ import { cn } from "@/lib/utils";
 import { setActiveCompanyCookie } from "@/utils/cookies";
 import { getRootCookieDomain } from "@/utils/cookieDomain";
 import { getMe } from "@/services/authService";
+import { sanitizeRedirect } from "@/utils/sanitizeRedirect";
 
 // Search earns its place once the list is long enough to need it.
 const SEARCH_FROM = 4;
@@ -121,7 +122,8 @@ function Intro() {
 export default function SelectCompanyClient() {
   const tr = useTr();
   const router = useRouter();
-  const redirect = useSearchParams().get("redirect") || "/dashboard";
+  // The requested page is untrusted input: only an in-app /dashboard path is followed.
+  const redirect = sanitizeRedirect(useSearchParams().get("redirect"));
   const { companies, setUser, status, name, email, activeCompanyId } = useAuthStore();
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -185,6 +187,16 @@ export default function SelectCompanyClient() {
   };
 
   const create = () => router.push("/onboarding?new=1");
+
+  // Exactly one company and none chosen yet: there is nothing to choose, so pick it and go on
+  // (the dashboard is still never rendered before the company is active).
+  const autoPicked = useRef(false);
+  useEffect(() => {
+    if (autoPicked.current || loading || failed || onboarded.length !== 1) return;
+    autoPicked.current = true;
+    void select(onboarded[0].id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, failed, onboarded]);
 
   const panel = "overflow-hidden rounded-2xl border border-border bg-card shadow-[0_1px_2px_rgba(20,30,60,0.05),0_24px_48px_-28px_rgba(20,30,60,0.22)]";
 

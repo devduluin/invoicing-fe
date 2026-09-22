@@ -9,6 +9,7 @@ import {
   SummaryTable,
   type TemplateProps,
 } from "./parts";
+import { isUsableLogo } from "../../shared/DocumentLogo";
 
 /**
  * Template 4 — "Invoice Sample (4)": no banner. Logo + company block on top, bill-to
@@ -31,10 +32,13 @@ export default function Template4({ view }: TemplateProps) {
   return (
     <Sheet template="template_4">
       <div className={`${GUTTER} py-[9mm] print:py-0`}>
-        <header className="flex items-start gap-[10mm]">
-          <div className="shrink-0 pt-[3mm]">
-            <Logo company={view.company} tint={RED} />
-          </div>
+        <header className="flex min-h-[25mm] items-start gap-[10mm]">
+          {/* Template 4 is left-aligned: with no logo there is no logo column, the text starts at the margin. */}
+          {isUsableLogo(view.company.logo) && (
+            <div className="shrink-0 pt-[3mm]">
+              <Logo company={view.company} />
+            </div>
+          )}
           <div>
             <p className="text-[15px] font-bold text-slate-800">{view.company.name}</p>
             <div className="mt-[1mm] space-y-[0.5mm] text-slate-600">

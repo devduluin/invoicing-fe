@@ -10,36 +10,29 @@ export const WIZARD_STEPS = [
   { id: 4, label: "Team" },
 ] as const;
 
-/** Step 2 "Company Information" — industry options (borrowed from the reference design). */
-export const INDUSTRY_OPTIONS = [
-  "Retail & Trade",
-  "Manufacturing",
-  "Services & Consulting",
-  "Technology / IT",
-  "Food & Beverage (F&B)",
-  "Construction & Real Estate",
-  "Logistics & Distribution",
-  "Other",
-];
+/** Step 2 "Tell us about your business" — Industry (Free-plan lead-signal taxonomy). */
+export const INDUSTRY_OPTIONS = ["Trading", "Services", "Retail", "Manufacturing", "Other"];
 
-/** Step 2 "Employee Count" buckets — must match model.EmployeeCountBuckets on the backend. */
+/** Step 2 "Company size" buckets — must match model.EmployeeCountBuckets on the backend. */
 export const EMPLOYEE_COUNT_OPTIONS: { value: string; label: string }[] = [
-  { value: "1-5", label: "1–5 people" },
-  { value: "6-10", label: "6–10 people" },
-  { value: "11-25", label: "11–25 people" },
-  { value: "26-50", label: "26–50 people" },
+  { value: "1-10", label: "1–10 people" },
+  { value: "11-50", label: "11–50 people" },
   { value: "51-100", label: "51–100 people" },
   { value: "100+", label: "More than 100 people" },
 ];
 
-/** PRD §3 — "User Needs" options. TODO(product): confirm the final list. */
+/** Step 3 "What do you need most?" — the Duluin ecosystem's shared Business Needs taxonomy, not
+ *  Invoice-specific feature names: this drives lead routing to the right Duluin product (HR,
+ *  Payroll, Attendance, …), so the categories stay the same across every Duluin onboarding wizard. */
 export const NEED_OPTIONS: { value: string; label: string }[] = [
-  { value: "invoice_penjualan", label: "Create sales invoices" },
-  { value: "invoice_pembelian", label: "Record purchase bills" },
-  { value: "laporan_keuangan", label: "Financial reports (balance sheet, P&L)" },
-  { value: "kelola_pajak", label: "Manage taxes (VAT/withholding)" },
-  { value: "kelola_mitra", label: "Manage customer & supplier data" },
-  { value: "kolaborasi_tim", label: "Collaborate with a team" },
+  { value: "invoicing", label: "Invoicing" },
+  { value: "accounting", label: "Accounting" },
+  { value: "hr_management", label: "HR Management" },
+  { value: "payroll", label: "Payroll" },
+  { value: "attendance", label: "Attendance" },
+  { value: "expense_management", label: "Expense Management" },
+  { value: "business_reporting", label: "Business Reporting" },
+  { value: "other", label: "Other" },
 ];
 
 /**

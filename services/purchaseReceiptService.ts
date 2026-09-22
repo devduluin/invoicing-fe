@@ -48,6 +48,18 @@ export async function previewPurchaseReceiptNumber(): Promise<string> {
   return data.data.number;
 }
 
+/** The payments applied to one purchase invoice (its payment history). */
+export async function listAllPurchaseReceiptsForInvoice(purchaseInvoiceId: string): Promise<PurchaseReceipt[]> {
+  const res = await fetchList<PurchaseReceipt>("/purchase-receipts", {
+    page: 1,
+    limit: 100,
+    purchase_invoice_id: purchaseInvoiceId,
+    sort: "date",
+    order: "DESC",
+  });
+  return res.items;
+}
+
 export async function getPurchaseReceipt(id: string): Promise<PurchaseReceipt> {
   const { data } = await api.get<Envelope<PurchaseReceipt>>(`/purchase-receipts/${encodeURIComponent(id)}`);
   return data.data;

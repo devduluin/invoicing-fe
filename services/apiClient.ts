@@ -1,7 +1,8 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
 import { INVOICE_API_URL, ACCOUNT_TYPE } from "@/utils/env";
 import { readAppToken, writeAppToken } from "@/utils/ssoCookies";
-import { getCookie } from "@/utils/cookies";
+import { clearActiveCompanyCookie, getCookie } from "@/utils/cookies";
+import { getRootCookieDomain } from "@/utils/cookieDomain";
 
 /**
  * Talks to invoice-service. In local dev this goes through the API gateway
@@ -26,6 +27,13 @@ interface RecoverableConfig extends InternalAxiosRequestConfig {
   _skipAuthRecovery?: boolean;
 }
 
+/** Endpoints that work without a company: identity, onboarding, and the public company lookup. */
+const COMPANY_FREE = [/^\/me(\/|$)/, /^\/onboarding(\/|$)/, /^\/companies\/lookup(\/|$)/, /^\/members\/me(\/|$)/];
+function isCompanyFree(url?: string): boolean {
+  const path = (url ?? "").split("?")[0];
+  return COMPANY_FREE.some((re) => re.test(path));
+}
+
 export function activeCompanyId(): string | null {
   return getCookie("company_id") || getCookie("app_company_id") || null;
 }
@@ -42,8 +50,15 @@ api.interceptors.request.use((config) => {
     // NOTE: do NOT add X-Company-ID here — the gateway does not allow that
     // header, so its preflight would fail with a CORS error.
     const companyId = activeCompanyId();
-    if (companyId) {
+    if (config.headers["x-callback-token"]) {
+      // A caller that deliberately targets another of the user's companies (e.g. reading that
+      // company's roles while inviting) sets the header itself; keep it.
+    } else if (companyId) {
       config.headers["x-callback-token"] = companyId;
+    } else if (!isCompanyFree(config.url)) {
+      // No active company: the server would fall back to the user's default company. A page must
+      // never load company data that way, so the request is not sent at all.
+      return Promise.reject(new axios.CanceledError("No active company"));
     }
   }
   return config;
@@ -144,8 +159,12 @@ api.interceptors.response.use(
     if (status === 403 && code === "onboarding_incomplete") {
       if (!path.startsWith("/onboarding")) window.location.href = "/onboarding";
     } else if (status === 403 && code && MEMBERSHIP_CODES.has(code)) {
-      // Lost access to the active company — bounce to the switcher/onboarding.
-      if (!path.startsWith("/onboarding")) window.location.href = "/dashboard";
+      // Lost access to the active company (removed, banned, deleted): forget it and choose again.
+      // The company is never shown or queried again until a valid one is picked.
+      if (!path.startsWith("/onboarding") && !path.startsWith("/select-company")) {
+        clearActiveCompanyCookie(getRootCookieDomain());
+        window.location.href = `/select-company?redirect=${encodeURIComponent(path + window.location.search)}`;
+      }
     } else if (status === 503 && code === "rbac_unresolved") {
       // Still unresolved after retries — let the caller surface it, don't log out.
     } else if (status === 401) {

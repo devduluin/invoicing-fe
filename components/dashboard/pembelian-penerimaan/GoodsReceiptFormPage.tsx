@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PackageCheck } from "lucide-react";
 import toast from "react-hot-toast";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
+import { useTr } from "@/lib/useTr";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
 import { getPurchaseOrder, listAllPurchaseOrders, type PurchaseOrder } from "@/services/purchaseOrderService";
@@ -27,6 +29,7 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
  *  frontend convenience — no backend coupling). */
 export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "create" | "edit"; id?: string } = {}) {
   const router = useRouter();
+  const tr = useTr();
   const searchParams = useSearchParams();
   const isEdit = mode === "edit" && !!id;
 
@@ -104,6 +107,11 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   const [attachmentData, setAttachmentData] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
+
+  // New documents start from the configured defaults (existing ones keep what they have).
+  useNewDocumentDefaults("goods_receipt", isEdit, (cfg) => {
+    setNotes((n) => n || cfg.notes.content);
+  });
 
   usePageBreadcrumb([
     { label: "Goods Receipts", href: "/dashboard/pembelian/penerimaan" },
@@ -193,15 +201,16 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
     };
 
     setBusy(true);
+    let savedId = id;
     try {
       if (isEdit && id) {
         await updateGoodsReceipt(id, payload);
         toast.success("Goods Receipt updated");
       } else {
-        await createGoodsReceipt(payload);
+        savedId = (await createGoodsReceipt(payload)).id;
         toast.success("Goods receipt added");
       }
-      router.push("/dashboard/pembelian/penerimaan");
+      router.push(isEdit ? `${"/dashboard/pembelian/penerimaan"}/${savedId}` : `${"/dashboard/pembelian/penerimaan"}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save goods receipt"));
     } finally {
@@ -213,7 +222,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="h-6 w-64 animate-pulse rounded-lg bg-muted" />
         <div className="h-36 animate-pulse rounded-2xl bg-muted" />
         <div className="h-64 animate-pulse rounded-2xl bg-muted" />
@@ -224,16 +233,15 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   return (
     <div className="space-y-4">
       <PageHeader
-        icon={PackageCheck}
-        title={isEdit ? "Edit Goods Receipt" : "Add Goods Receipt"}
-        description="Record goods physically received from a supplier, optionally linked to a purchase order."
+        title={isEdit ? tr("Ubah Penerimaan Barang", "Edit Goods Receipt") : tr("Buat Penerimaan Barang", "New Goods Receipt")}
+        description={tr("Isi informasi dokumen, lalu simpan.", "Fill in the document details, then save.")}
         actions={
           <>
-            <Button variant="ghost" onClick={() => router.push("/dashboard/pembelian/penerimaan")} disabled={busy}>
-              Cancel
+            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/pembelian/penerimaan"}/${id}` : "/dashboard/pembelian/penerimaan")} disabled={busy}>
+              {tr("Batal", "Cancel")}
             </Button>
-            <Button variant="primary" onClick={submit} disabled={busy}>
-              {busy ? "Saving…" : "Save Goods Receipt"}
+            <Button variant="primary" onClick={submit} loading={busy}>
+              {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
             </Button>
           </>
         }

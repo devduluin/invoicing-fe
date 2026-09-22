@@ -4,7 +4,8 @@ import type { AxiosAdapter, InternalAxiosRequestConfig } from "axios";
 /** Minimal browser stand-ins: the interceptor reads/writes document.cookie and
  *  navigates via window.location.href. */
 function installBrowser(initialToken: string) {
-  const jar = new Map<string, string>([["app_token", initialToken]]);
+  // an active company is part of a normal signed-in session (requests without one are not sent)
+  const jar = new Map<string, string>([["app_token", initialToken], ["company_id", "c1"]]);
   vi.stubGlobal("document", {
     get cookie() {
       return [...jar].map(([k, v]) => `${k}=${v}`).join("; ");
@@ -133,5 +134,16 @@ describe("apiClient session handling", () => {
     await api.get("/things");
     expect(env.jar.get("app_token")).toBe("tok-new");
     expect(env.jar.get("APP_TOKEN")).toBe("tok-new");
+  });
+});
+
+describe("apiClient company context", () => {
+  it("does not send a company-scoped request when no company is active, but identity calls still work", async () => {
+    const { jar } = installBrowser("t");
+    jar.delete("company_id");
+    const { api, calls } = await loadClient(() => ({ status: 200 }));
+    await expect(api.get("/sales-invoices/summary")).rejects.toThrow(/No active company/);
+    await api.get("/me");
+    expect(calls.map((c) => c.url)).toEqual(["/me"]);
   });
 });

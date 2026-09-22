@@ -22,12 +22,19 @@ export function syncIdentity(): Promise<void> {
   if (inflight) return inflight;
   inflight = (async () => {
     const user = await getMe();
-    // Company context travels as a header from the company_id cookie. On a fresh
-    // login it isn't set yet, so seed it from the resolved active company.
-    if (user.activeCompanyId && !getCookie("company_id") && !getCookie("app_company_id")) {
+    // Company context travels as a header from the company_id cookie. Without the cookie the server
+    // silently falls back to the user's default company, which is NOT a choice the user made.
+    // So: with exactly one company there is nothing to choose and it is adopted; otherwise the
+    // fallback is ignored and the user has NO active company until they pick one (the company
+    // picker), and permissions/company details from the fallback are not trusted.
+    const onboarded = user.companies.filter((c) => c.onboardingStatus === "active");
+    const hasCookie = () => !!(getCookie("company_id") || getCookie("app_company_id"));
+    if (!hasCookie() && user.activeCompanyId && onboarded.length === 1 && onboarded[0].id === user.activeCompanyId) {
       setActiveCompanyCookie(user.activeCompanyId, getRootCookieDomain());
     }
-    useAuthStore.getState().setUser(user);
+    useAuthStore.getState().setUser(
+      hasCookie() ? user : { ...user, activeCompanyId: null, companyId: null, companyName: null, roles: [], permissions: [] },
+    );
   })().finally(() => {
     inflight = null;
   });

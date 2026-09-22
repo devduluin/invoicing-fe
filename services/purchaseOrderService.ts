@@ -1,4 +1,5 @@
 import api from "./apiClient";
+import type { InvoiceTemplateId } from "@/components/dashboard/penjualan-invoice/templates/types";
 import { fetchList } from "./masterList";
 import type { GetAllPayload, ListResult, TableRow } from "@/app/types/apiResponses";
 
@@ -22,6 +23,13 @@ export interface PurchaseOrderLine {
 }
 
 export interface PurchaseOrder {
+  /** Contact person of the partner; the four contact_* fields are the document\'s own copy. */
+  contact_person_id?: string;
+  contact_name?: string;
+  contact_position?: string;
+  contact_phone?: string;
+  contact_email?: string;
+  template?: InvoiceTemplateId;
   id: string;
   company_id: string;
   mitra_id: string;
@@ -48,6 +56,8 @@ export interface PurchaseOrder {
 }
 
 export interface PurchaseOrderInput {
+  contact_person_id?: string | null;
+  template?: InvoiceTemplateId;
   mitra_id: string;
   number?: string;
   date: string;
@@ -135,3 +145,9 @@ export const PURCHASE_ORDER_STATUS_LABEL: Record<PurchaseOrderStatus, string> = 
   confirmed: "Confirmed",
   cancelled: "Cancelled",
 };
+
+/** Change only the printable layout (any status). Used by the template picker on the detail page. */
+export async function setPurchaseOrderTemplate(id: string, template: InvoiceTemplateId): Promise<PurchaseOrder> {
+  const { data } = await api.put<Envelope<PurchaseOrder>>(`/purchase-orders/${encodeURIComponent(id)}/template`, { template });
+  return data.data;
+}

@@ -8,9 +8,13 @@ import { Button } from "@/components/ui";
 import { Modal } from "@/components/modal/Modal";
 import { CheckboxField, FormField, Input, RadioField, Textarea } from "@/components/form";
 import { cn } from "@/lib/utils";
+import { localPhone } from "@/lib/phone";
+import { hasPermission, useAuthStore } from "@/store/useAuthStore";
+import ContactPersonsEditor, { contactDraftsToPayload, draftFromContact, type ContactDraft } from "./ContactPersonsEditor";
 import { extractApiError } from "@/lib/apiError";
 import {
   createMitra,
+  listContactPersons,
   lookupCompanyByCode,
   updateMitra,
   type Mitra,
@@ -23,7 +27,7 @@ const FORM_ID = "mitra-form";
 
 const TABS = [
   { id: "perusahaan", label: "Company Information", icon: Building2, ready: true },
-  { id: "kontak", label: "Contact Information", icon: UserCircle, ready: false },
+  { id: "kontak", label: "Contact Persons", icon: UserCircle, ready: true },
   { id: "rekening", label: "Bank Account Information", icon: CreditCard, ready: false },
   { id: "pembayaran", label: "Payment Method", icon: Wallet, ready: false },
 ] as const;
@@ -34,10 +38,6 @@ const TYPE_OPTIONS = [
   { value: "both", label: "Customer & Supplier" },
 ];
 
-/** trims leading 0 / 62 / +62 so the +62 prefix isn't doubled */
-function localPhone(v: string) {
-  return v.replace(/^\+?62/, "").replace(/^0/, "");
-}
 
 export default function MitraFormModal({
   mitra,
@@ -62,6 +62,26 @@ export default function MitraFormModal({
   });
   const [errors, setErrors] = useState<Partial<Record<"name" | "email", string>>>({});
   const [busy, setBusy] = useState(false);
+  // Contact persons are part of this form: edited in place and saved (added / changed / removed)
+  // together with the partner by the Save button; Cancel discards them.
+  const permissions = useAuthStore((st) => st.permissions);
+  const canAddContact = hasPermission(permissions, "invoice-mitra-contact-create");
+  const canEditContact = hasPermission(permissions, "invoice-mitra-contact-update");
+  const canRemoveContact = hasPermission(permissions, "invoice-mitra-contact-delete");
+  const [contacts, setContacts] = useState<ContactDraft[]>([]);
+  const [contactErrors, setContactErrors] = useState<Record<string, { name?: string; email?: string }>>({});
+  const [contactsLoaded, setContactsLoaded] = useState(!editing);
+  const [contactsFailed, setContactsFailed] = useState(false);
+  useEffect(() => {
+    if (!editing || !mitra) return;
+    let alive = true;
+    listContactPersons(mitra.id)
+      .then((rows) => alive && (setContacts(rows.map(draftFromContact)), setContactsLoaded(true)))
+      .catch(() => alive && setContactsFailed(true));
+    return () => {
+      alive = false;
+    };
+  }, [editing, mitra]);
 
   const [code, setCode] = useState("");
   const [lookup, setLookup] = useState<"idle" | "loading" | "found" | "notfound">("idle");
@@ -116,6 +136,12 @@ export default function MitraFormModal({
       setTab("perusahaan");
       return;
     }
+    const { payload: contactPayload, errors: ce } = contactDraftsToPayload(contacts);
+    setContactErrors(ce);
+    if (Object.keys(ce).length) {
+      setTab("kontak");
+      return;
+    }
 
     setBusy(true);
     try {
@@ -129,6 +155,8 @@ export default function MitraFormModal({
         npwp: form.npwp.trim() || undefined,
         address: form.address.trim() || undefined,
         is_active: form.is_active,
+        // create: send the rows; edit: send the whole list once it was loaded (so removals are saved too)
+        ...((!editing && contactPayload.length) || (editing && contactsLoaded && (canAddContact || canEditContact || canRemoveContact)) ? { contact_persons: contactPayload } : {}),
       };
       const saved = editing ? await updateMitra(mitra!.id, payload) : await createMitra(payload);
       toast.success(editing ? "Partner updated" : "Partner created");
@@ -189,8 +217,30 @@ export default function MitraFormModal({
           </nav>
 
           <div className="min-h-0 flex-1 overflow-y-auto p-5">
+            {tab === "kontak" && (
+              <div className="max-w-lg">
+                {contactsFailed ? (
+                  <p className="rounded-xl border border-border bg-card px-4 py-5 text-center text-[13px] text-slate-600">Couldn't load the contact persons. Close this dialog and try again.</p>
+                ) : !contactsLoaded ? (
+                  <p className="px-1 py-6 text-center text-[13px] text-slate-500">Loading…</p>
+                ) : (
+                  <ContactPersonsEditor
+                    drafts={contacts}
+                    onChange={(next) => {
+                      setContacts(next);
+                      setContactErrors({});
+                    }}
+                    errors={contactErrors}
+                    canAdd={canAddContact}
+                    canEdit={canEditContact}
+                    canRemove={canRemoveContact}
+                  />
+                )}
+              </div>
+            )}
             <form
               id={FORM_ID}
+              hidden={tab !== "perusahaan"}
               className="max-w-lg space-y-4"
               onSubmit={(e) => {
                 e.preventDefault();

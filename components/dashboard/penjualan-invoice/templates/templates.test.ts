@@ -119,3 +119,35 @@ describe("InvoiceTemplate — one renderer, four genuinely different layouts", (
     expect(none).toContain('data-invoice-template="template_1"');
   });
 });
+
+describe("one renderer for every printable document", () => {
+  const build = (doc: "sales_order" | "purchase_order" | "purchase_invoice", lang: "id" | "en" = "id") =>
+    buildInvoiceView({ invoice, mitra: null, company: null, taxByID: new Map(), lang, doc });
+
+  it("titles each document itself", () => {
+    expect(build("sales_order").title).toBe("PESANAN PENJUALAN");
+    expect(build("purchase_order", "en").title).toBe("PURCHASE ORDER");
+    expect(build("purchase_invoice").title).toBe("INVOICE PEMBELIAN");
+    expect(buildInvoiceView({ invoice, mitra: null, company: null, taxByID: new Map() }).title).not.toBe("PESANAN PENJUALAN");
+  });
+
+  it("orders show no paid / outstanding rows and no due date; a purchase invoice keeps them", () => {
+    for (const d of ["sales_order", "purchase_order"] as const) {
+      const v = build(d);
+      expect(v.summary.some((r) => r.key === "paid" || r.key === "outstanding")).toBe(false);
+      expect(v.dueDate).toBeUndefined();
+    }
+    const pi = build("purchase_invoice");
+    expect(pi.summary.some((r) => r.key === "outstanding")).toBe(true);
+    expect(pi.dueDate).toBeDefined();
+  });
+
+  it("all four templates render every document type", () => {
+    for (const d of ["sales_order", "purchase_order", "purchase_invoice"] as const) {
+      for (const t of INVOICE_TEMPLATES) {
+        const html = renderToStaticMarkup(createElement(InvoiceTemplate, { template: t.id, view: build(d) }));
+        expect(html).toContain(`data-invoice-template="${t.id}"`);
+      }
+    }
+  });
+});

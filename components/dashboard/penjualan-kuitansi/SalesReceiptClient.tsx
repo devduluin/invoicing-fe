@@ -14,7 +14,7 @@ import type { TableRow } from "@/app/types/apiResponses";
 import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
-import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
+import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import {
   listSalesReceipts,
@@ -75,6 +75,7 @@ export default function SalesReceiptClient() {
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
 
   const goTo = (id: string) => router.push(`/dashboard/penjualan/kuitansi/${id}`);
+  const goToEdit = (id: string) => router.push(`/dashboard/penjualan/kuitansi/${id}/edit`);
 
   const remove = async () => {
     if (!confirm) return;
@@ -123,12 +124,13 @@ export default function SalesReceiptClient() {
       error={list.error}
       defaultSort={{ column: "date", order: "desc" }}
       emptyTitle="No receipts yet"
-      onRowClick={canUpdate ? (row) => goTo(String(row.id)) : undefined}
+      onRowClick={(row) => goTo(String(row.id))}
       renderRowActions={(row) => {
         const doc = row as unknown as { id: string; number: string };
         return (
           <RowActionDropdown
-            onEdit={canUpdate ? () => goTo(doc.id) : undefined}
+            onView={() => goTo(doc.id)}
+            onEdit={canUpdate ? () => goToEdit(doc.id) : undefined}
             onDelete={canDelete ? () => setConfirm({ id: doc.id, number: doc.number }) : undefined}
           />
         );
@@ -136,10 +138,11 @@ export default function SalesReceiptClient() {
       emptyDescription="Add a receipt to record a payment received from a partner."
     />
 
-    <ConfirmDeleteModal
+    <DeleteDocumentModal
       open={!!confirm}
       title="Delete receipt?"
-      description={confirm ? `"${confirm.number}" will be deleted and its payment taken back from the invoices it was applied to.` : undefined}
+      number={confirm?.number}
+      note="Its payment will be taken back from the invoices it was applied to."
       onConfirm={remove}
       onClose={() => setConfirm(null)}
     />

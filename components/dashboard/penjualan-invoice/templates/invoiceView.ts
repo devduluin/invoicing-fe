@@ -3,6 +3,9 @@ import type { Mitra } from "@/services/mitraService";
 import type { Company } from "@/services/companyService";
 import type { Tax } from "@/services/taxService";
 import type { InvoiceLang } from "./types";
+import type { PrintableDocKind } from "@/lib/documentShape";
+import { displayPhone } from "@/lib/phone";
+import { docConfigTypeFor, resolveDocConfig, type ResolvedDocConfig } from "@/lib/documentConfig";
 
 /**
  * The single, template-agnostic description of what an invoice prints.
@@ -110,10 +113,24 @@ export interface InvoiceViewLine {
   discount: string;
   tax: string;
   amount: string;
+  /** Every printable cell by column key (col.product, col.quantity, ...), in the configured columns. */
+  cells: Record<string, string>;
+}
+
+export interface InvoiceViewColumn {
+  key: string;
+  label: string;
+  align: "left" | "right";
+}
+
+export interface InvoiceViewMetaRow {
+  key: string;
+  label: string;
+  value: string;
 }
 
 export interface InvoiceViewSummaryRow {
-  key: "subtotal" | "discount" | "tax" | "shipping" | "total" | "paid" | "outstanding";
+  key: "subtotal" | "discount" | "tax" | "shipping" | "total" | "paid" | "outstanding" | "paymentStatus";
   label: string;
   value: string;
   /** Rendered heavier (the grand total / amount due). */
@@ -129,12 +146,16 @@ export interface InvoiceView {
   date: string;
   dueDate?: string;
   company: { name: string; logo?: string; addressLines: string[]; email?: string; phone?: string; npwp?: string };
-  customer: { name: string; addressLines: string[]; email?: string; phone?: string };
+  customer: { name: string; addressLines: string[]; email?: string; phone?: string; /** configured contact person lines */ extra?: string[] };
+  /** Header (label, value) pairs in print order, already filtered by the document configuration. */
+  meta: InvoiceViewMetaRow[];
+  /** Visible table columns in print order, with their configured labels. */
+  columns: InvoiceViewColumn[];
   lines: InvoiceViewLine[];
   summary: InvoiceViewSummaryRow[];
   notes?: string;
   terms?: string;
-  signature: { dateLong: string; image?: string; showStamp: boolean; name: string };
+  signature: { show: boolean; dateLong: string; image?: string; showStamp: boolean; name: string };
 }
 
 // ── formatting ──────────────────────────────────────────────────────────────
@@ -178,11 +199,15 @@ const splitLines = (s?: string) =>
 
 export interface BuildInvoiceViewInput {
   invoice: SalesInvoice;
+  /** Which document this data is (omit for sales / down-payment invoices). */
+  doc?: PrintableDocKind;
   mitra: Mitra | null;
   company: Company | null;
   taxByID: Map<string, Tax>;
   variant?: InvoiceDocumentVariant;
   lang?: InvoiceLang;
+  /** The document type's configuration (names, labels, visible fields). Defaults are used when omitted. */
+  config?: ResolvedDocConfig;
 }
 
 export function buildInvoiceView({
@@ -191,9 +216,41 @@ export function buildInvoiceView({
   company,
   taxByID,
   variant = "original",
-  lang = "id",
+  lang: langInput = "id",
+  doc,
+  config,
 }: BuildInvoiceViewInput): InvoiceView {
-  const labels = LABELS[lang];
+  // The document configuration is the single source of wording, visible fields and language.
+  const cfg = config ?? resolveDocConfig(docConfigTypeFor({ kind: invoice.kind, doc }), { language: langInput });
+  const lang: InvoiceLang = cfg.language;
+  const has = (k: string) => cfg.spec.fields.some((f) => f.key === k);
+  const labels: InvoiceLabels = {
+    ...LABELS[lang],
+    title: cfg.documentName.toUpperCase(),
+    invoiceNo: cfg.label("hdr.number"),
+    reference: cfg.label("hdr.reference"),
+    date: cfg.label("hdr.date"),
+    dueDate: cfg.label("hdr.dueDate"),
+    billTo: cfg.label("hdr.partner"),
+    companyInfo: cfg.label("hdr.companyInfo"),
+    product: cfg.label("col.product"),
+    quantity: cfg.label("col.quantity"),
+    price: cfg.label("col.price"),
+    discount: cfg.label("col.discount"),
+    tax: cfg.label("col.tax"),
+    amount: cfg.label("col.amount"),
+    subtotal: cfg.label("sum.subtotal"),
+    totalDiscount: cfg.label("sum.discount"),
+    taxTotal: cfg.label("sum.tax"),
+    shipping: cfg.label("sum.shipping"),
+    total: cfg.label("sum.total"),
+    totalPaid: has("sum.paid") ? cfg.label("sum.paid") : LABELS[lang].totalPaid,
+    outstanding: has("sum.outstanding") ? cfg.label("sum.outstanding") : LABELS[lang].outstanding,
+    notes: cfg.notes.label,
+    terms: cfg.terms.label,
+  };
+  // Orders are not billed yet: no due date, no paid / outstanding rows.
+  const isOrder = cfg.spec.family === "order";
 
   const lines: InvoiceViewLine[] = invoice.lines.map((l, i) => {
     const taxes = (l.tax_ids ?? []).map((id) => taxByID.get(id)).filter((t): t is Tax => !!t);
@@ -203,15 +260,27 @@ export function buildInvoiceView({
           ? formatRupiah(l.discount_value)
           : "0%"
         : `${l.discount_value || 0}%`;
+    const quantity = qtyNf.format(l.quantity);
+    const price = formatNumber(l.unit_price);
+    const taxText = taxes.length ? taxes.map((t) => t.name).join(", ") : "—";
+    const amount = formatNumber(l.line_total ?? 0);
     return {
       key: l.id ?? String(i),
       name: l.product_name,
-      description: l.description || undefined,
-      quantity: qtyNf.format(l.quantity),
-      price: formatNumber(l.unit_price),
+      description: cfg.visible("col.description") ? l.description || undefined : undefined,
+      quantity,
+      price,
       discount,
-      tax: taxes.length ? taxes.map((t) => t.name).join(", ") : "—",
-      amount: formatNumber(l.line_total ?? 0),
+      tax: taxText,
+      amount,
+      cells: {
+        "col.product": l.product_name,
+        "col.quantity": quantity,
+        "col.price": price,
+        "col.discount": discount,
+        "col.tax": taxText,
+        "col.amount": amount,
+      },
     };
   });
 
@@ -220,41 +289,63 @@ export function buildInvoiceView({
   const outstanding = Math.max(0, (invoice.grand_total ?? 0) - paid);
   const shipping = invoice.shipping_cost ?? 0;
 
+  const statusText: Record<string, { id: string; en: string }> = {
+    unpaid: { id: "Belum dibayar", en: "Unpaid" },
+    partially_paid: { id: "Dibayar sebagian", en: "Partially paid" },
+    paid: { id: "Lunas", en: "Paid" },
+  };
+  const paymentState = paid >= (invoice.grand_total ?? 0) && (invoice.grand_total ?? 0) > 0 ? "paid" : paid > 0 ? "partially_paid" : "unpaid";
+
   const summary: InvoiceViewSummaryRow[] = [
-    { key: "subtotal", label: labels.subtotal, value: formatRupiah(invoice.subtotal ?? 0) },
-    { key: "discount", label: labels.totalDiscount, value: formatRupiah(discountTotal) },
-    { key: "tax", label: labels.taxTotal, value: formatRupiah(invoice.tax_total ?? 0) },
-    ...(shipping > 0 ? [{ key: "shipping" as const, label: labels.shipping, value: formatRupiah(shipping) }] : []),
+    ...(cfg.visible("sum.subtotal") ? [{ key: "subtotal" as const, label: labels.subtotal, value: formatRupiah(invoice.subtotal ?? 0) }] : []),
+    ...(cfg.visible("sum.discount") ? [{ key: "discount" as const, label: labels.totalDiscount, value: formatRupiah(discountTotal) }] : []),
+    ...(cfg.visible("sum.tax") ? [{ key: "tax" as const, label: labels.taxTotal, value: formatRupiah(invoice.tax_total ?? 0) }] : []),
+    ...(shipping > 0 && cfg.visible("sum.shipping") ? [{ key: "shipping" as const, label: labels.shipping, value: formatRupiah(shipping) }] : []),
     { key: "total", label: labels.total, value: formatRupiah(invoice.grand_total ?? 0), emphasis: true },
-    { key: "paid", label: labels.totalPaid, value: formatRupiah(paid) },
-    { key: "outstanding", label: labels.outstanding, value: formatRupiah(outstanding), emphasis: true },
+    ...(isOrder
+      ? []
+      : [
+          ...(cfg.visible("sum.paid") ? [{ key: "paid" as const, label: labels.totalPaid, value: formatRupiah(paid) }] : []),
+          ...(cfg.visible("sum.outstanding") ? [{ key: "outstanding" as const, label: labels.outstanding, value: formatRupiah(outstanding), emphasis: true }] : []),
+          ...(cfg.visible("sum.paymentStatus") ? [{ key: "paymentStatus" as const, label: cfg.label("sum.paymentStatus"), value: statusText[paymentState][lang] }] : []),
+        ]),
   ];
 
+  const attachmentLogo = invoice.attachment_data?.startsWith("data:image/") ? invoice.attachment_data : undefined;
   const companyCity = [company?.kota, company?.provinsi, company?.kode_pos].filter(Boolean).join(", ");
   const showSignatureImage = variant === "signed" || variant === "signed_stamped" || !!invoice.signature_data;
 
   return {
     lang,
     labels,
-    title:
-      invoice.kind === "down_payment"
-        ? lang === "id"
-          ? "INVOICE UANG MUKA"
-          : "DOWN PAYMENT INVOICE"
-        : labels.title,
+    title: labels.title,
     number: invoice.number,
-    reference: invoice.ref_no || undefined,
+    reference: cfg.visible("hdr.reference") ? invoice.ref_no || undefined : undefined,
     date: formatShortDate(invoice.date),
-    dueDate: invoice.due_date ? formatShortDate(invoice.due_date) : undefined,
+    dueDate: !isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? formatShortDate(invoice.due_date) : undefined,
+    meta: [
+      { key: "no", label: labels.invoiceNo, value: invoice.number },
+      ...(cfg.visible("hdr.reference") && invoice.ref_no ? [{ key: "ref", label: labels.reference, value: invoice.ref_no }] : []),
+      { key: "date", label: labels.date, value: formatShortDate(invoice.date) },
+      ...(!isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? [{ key: "due", label: labels.dueDate, value: formatShortDate(invoice.due_date) }] : []),
+    ],
+    columns: cfg.columns().map((key) => ({ key, label: cfg.label(key), align: key === "col.product" ? ("left" as const) : ("right" as const) })),
     company: {
       name: company?.name ?? "—",
-      logo: company?.company_logo || undefined,
+      // The document's own attachment (when it is an image) is its logo; otherwise the company logo.
+      logo: attachmentLogo || company?.company_logo || undefined,
       addressLines: [...splitLines(company?.alamat), ...(companyCity ? [companyCity] : [])],
       email: company?.email || undefined,
       phone: company?.phone || undefined,
       npwp: company?.npwp || undefined,
     },
     customer: {
+      extra: [
+        ...(cfg.visible("hdr.contact") && invoice.contact_name ? [`${cfg.label("hdr.contact")}: ${invoice.contact_name}`] : []),
+        ...(cfg.visible("hdr.contactPosition") && invoice.contact_position ? [`${cfg.label("hdr.contactPosition")}: ${invoice.contact_position}`] : []),
+        ...(cfg.visible("hdr.contactPhone") && invoice.contact_phone ? [`${cfg.label("hdr.contactPhone")}: ${displayPhone(invoice.contact_phone)}`] : []),
+        ...(cfg.visible("hdr.contactEmail") && invoice.contact_email ? [`${cfg.label("hdr.contactEmail")}: ${invoice.contact_email}`] : []),
+      ],
       name: mitra?.name ?? "—",
       addressLines: splitLines(mitra?.address),
       email: mitra?.email || undefined,
@@ -262,13 +353,14 @@ export function buildInvoiceView({
     },
     lines,
     summary,
-    notes: invoice.notes || undefined,
-    terms: invoice.terms || undefined,
+    notes: cfg.notes.show ? invoice.notes || undefined : undefined,
+    terms: cfg.terms.show ? invoice.terms || undefined : undefined,
     signature: {
+      show: cfg.signature.show,
       dateLong: formatLongDate(invoice.date, lang),
       image: showSignatureImage ? invoice.signature_data || undefined : undefined,
       showStamp: variant === "signed_stamped" || !!invoice.stamp_duty,
-      name: company?.name || "—",
+      name: cfg.signature.name || company?.name || "—",
     },
   };
 }

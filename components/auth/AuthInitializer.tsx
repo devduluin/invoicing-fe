@@ -4,7 +4,7 @@ import { useEffect, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useAuthStore } from "@/store/useAuthStore";
 import { readAppToken } from "@/utils/ssoCookies";
-import { setActiveCompanyCookie } from "@/utils/cookies";
+import { clearActiveCompanyCookie, setActiveCompanyCookie } from "@/utils/cookies";
 import { getRootCookieDomain } from "@/utils/cookieDomain";
 import { isUnauthorized, syncIdentity } from "@/lib/session";
 
@@ -31,7 +31,10 @@ export default function AuthInitializer() {
   const pathname = usePathname();
   // "create another company" flow: user is deliberately in the wizard even
   // though they already have a company — don't bounce them out.
-  const creatingCompany = useSearchParams().get("new") === "1";
+  const searchParams = useSearchParams();
+  const creatingCompany = searchParams.get("new") === "1";
+  // Where the user was heading (path AND query), so the picker can send them back to it.
+  const destination = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
   const fetched = useRef(false);
   const repairedPointer = useRef(false);
 
@@ -60,10 +63,12 @@ export default function AuthInitializer() {
 
     const onboarded = companies.filter((c) => c.onboardingStatus === "active");
 
-    // No usable company at all → onboarding is the only place to be.
+    // No usable company at all → the company picker, whose empty state offers "Create company".
+    // (A dashboard page must never render without a company.)
     if (onboarded.length === 0) {
       if (isDashboardPath(pathname) && !creatingCompany) {
-        router.replace("/onboarding");
+        clearActiveCompanyCookie(getRootCookieDomain());
+        router.replace(`/select-company?redirect=${encodeURIComponent(destination)}`);
         return;
       }
       setStatus("ready");
@@ -79,7 +84,9 @@ export default function AuthInitializer() {
     if (!pointerOk && !creatingCompany) {
       if (onboarded.length > 1) {
         if (isDashboardPath(pathname)) {
-          router.replace(`/select-company?redirect=${encodeURIComponent(pathname)}`);
+          // The pointer is missing or stale: forget it so nothing keeps sending it, then choose.
+          clearActiveCompanyCookie(getRootCookieDomain());
+          router.replace(`/select-company?redirect=${encodeURIComponent(destination)}`);
           return;
         }
         setStatus("ready");
@@ -109,7 +116,7 @@ export default function AuthInitializer() {
       return;
     }
     setStatus("ready");
-  }, [isLoaded, companies, companyId, pathname, creatingCompany, router]);
+  }, [isLoaded, companies, companyId, pathname, destination, creatingCompany, router]);
 
   return null;
 }

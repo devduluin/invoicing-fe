@@ -25,6 +25,12 @@ export interface SalesInvoiceLine {
 }
 
 export interface SalesInvoice {
+  /** Contact person of the partner; the four contact_* fields are the document\'s own copy. */
+  contact_person_id?: string;
+  contact_name?: string;
+  contact_position?: string;
+  contact_phone?: string;
+  contact_email?: string;
   id: string;
   company_id: string;
   sales_order_id?: string;
@@ -58,6 +64,8 @@ export interface SalesInvoice {
   // Recomputed server-side only (SalesPaymentRepository.Verify) — never
   // sent in SalesInvoiceInput.
   paid_amount: number;
+  /** max(grand_total - paid_amount, 0), computed by the server on every read. */
+  outstanding_amount: number;
   payment_status: SalesInvoicePaymentStatus;
   lines: SalesInvoiceLine[];
   created_at: string;
@@ -65,6 +73,7 @@ export interface SalesInvoice {
 }
 
 export interface SalesInvoiceInput {
+  contact_person_id?: string | null;
   kind: SalesInvoiceKind;
   sales_order_id?: string | null;
   linked_invoice_id?: string | null;
@@ -126,6 +135,12 @@ export async function createSalesInvoice(input: SalesInvoiceInput): Promise<Sale
 
 export async function updateSalesInvoice(id: string, input: SalesInvoiceInput): Promise<SalesInvoice> {
   const { data } = await api.put<Envelope<SalesInvoice>>(`/sales-invoices/${encodeURIComponent(id)}`, input);
+  return data.data;
+}
+
+/** Changes only the layout of an invoice; allowed in any status (lines and totals are untouched). */
+export async function setSalesInvoiceTemplate(id: string, template: InvoiceTemplateId): Promise<SalesInvoice> {
+  const { data } = await api.put<Envelope<SalesInvoice>>(`/sales-invoices/${encodeURIComponent(id)}/template`, { template });
   return data.data;
 }
 

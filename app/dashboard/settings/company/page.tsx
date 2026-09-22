@@ -5,9 +5,10 @@ import toast from "react-hot-toast";
 
 import PermissionGate from "@/components/auth/PermissionGate";
 import { Button } from "@/components/ui";
-import { FormField, Input, Textarea } from "@/components/form";
+import { FormField, Input, Select, Textarea } from "@/components/form";
 import { LogoUpload } from "@/components/form/LogoUpload";
 import { extractApiError } from "@/lib/apiError";
+import { EMPLOYEE_COUNT_OPTIONS, INDUSTRY_OPTIONS } from "@/lib/onboarding";
 import { useAuthStore } from "@/store/useAuthStore";
 import { getMe } from "@/services/authService";
 import {
@@ -29,6 +30,9 @@ const EMPTY: FormState = {
   kota: "",
   provinsi: "",
   kode_pos: "",
+  website: "",
+  jenis_usaha: "",
+  jumlah_karyawan: "",
 };
 
 export default function CompanySettingsPage() {
@@ -52,7 +56,10 @@ function CompanyForm() {
   const [saving, setSaving] = useState(false);
   const [initial, setInitial] = useState<FormState>(EMPTY);
   const [form, setForm] = useState<FormState>(EMPTY);
-  const [error, setError] = useState<string>();
+  // Name/email/phone/industry/company size are required — the Free-plan activation checklist's
+  // "Company profile completed" step needs all five (see app/service/activation.service.go).
+  const [errors, setErrors] = useState<{ name?: string; email?: string; phone?: string; jenis_usaha?: string; jumlah_karyawan?: string }>({});
+  const error = errors.name;
 
   useEffect(() => {
     getMyCompany()
@@ -67,15 +74,22 @@ function CompanyForm() {
 
   const set = (k: keyof FormState, v: string) => {
     setForm((f) => ({ ...f, [k]: v }));
-    if (k === "name") setError(undefined);
+    setErrors((e) => ({ ...e, [k]: undefined }));
   };
   const dirty = JSON.stringify(form) !== JSON.stringify(initial);
 
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
   const save = async () => {
-    if (!form.name.trim()) {
-      setError("Company name is required.");
-      return;
-    }
+    const next: typeof errors = {};
+    if (!form.name.trim()) next.name = "Company name is required.";
+    if (!form.email.trim()) next.email = "Email is required.";
+    else if (!EMAIL_RE.test(form.email.trim())) next.email = "Invalid email format.";
+    if (!form.phone.trim()) next.phone = "Phone is required.";
+    if (!form.jenis_usaha) next.jenis_usaha = "Industry is required.";
+    if (!form.jumlah_karyawan) next.jumlah_karyawan = "Company size is required.";
+    setErrors(next);
+    if (Object.keys(next).length > 0) return;
     setSaving(true);
     try {
       // Only send the logo when it actually changed (avoid re-uploading a URL).
@@ -133,13 +147,38 @@ function CompanyForm() {
             </FormField>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
-            <FormField label="Email" htmlFor="c-email" optional>
-              <Input id="c-email" type="email" value={form.email} onChange={(e) => set("email", e.target.value)} />
+            <FormField label="Email" htmlFor="c-email" required error={errors.email}>
+              <Input id="c-email" type="email" value={form.email} error={!!errors.email} onChange={(e) => set("email", e.target.value)} />
             </FormField>
-            <FormField label="Phone" htmlFor="c-phone" optional>
-              <Input id="c-phone" value={form.phone} onChange={(e) => set("phone", e.target.value)} />
+            <FormField label="Phone" htmlFor="c-phone" required error={errors.phone}>
+              <Input id="c-phone" value={form.phone} error={!!errors.phone} onChange={(e) => set("phone", e.target.value)} />
             </FormField>
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <FormField label="Industry" htmlFor="c-jenis-usaha" required error={errors.jenis_usaha}>
+              <Select
+                id="c-jenis-usaha"
+                placeholder="Select your industry"
+                options={INDUSTRY_OPTIONS.map((o) => ({ value: o, label: o }))}
+                value={form.jenis_usaha}
+                error={!!errors.jenis_usaha}
+                onChange={(v) => set("jenis_usaha", v)}
+              />
+            </FormField>
+            <FormField label="Company Size" htmlFor="c-jumlah-karyawan" required error={errors.jumlah_karyawan}>
+              <Select
+                id="c-jumlah-karyawan"
+                placeholder="Select employee count"
+                options={EMPLOYEE_COUNT_OPTIONS}
+                value={form.jumlah_karyawan}
+                error={!!errors.jumlah_karyawan}
+                onChange={(v) => set("jumlah_karyawan", v)}
+              />
+            </FormField>
+          </div>
+          <FormField label="Website" htmlFor="c-website" optional hint="e.g. https://yourcompany.com">
+            <Input id="c-website" type="url" value={form.website} onChange={(e) => set("website", e.target.value)} />
+          </FormField>
           <FormField label="Address" htmlFor="c-alamat" optional>
             <Textarea id="c-alamat" rows={2} value={form.alamat} onChange={(e) => set("alamat", e.target.value)} />
           </FormField>
@@ -180,5 +219,8 @@ function toForm(c: Company): FormState {
     kota: c.kota ?? "",
     provinsi: c.provinsi ?? "",
     kode_pos: c.kode_pos ?? "",
+    website: c.website ?? "",
+    jenis_usaha: c.jenis_usaha ?? "",
+    jumlah_karyawan: c.jumlah_karyawan ?? "",
   };
 }
