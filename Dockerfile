@@ -8,6 +8,25 @@ WORKDIR /app
 COPY package.json package-lock.json* ./
 RUN npm ci
 COPY . .
+
+# NEXT_PUBLIC_* vars are inlined into the client bundle at build time, not read at container
+# start — .dockerignore excludes .env*, so they must arrive as build args (docker-compose's
+# build.args) rather than an env file baked into the image.
+ARG NEXT_PUBLIC_NODE_ENV=production
+ARG NEXT_PUBLIC_INVOICE_API_URL
+ARG NEXT_PUBLIC_AUTH_API_URL
+ARG NEXT_PUBLIC_LAUNCHPAD_URL
+ARG NEXT_PUBLIC_SITE_URL
+ARG NEXT_PUBLIC_X_ACCOUNT_TYPE=duluin_invoice
+ARG NEXT_PUBLIC_COOKIE_DOMAIN
+ENV NEXT_PUBLIC_NODE_ENV=$NEXT_PUBLIC_NODE_ENV \
+    NEXT_PUBLIC_INVOICE_API_URL=$NEXT_PUBLIC_INVOICE_API_URL \
+    NEXT_PUBLIC_AUTH_API_URL=$NEXT_PUBLIC_AUTH_API_URL \
+    NEXT_PUBLIC_LAUNCHPAD_URL=$NEXT_PUBLIC_LAUNCHPAD_URL \
+    NEXT_PUBLIC_SITE_URL=$NEXT_PUBLIC_SITE_URL \
+    NEXT_PUBLIC_X_ACCOUNT_TYPE=$NEXT_PUBLIC_X_ACCOUNT_TYPE \
+    NEXT_PUBLIC_COOKIE_DOMAIN=$NEXT_PUBLIC_COOKIE_DOMAIN
+
 RUN npm run build
 
 # Stage 2: runtime (standalone output + headless Chromium for server-side PDF export)

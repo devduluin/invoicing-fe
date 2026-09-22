@@ -1,0 +1,35 @@
+name: invoicing-fe
+
+services:
+  invoicing-fe:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Baked into the browser bundle at BUILD time (`docker compose build`) — must be
+        # reachable from your browser on the host machine, not just inside Docker.
+        NEXT_PUBLIC_NODE_ENV: ${APP_ENV:-development}
+        NEXT_PUBLIC_INVOICE_API_URL: ${NEXT_PUBLIC_INVOICE_API_URL:-http://localhost:8090/api/v1}
+        NEXT_PUBLIC_AUTH_API_URL: ${NEXT_PUBLIC_AUTH_API_URL:-http://sso.test/api}
+        NEXT_PUBLIC_LAUNCHPAD_URL: ${NEXT_PUBLIC_LAUNCHPAD_URL:-http://localhost:3000}
+        NEXT_PUBLIC_SITE_URL: ${NEXT_PUBLIC_SITE_URL:-http://localhost:3010}
+        NEXT_PUBLIC_X_ACCOUNT_TYPE: duluin_invoice
+        NEXT_PUBLIC_COOKIE_DOMAIN: ${NEXT_PUBLIC_COOKIE_DOMAIN:-}
+    restart: unless-stopped
+    # host.docker.internal is native on Docker Desktop (Windows/Mac); this makes it also
+    # resolve on plain Linux Docker Engine, where it isn't automatic.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      # Server-side only (never sent to the browser): lets the Next server reach
+      # invoice-service even though the browser-facing NEXT_PUBLIC_INVOICE_API_URL above
+      # points at localhost. invoicing-be runs as its OWN separate compose stack (see
+      # invoicing-be/docker-compose.yml), so it's reached via its host-published port
+      # through host.docker.internal, not a shared Docker network/service name.
+      INVOICE_API_INTERNAL_URL: ${INVOICE_API_INTERNAL_URL:-http://host.docker.internal:8090/api/v1}
+      # PDF export tuning (all optional — Playwright, see Dockerfile / lib/server/pdfRenderer.ts).
+      PDF_MAX_CONCURRENCY: ${PDF_MAX_CONCURRENCY:-2}
+      PDF_QUEUE_TIMEOUT_MS: ${PDF_QUEUE_TIMEOUT_MS:-20000}
+      PDF_RENDER_TIMEOUT_MS: ${PDF_RENDER_TIMEOUT_MS:-30000}
+    ports:
+      - "${INVOICE_FE_PORT:-3010}:3010"
