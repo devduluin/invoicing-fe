@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
+import { useDirtyForm } from "@/hooks/useDirtyForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PackageCheck } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
+import DocumentHeaderActions from "../shared/DocumentHeaderActions";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
@@ -210,12 +211,32 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
         savedId = (await createGoodsReceipt(payload)).id;
         toast.success("Goods receipt added");
       }
+      markClean();
       router.push(isEdit ? `${"/dashboard/pembelian/penerimaan"}/${savedId}` : `${"/dashboard/pembelian/penerimaan"}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save goods receipt"));
     } finally {
       setBusy(false);
     }
+  };
+
+  const { isDirty, markClean, reset } = useDirtyForm(
+    { purchaseOrderId, mitraId, number, date, notes, lines, moreInfo, attachmentData, attachmentName },
+    !loading,
+  );
+  const applyReset = () => {
+    const snap = reset();
+    if (!snap) return;
+    setPurchaseOrderId(snap.purchaseOrderId);
+    setMitraId(snap.mitraId);
+    setNumber(snap.number);
+    setDate(snap.date);
+    setNotes(snap.notes);
+    setLines(snap.lines);
+    setMoreInfo(snap.moreInfo);
+    setAttachmentData(snap.attachmentData);
+    setAttachmentName(snap.attachmentName);
+    setErrors({});
   };
 
   const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
@@ -236,14 +257,11 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
         title={isEdit ? tr("Ubah Penerimaan Barang", "Edit Goods Receipt") : tr("Buat Penerimaan Barang", "New Goods Receipt")}
         description={tr("Isi informasi dokumen, lalu simpan.", "Fill in the document details, then save.")}
         actions={
-          <>
-            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/pembelian/penerimaan"}/${id}` : "/dashboard/pembelian/penerimaan")} disabled={busy}>
-              {tr("Batal", "Cancel")}
-            </Button>
-            <Button variant="primary" onClick={submit} loading={busy}>
-              {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
-            </Button>
-          </>
+          isEdit ? (
+            <DocumentHeaderActions mode="edit" busy={busy} isDirty={isDirty} onSave={submit} />
+          ) : (
+            <DocumentHeaderActions mode="create" canConfirm={false} busy={busy} isDirty={isDirty} onReset={applyReset} onSaveDraft={submit} />
+          )
         }
       />
 

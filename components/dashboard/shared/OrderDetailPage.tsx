@@ -2,16 +2,15 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, FileText, MoreHorizontal, Package, Pencil, Trash2, Truck, Wallet } from "lucide-react";
+import { Copy, FileText, Package, Pencil, Trash2, Truck, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import { DeleteDocumentModal } from "./DeleteDocumentModal";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import DocumentHeaderActions, { type HeaderAction } from "./DocumentHeaderActions";
 import { hasPermission, useAuthStore } from "@/store/useAuthStore";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { extractApiError } from "@/lib/apiError";
@@ -28,7 +27,6 @@ import {
   cancelPurchaseOrder, confirmPurchaseOrder, deletePurchaseOrder, draftPurchaseOrder, getPurchaseOrder, setPurchaseOrderTemplate, PURCHASE_ORDER_STATUS_LABEL,
 } from "@/services/purchaseOrderService";
 import ConnectedDocuments from "./ConnectedDocuments";
-import PrintPdfActions from "./PrintPdfActions";
 import { InvoiceDocument } from "../penjualan-invoice/InvoiceDocument";
 import { ScaledSheet } from "../penjualan-invoice/templates/ScaledSheet";
 import { InvoiceTemplatePanel } from "../penjualan-invoice/templates/InvoiceTemplatePanel";
@@ -157,71 +155,32 @@ export default function OrderDetailPage({ kind, id }: { kind: OrderKind; id: str
   const doc = asInvoiceShape(order);
   const label = cfg.labels[status] ?? status;
 
+  const createDocLabel = tr("Buat dokumen", "Create document");
+  const headerActions: HeaderAction[] = [
+    ...(canUpdate ? [{ key: "edit", label: tr("Ubah", "Edit"), icon: <Pencil aria-hidden />, onSelect: () => router.push(`${cfg.base}/${id}/edit`) }] : []),
+    ...(status === "confirmed"
+      ? nextDocs.map((a) => ({ key: a.href, label: a.label, icon: <a.icon aria-hidden />, onSelect: () => router.push(a.href), section: createDocLabel }))
+      : []),
+    ...(canUpdate && status === "draft"
+      ? [{ key: "confirm", label: tr("Terbitkan", "Confirm"), icon: <FileText aria-hidden />, onSelect: () => run(() => cfg.confirm(id), tr("Pesanan diterbitkan", "Order confirmed"), tr("Gagal menerbitkan", "Failed to confirm")) }]
+      : []),
+    ...(canUpdate && status !== "draft"
+      ? [{ key: "draft", label: tr("Kembalikan ke draf", "Move back to draft"), icon: <Pencil aria-hidden />, onSelect: () => run(() => cfg.draft(id), tr("Dikembalikan ke draf", "Moved back to draft"), tr("Gagal mengembalikan ke draf", "Failed to move back to draft")) }]
+      : []),
+    ...(canUpdate && status === "confirmed"
+      ? [{ key: "cancel", label: tr("Batalkan", "Cancel"), icon: <Package aria-hidden />, onSelect: () => run(() => cfg.cancel(id), tr("Dibatalkan", "Cancelled"), tr("Gagal membatalkan", "Failed to cancel")) }]
+      : []),
+    ...(canCreate ? [{ key: "duplicate", label: tr("Duplikat", "Duplicate"), icon: <Copy aria-hidden />, onSelect: () => router.push(`${cfg.base}/add?duplicate_from=${id}`) }] : []),
+    ...(canDelete ? [{ key: "delete", label: tr("Hapus", "Delete"), icon: <Trash2 aria-hidden />, onSelect: () => setConfirmDelete(true), destructive: true }] : []),
+  ];
+
   return (
     <div className="space-y-3">
       <PageHeader
         title={order.number}
         description={`${tr(cfg.partner.id, cfg.partner.en)}: ${mitra?.name ?? "-"}`}
         meta={<Status status={status as StatusKey} label={label} />}
-        actions={
-          <>
-            <PrintPdfActions kind={cfg.pdf} id={id} />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" leftIcon={<MoreHorizontal className="size-4" />}>
-                  {tr("Lainnya", "More")}
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-60">
-                {status === "confirmed" && nextDocs.length > 0 && (
-                  <>
-                    <DropdownMenuLabel>{tr("Buat dokumen", "Create document")}</DropdownMenuLabel>
-                    {nextDocs.map((a) => (
-                      <DropdownMenuItem key={a.href} onSelect={() => router.push(a.href)}>
-                        <a.icon aria-hidden /> {a.label}
-                      </DropdownMenuItem>
-                    ))}
-                    <DropdownMenuSeparator />
-                  </>
-                )}
-                {canUpdate && status === "draft" && (
-                  <DropdownMenuItem onSelect={() => run(() => cfg.confirm(id), tr("Pesanan diterbitkan", "Order confirmed"), tr("Gagal menerbitkan", "Failed to confirm"))}>
-                    <FileText aria-hidden /> {tr("Terbitkan", "Confirm")}
-                  </DropdownMenuItem>
-                )}
-                {canUpdate && status !== "draft" && (
-                  <DropdownMenuItem onSelect={() => run(() => cfg.draft(id), tr("Dikembalikan ke draf", "Moved back to draft"), tr("Gagal mengembalikan ke draf", "Failed to move back to draft"))}>
-                    <Pencil aria-hidden /> {tr("Kembalikan ke draf", "Move back to draft")}
-                  </DropdownMenuItem>
-                )}
-                {canUpdate && status === "confirmed" && (
-                  <DropdownMenuItem onSelect={() => run(() => cfg.cancel(id), tr("Dibatalkan", "Cancelled"), tr("Gagal membatalkan", "Failed to cancel"))}>
-                    <Package aria-hidden /> {tr("Batalkan", "Cancel")}
-                  </DropdownMenuItem>
-                )}
-                {canCreate && (
-                  <DropdownMenuItem onSelect={() => router.push(`${cfg.base}/add?duplicate_from=${id}`)}>
-                    <Copy aria-hidden /> {tr("Duplikat", "Duplicate")}
-                  </DropdownMenuItem>
-                )}
-                {canDelete && (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={() => setConfirmDelete(true)} className="text-rose-600 focus:bg-rose-50 focus:text-rose-700 [&>svg:first-child]:bg-rose-500/10 [&>svg:first-child]:text-rose-600">
-                      <Trash2 aria-hidden /> {tr("Hapus", "Delete")}
-                    </DropdownMenuItem>
-                  </>
-                )}
-              </DropdownMenuContent>
-            </DropdownMenu>
-            {/* Edit stays available in every status; the next documents live in More. */}
-            {canUpdate && (
-              <Button variant="primary" leftIcon={<Pencil className="size-4" />} onClick={() => router.push(`${cfg.base}/${id}/edit`)}>
-                {tr("Ubah", "Edit")}
-              </Button>
-            )}
-          </>
-        }
+        actions={<DocumentHeaderActions mode="detail" pdfKind={cfg.pdf} documentId={id} actions={headerActions} />}
       />
 
       <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-card lg:grid-cols-[minmax(0,1fr)_260px]">

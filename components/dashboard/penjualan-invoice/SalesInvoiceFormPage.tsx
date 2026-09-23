@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button } from "@/components/ui";
 import { Status } from "@/components/ui/StatusBadge";
 import { useTr } from "@/lib/useTr";
 import { useInvoiceStatusLabels } from "./statusBadges";
@@ -27,8 +26,6 @@ import {
   createSalesInvoice,
   updateSalesInvoice,
   confirmSalesInvoice,
-  cancelSalesInvoice,
-  draftSalesInvoice,
   setSalesInvoiceTemplate,
   SALES_INVOICE_STATUS_LABEL,
   type SalesInvoice,
@@ -53,6 +50,8 @@ import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
+import DocumentHeaderActions from "../shared/DocumentHeaderActions";
+import { useDirtyForm } from "@/hooks/useDirtyForm";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const noop = () => {};
@@ -161,6 +160,62 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   // A document's status never makes it read-only: issued, paid or cancelled documents stay editable
   // (permission and the server's validation are the only gates).
   const readOnly = false;
+
+  const { isDirty, markClean, reset } = useDirtyForm(
+    {
+      salesOrderId,
+      linkedInvoiceId,
+      mitraId,
+      contactPersonId,
+      contactInfo,
+      number,
+      date,
+      dueDate,
+      refNo,
+      notes,
+      terms,
+      lines,
+      additionalDiscountType,
+      additionalDiscountValue,
+      shippingCost,
+      shipFrom,
+      salesperson,
+      attachmentData,
+      attachmentName,
+      signatureData,
+      stampDuty,
+      template,
+    },
+    !loading,
+  );
+  const applyReset = () => {
+    const snap = reset();
+    if (!snap) return;
+    setSalesOrderId(snap.salesOrderId);
+    setLinkedInvoiceId(snap.linkedInvoiceId);
+    setMitraId(snap.mitraId);
+    setContactPersonId(snap.contactPersonId);
+    setContactInfo(snap.contactInfo);
+    setNumber(snap.number);
+    setDate(snap.date);
+    setDueDate(snap.dueDate);
+    setRefNo(snap.refNo);
+    setNotes(snap.notes);
+    setTerms(snap.terms);
+    setLines(snap.lines);
+    setAdditionalDiscountType(snap.additionalDiscountType);
+    setAdditionalDiscountValue(snap.additionalDiscountValue);
+    setShippingCost(snap.shippingCost);
+    setShipFrom(snap.shipFrom);
+    setSalesperson(snap.salesperson);
+    setAttachmentData(snap.attachmentData);
+    setAttachmentName(snap.attachmentName);
+    setSignatureData(snap.signatureData);
+    setStampDuty(snap.stampDuty);
+    setTemplate(snap.template);
+    templateTouched.current = true;
+    setErrors({});
+  };
 
   // New invoice: start from the ACTIVE company's default for this document type.
   useEffect(() => {
@@ -528,7 +583,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     return active;
   };
 
-  const submit = async () => {
+  const submit = async (confirmAfter = false) => {
     const active = validate();
     if (!active) return;
 
@@ -575,51 +630,14 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         savedId = (await createSalesInvoice(payload)).id;
         toast.success("Invoice added");
       }
-      router.push(isEdit ? `${label.basePath}/${savedId}` : `${label.basePath}/${savedId}/edit`);
+      if (confirmAfter && savedId) {
+        await confirmSalesInvoice(savedId);
+        toast.success("Invoice confirmed");
+      }
+      markClean();
+      router.push(isEdit ? `${label.basePath}/${savedId}` : `${label.basePath}/${savedId}${confirmAfter ? "" : "/edit"}`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save invoice"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doConfirm = async () => {
-    if (!id) return;
-    setBusy(true);
-    try {
-      const updated = await confirmSalesInvoice(id);
-      setStatus(updated.status);
-      toast.success("Invoice confirmed");
-    } catch (err) {
-      toast.error(extractApiError(err, "Failed to confirm invoice"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doBackToDraft = async () => {
-    if (!id) return;
-    setBusy(true);
-    try {
-      const updated = await draftSalesInvoice(id);
-      setStatus(updated.status);
-      toast.success("Invoice moved back to draft");
-    } catch (err) {
-      toast.error(extractApiError(err, "Failed to move invoice back to draft"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doCancel = async () => {
-    if (!id) return;
-    setBusy(true);
-    try {
-      const updated = await cancelSalesInvoice(id);
-      setStatus(updated.status);
-      toast.success("Invoice cancelled");
-    } catch (err) {
-      toast.error(extractApiError(err, "Failed to cancel invoice"));
     } finally {
       setBusy(false);
     }
@@ -641,36 +659,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const isDP = kind === "down_payment";
   const docTitle = isDP ? tr("Invoice Uang Muka", "Down Payment Invoice") : tr("Invoice Penjualan", "Sales Invoice");
 
-  // Primary/secondary actions live in two places on purpose: the page header, and the sticky
-  // summary card — so "Save" is always one glance away on a long form.
-  const saveActions = (
-    <>
-      <Button variant="primary" fullWidth onClick={submit} loading={busy} className="hidden xl:inline-flex">
-        {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan Invoice", "Save Invoice")}
-      </Button>
-      {isEdit && status === "draft" && (
-        <Button variant="outline" fullWidth onClick={doConfirm} disabled={busy}>
-          {tr("Terbitkan Invoice", "Confirm Invoice")}
-        </Button>
-      )}
-      {status === "confirmed" && (
-        <>
-          <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
-            {tr("Kembalikan ke Draf", "Move Back to Draft")}
-          </Button>
-          <Button variant="outline" fullWidth onClick={doCancel} disabled={busy}>
-            {tr("Batalkan Invoice", "Cancel Invoice")}
-          </Button>
-        </>
-      )}
-      {status === "cancelled" && (
-        <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
-          {tr("Kembalikan ke Draf", "Move Back to Draft")}
-        </Button>
-      )}
-    </>
-  );
-
   return (
     <div className="space-y-3">
       <PageHeader
@@ -682,23 +670,15 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         }
         meta={isEdit ? <Status status={status === "confirmed" ? "confirmed" : status === "cancelled" ? "cancelled" : "draft"} label={status === "confirmed" ? statusLabels.confirmed : status === "cancelled" ? statusLabels.cancelled : statusLabels.draft} /> : undefined}
         actions={
-          <>
-            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${label.basePath}/${id}` : label.basePath)} disabled={busy}>
-              {readOnly ? tr("Tutup", "Close") : tr("Batal", "Cancel")}
-            </Button>
-            {/* The sticky summary column carries Save on wide screens; this one only shows when that
-                column has dropped below the form (below xl), so the action never appears twice. */}
-            {!readOnly && (
-              <Button variant="primary" onClick={submit} loading={busy} className="xl:hidden">
-                {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan Invoice", "Save Invoice")}
-              </Button>
-            )}
-          </>
+          isEdit ? (
+            <DocumentHeaderActions mode="edit" busy={busy} isDirty={isDirty} onSave={() => submit(false)} />
+          ) : (
+            <DocumentHeaderActions mode="create" canConfirm busy={busy} isDirty={isDirty} onReset={applyReset} onSaveDraft={() => submit(false)} onSaveAndConfirm={() => submit(true)} />
+          )
         }
       />
 
       <DocumentFormLayout
-        summaryActions={saveActions}
         aside={
           <InvoiceTemplatePanel
             value={template}

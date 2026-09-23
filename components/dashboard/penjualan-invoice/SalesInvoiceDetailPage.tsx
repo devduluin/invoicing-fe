@@ -2,16 +2,16 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronRight, Copy, FilePlus2, Trash2, MoreHorizontal, Package, Pencil, Plus, Truck, Wallet } from "lucide-react";
+import { Copy, FilePlus2, Trash2, Package, Pencil, Plus, Truck, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button, Card } from "@/components/ui";
+import { Card } from "@/components/ui";
 import { Tabs } from "@/components/ui/Tabs";
-import { Status, StatusBadge } from "@/components/ui/StatusBadge";
+import { Status } from "@/components/ui/StatusBadge";
 import { useTr } from "@/lib/useTr";
 import { effectiveStatus, useInvoiceStatusLabels } from "./statusBadges";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import PageHeader from "@/components/layouts/page/PageHeader";
+import DocumentHeaderActions, { type HeaderAction } from "../shared/DocumentHeaderActions";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
@@ -23,11 +23,11 @@ import {
   deleteSalesInvoice,
   getSalesInvoice,
   setSalesInvoiceTemplate,
-  SALES_INVOICE_STATUS_LABEL,
+  confirmSalesInvoice,
+  cancelSalesInvoice,
+  draftSalesInvoice,
   type SalesInvoice,
   type SalesInvoiceKind,
-  type SalesInvoiceStatus,
-  type SalesInvoicePaymentStatus,
 } from "@/services/salesInvoiceService";
 import { getMitra, type Mitra } from "@/services/mitraService";
 import { getMyCompany, type Company } from "@/services/companyService";
@@ -43,7 +43,6 @@ import {
 import { PAYMENT_METHOD_LABEL, listAllSalesReceiptsForInvoice, type SalesReceipt } from "@/services/salesReceiptService";
 import ConnectedDocuments from "../shared/ConnectedDocuments";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
-import PrintPdfActions from "../shared/PrintPdfActions";
 import { InvoiceDocument } from "./InvoiceDocument";
 import { ScaledSheet } from "./templates/ScaledSheet";
 import { InvoiceTemplatePanel } from "./templates/InvoiceTemplatePanel";
@@ -72,6 +71,7 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   const canDelete = hasPermission(permissions, "invoice-sales-invoice-delete");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const canCreateDeliveryNote = hasPermission(permissions, "invoice-delivery-note-create");
+  const [busy, setBusy] = useState(false);
 
   const [loading, setLoading] = useState(true);
   const [invoice, setInvoice] = useState<SalesInvoice | null>(null);
@@ -186,19 +186,43 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   const showManualPayment = canCreatePayment && invoice.status === "confirmed" && remaining > 0;
 
   // Edit is available in every status (paid, partially paid, issued…); permission is the only gate.
-  // When Edit is the primary button, "Record payment" moves into More so nothing appears twice.
   const canRecordReceipt = canCreateReceipt && invoice.status === "confirmed" && remaining > 0;
-  const primaryAction =
-    canUpdate ? (
-      <Button variant="primary" leftIcon={<Pencil className="size-4" />} onClick={() => router.push(`${cfg.basePath}/${id}/edit`)}>
-        {tr("Ubah", "Edit")}
-      </Button>
-    ) : canRecordReceipt ? (
-      <Button variant="primary" leftIcon={<Wallet className="size-4" />} onClick={() => router.push(`/dashboard/penjualan/kuitansi/add?dari_invoice=${id}`)}>
-        {tr("Catat Pembayaran", "Record Payment")}
-      </Button>
-    ) : null;
 
+  const run = async (fn: () => Promise<unknown>, ok: string, fail: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast.success(ok);
+      load();
+    } catch (err) {
+      toast.error(extractApiError(err, fail));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const createDocLabel = tr("Buat dokumen", "Create document");
+  const headerActions: HeaderAction[] = [
+    ...(canUpdate ? [{ key: "edit", label: tr("Ubah", "Edit"), icon: <Pencil aria-hidden />, onSelect: () => router.push(`${cfg.basePath}/${id}/edit`) }] : []),
+    ...createActions.map((a) => ({ key: a.href, label: a.label, icon: <a.icon aria-hidden />, onSelect: () => router.push(a.href), section: createDocLabel })),
+    ...(showManualPayment
+      ? [{ key: "manual-payment", label: tr("Tambah pembayaran manual", "Add manual payment"), icon: <Plus aria-hidden />, onSelect: () => setPaymentModalOpen(true) }]
+      : []),
+    ...(canRecordReceipt
+      ? [{ key: "record-payment", label: tr("Catat Pembayaran", "Record Payment"), icon: <Wallet aria-hidden />, onSelect: () => router.push(`/dashboard/penjualan/kuitansi/add?dari_invoice=${id}`) }]
+      : []),
+    ...(canUpdate && invoice.status === "draft"
+      ? [{ key: "confirm", label: tr("Terbitkan", "Confirm"), icon: <FilePlus2 aria-hidden />, onSelect: () => run(() => confirmSalesInvoice(id), tr("Invoice diterbitkan", "Invoice confirmed"), tr("Gagal menerbitkan", "Failed to confirm")) }]
+      : []),
+    ...(canUpdate && invoice.status !== "draft"
+      ? [{ key: "draft", label: tr("Kembalikan ke draf", "Move back to draft"), icon: <Pencil aria-hidden />, onSelect: () => run(() => draftSalesInvoice(id), tr("Dikembalikan ke draf", "Moved back to draft"), tr("Gagal mengembalikan ke draf", "Failed to move back to draft")) }]
+      : []),
+    ...(canUpdate && invoice.status === "confirmed"
+      ? [{ key: "cancel", label: tr("Batalkan", "Cancel"), icon: <Package aria-hidden />, onSelect: () => run(() => cancelSalesInvoice(id), tr("Dibatalkan", "Cancelled"), tr("Gagal membatalkan", "Failed to cancel")) }]
+      : []),
+    ...(canCreateInvoice ? [{ key: "duplicate", label: tr("Duplikat", "Duplicate"), icon: <Copy aria-hidden />, onSelect: () => router.push(`${cfg.basePath}/add?duplicate_from=${id}`) }] : []),
+    ...(canDelete ? [{ key: "delete", label: tr("Hapus", "Delete"), icon: <Trash2 aria-hidden />, onSelect: () => setDeleteOpen(true), destructive: true }] : []),
+  ];
 
   return (
     <div className="space-y-3">
@@ -209,59 +233,7 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
           `${cfg.title} for ${mitra?.name ?? "—"}`,
         )}
         meta={<Status status={effective} label={statusLabels[effective]} />}
-        actions={
-          <>
-            <PrintPdfActions kind="sales-invoice" id={id} />
-            {(createActions.length > 0 || canCreateInvoice || showManualPayment || canDelete || (canUpdate && canRecordReceipt)) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" leftIcon={<MoreHorizontal className="size-4" />}>
-                    {tr("Lainnya", "More")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-60">
-                  {createActions.length > 0 && <DropdownMenuLabel>{tr("Buat dokumen", "Create document")}</DropdownMenuLabel>}
-                  {createActions.map((a) => (
-                    <DropdownMenuItem key={a.label} onSelect={() => router.push(a.href)}>
-                      <a.icon aria-hidden />
-                      {a.label}
-                    </DropdownMenuItem>
-                  ))}
-                  {showManualPayment && (
-                    <>
-                      {createActions.length > 0 && <DropdownMenuSeparator />}
-                      <DropdownMenuItem onSelect={() => setPaymentModalOpen(true)}>
-                        <Plus aria-hidden /> {tr("Tambah pembayaran manual", "Add manual payment")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {canUpdate && canRecordReceipt && (
-                    <DropdownMenuItem onSelect={() => router.push(`/dashboard/penjualan/kuitansi/add?dari_invoice=${id}`)}>
-                      <Wallet aria-hidden /> {tr("Catat Pembayaran", "Record Payment")}
-                    </DropdownMenuItem>
-                  )}
-                  {canCreateInvoice && (
-                    <>
-                      {(createActions.length > 0 || showManualPayment) && <DropdownMenuSeparator />}
-                      <DropdownMenuItem onSelect={() => router.push(`${cfg.basePath}/add?duplicate_from=${id}`)}>
-                        <Copy aria-hidden /> {tr("Duplikat", "Duplicate")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                  {canDelete && (
-                    <>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onSelect={() => setDeleteOpen(true)} className="text-rose-600 focus:bg-rose-50 focus:text-rose-700 [&>svg:first-child]:bg-rose-500/10 [&>svg:first-child]:text-rose-600">
-                        <Trash2 aria-hidden /> {tr("Hapus", "Delete")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {primaryAction}
-          </>
-        }
+        actions={<DocumentHeaderActions mode="detail" pdfKind="sales-invoice" documentId={id} actions={headerActions} />}
       />
 
       {/* Facts on the left, the balance (the number that matters) tinted on the right. */}

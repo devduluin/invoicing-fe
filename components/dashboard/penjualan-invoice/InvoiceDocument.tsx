@@ -3,6 +3,7 @@
 import { useMemo } from "react";
 
 import { useDocConfig } from "@/hooks/useDocConfig";
+import { useDownPaymentRef, type DownPaymentRef } from "@/hooks/useDownPaymentRef";
 import { docConfigTypeFor, type ResolvedDocConfig } from "@/lib/documentConfig";
 import type { SalesInvoice } from "@/services/salesInvoiceService";
 import type { Mitra } from "@/services/mitraService";
@@ -27,6 +28,13 @@ interface Props {
   config?: ResolvedDocConfig;
   /** Set for orders / purchase invoices (adapted to the invoice shape); omit for sales invoices. */
   doc?: PrintableDocKind;
+  /** The linked down-payment invoice's number/date/amount, resolved ahead of time (the PDF
+   *  pipeline pre-fetches it server-side): pass the object when there is one, `null` when it
+   *  already knows there is none. Omit entirely to self-fetch (detail page, create/edit preview)
+   *  — `null` vs. omitted is the signal that decides whether this component fetches at all, so the
+   *  PDF path (which must never fetch live, its origin isn't allow-listed) always passes one or
+   *  the other, never leaves this prop out. */
+  downPaymentRef?: DownPaymentRef | null;
 }
 
 /**
@@ -40,13 +48,15 @@ interface Props {
  * document type unless the caller passes its own (the PDF page gets it injected; the settings
  * page passes the draft being edited).
  */
-export function InvoiceDocument({ invoice, mitra, company, taxByID, variant, template, doc, config }: Props) {
+export function InvoiceDocument({ invoice, mitra, company, taxByID, variant, template, doc, config, downPaymentRef }: Props) {
   const type = docConfigTypeFor({ kind: invoice.kind, doc });
   const loaded = useDocConfig(type, !config);
   const cfg = config ?? loaded.config;
+  const selfFetchedDownPaymentRef = useDownPaymentRef(invoice, downPaymentRef === undefined);
+  const dpRef = downPaymentRef === undefined ? selfFetchedDownPaymentRef : (downPaymentRef ?? undefined);
   const view = useMemo(
-    () => buildInvoiceView({ invoice, mitra, company, taxByID, variant, doc, config: cfg }),
-    [invoice, mitra, company, taxByID, variant, doc, cfg],
+    () => buildInvoiceView({ invoice, mitra, company, taxByID, variant, doc, config: cfg, downPaymentRef: dpRef }),
+    [invoice, mitra, company, taxByID, variant, doc, cfg, dpRef],
   );
   // Never paint default wording and then swap it: wait for the saved configuration.
   if (!config && !loaded.ready) return <div className="min-h-[60vh]" aria-busy="true" />;

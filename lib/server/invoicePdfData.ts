@@ -14,6 +14,16 @@ import type { SalesReceipt } from "../../services/salesReceiptService";
 import type { PurchaseReceipt } from "../../services/purchaseReceiptService";
 import { asInvoiceShape, type PrintableDoc, type PrintableDocKind } from "../documentShape";
 
+/** Just enough of a connected document to print a Down Payment cross-reference (Template 6/7) —
+ *  mirrors services/connectedDocumentService.ts's ConnectedDocument shape. */
+interface ConnectedDocumentRef {
+  type: string;
+  id: string;
+  number: string;
+  date: string;
+  amount?: number;
+}
+
 export interface InvoicePdfPayload {
   invoice: SalesInvoice;
   mitra: Mitra | null;
@@ -25,6 +35,9 @@ export interface InvoicePdfPayload {
   doc?: PrintableDocKind;
   /** This document type's saved configuration (names, labels, visible fields, language). */
   config?: StoredDocConfig;
+  /** The linked down-payment invoice's own number/date/amount, when this (regular) invoice has
+   *  one — see loadInvoicePdfData. Undefined when there is none. */
+  downPaymentRef?: { number: string; date: string; amount?: number };
 }
 
 export class PdfDataError extends Error {
@@ -80,15 +93,26 @@ export async function loadDocConfig(type: DocConfigType, auth: Auth): Promise<St
   return parseStoredConfig(item?.config);
 }
 
+/** The linked down-payment invoice's own number/date/amount for a regular invoice, when it has
+ *  one — same endpoint ConnectedDocuments.tsx already uses on every detail page. A failed/empty
+ *  lookup just means no cross-reference prints (Template 6/7 hide the section), never fake data. */
+async function loadDownPaymentRef(invoice: SalesInvoice, auth: Auth): Promise<InvoicePdfPayload["downPaymentRef"]> {
+  if (invoice.kind !== "invoice") return undefined;
+  const docs = await apiGet<ConnectedDocumentRef[]>(`/connected-documents/sales_invoice/${encodeURIComponent(invoice.id)}`, auth).catch(() => []);
+  const dp = docs.find((d) => d.type === "down_payment");
+  return dp ? { number: dp.number, date: dp.date, amount: dp.amount } : undefined;
+}
+
 export async function loadInvoicePdfData(id: string, auth: Auth): Promise<InvoicePdfPayload> {
   const invoice = await apiGet<SalesInvoice>(`/sales-invoices/${encodeURIComponent(id)}`, auth);
-  const [company, taxes, mitra] = await Promise.all([
+  const [company, taxes, mitra, downPaymentRef] = await Promise.all([
     apiGet<Company>("/companies/me", auth).catch(() => null),
     apiGet<Tax[]>("/taxes?page=1&limit=200", auth).catch(() => [] as Tax[]),
     apiGet<Mitra>(`/mitra/${encodeURIComponent(invoice.mitra_id)}`, auth).catch(() => null),
+    loadDownPaymentRef(invoice, auth),
   ]);
   const config = await loadDocConfig(docConfigTypeFor({ kind: invoice.kind }), auth);
-  return { invoice, mitra, company, taxes: taxes ?? [], config };
+  return { invoice, mitra, company, taxes: taxes ?? [], config, downPaymentRef };
 }
 
 const DOC_ENDPOINT: Record<PrintableDocKind, string> = {

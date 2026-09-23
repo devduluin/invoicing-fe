@@ -7,7 +7,7 @@ export type SalesInvoiceStatus = "draft" | "confirmed" | "cancelled";
 export type SalesInvoicePaymentStatus = "unpaid" | "partially_paid" | "paid";
 export type DiscountType = "percent" | "amount";
 /** Printable layout chosen per invoice; presentation only. */
-export type InvoiceTemplateId = "template_1" | "template_2" | "template_3" | "template_4";
+export type InvoiceTemplateId = "template_1" | "template_2" | "template_3" | "template_4" | "template_5" | "template_6" | "template_7";
 
 export interface SalesInvoiceLine {
   id?: string;

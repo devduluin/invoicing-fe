@@ -74,26 +74,42 @@ describe("buildInvoiceView — the shared, template-agnostic data", () => {
     expect(view("en").labels.billTo).toBe("Bill To:");
     expect(view("id").signature.dateLong).toContain("April");
   });
+
+  it("always spells out the grand total (terbilang), in the requested language", () => {
+    expect(view("id").terbilang.toLowerCase()).toContain("lima ratus lima puluh empat ribu tujuh ratus rupiah");
+    expect(view("en").terbilang.toLowerCase()).toContain("five hundred fifty");
+  });
+
+  it("only carries a down payment reference when one is given, and never touches this invoice's own totals", () => {
+    expect(view().downPayment).toBeUndefined();
+    const v = buildInvoiceView({
+      invoice, mitra: null, company: null, taxByID: new Map(),
+      downPaymentRef: { number: "INV-DP/2024/0001", date: "2024-04-01", amount: 100000 },
+    });
+    expect(v.downPayment).toEqual({ number: "INV-DP/2024/0001", date: "01/04/2024", amount: "Rp100.000" });
+    expect(v.summary.find((r) => r.key === "total")?.value).toBe("Rp554.700"); // unchanged
+  });
 });
 
 describe("resolveInvoiceTemplate", () => {
-  it("accepts the four ids and falls back to template_1 for anything else", () => {
+  it("accepts all seven ids and falls back to template_1 for anything else", () => {
     for (const t of INVOICE_TEMPLATES) expect(resolveInvoiceTemplate(t.id)).toBe(t.id);
     for (const bad of [undefined, null, "", "template_9", "classic", 3]) expect(resolveInvoiceTemplate(bad)).toBe("template_1");
   });
 });
 
-describe("InvoiceTemplate — one renderer, four genuinely different layouts", () => {
+describe("InvoiceTemplate — one renderer, seven genuinely different layouts", () => {
   const html = Object.fromEntries(
     INVOICE_TEMPLATES.map((t) => [t.id, renderToStaticMarkup(createElement(InvoiceTemplate, { template: t.id, view: view() }))]),
   );
 
   it("every template prints the same invoice data", () => {
+    // Template 5 is deliberately the "simple total only" classic layout (per its own spec) — it
+    // never shows the paid/outstanding breakdown, notes or terms, unlike the other six.
+    const CORE = ["INV/2024/0053", "PT. Multi Wira Subagja", "PT. Kantoran Alam Semesta", "Reimbursement Statement", "Rp554.700", "PO-778", "30/04/2025"];
+    const FULL = [...CORE, "Rp354.700", "Bawa", "Bayar dalam 30 hari", "Keterangan", "Syarat &amp; Ketentuan"];
     for (const [id, out] of Object.entries(html)) {
-      for (const needle of [
-        "INV/2024/0053", "PT. Multi Wira Subagja", "PT. Kantoran Alam Semesta", "Reimbursement Statement",
-        "Rp554.700", "Rp354.700", "Bawa", "Bayar dalam 30 hari", "PO-778", "30/04/2025", "Keterangan", "Syarat &amp; Ketentuan",
-      ]) {
+      for (const needle of id === "template_5" ? CORE : FULL) {
         expect(out, `${id} is missing "${needle}"`).toContain(needle);
       }
       expect(out).toContain(`data-invoice-template="${id}"`);
@@ -103,13 +119,19 @@ describe("InvoiceTemplate — one renderer, four genuinely different layouts", (
   it("the layouts are structurally different, not one layout recoloured", () => {
     const structure = (s: string) => s.replace(/>[^<]*</g, "><").replace(/style="[^"]*"/g, "");
     const shapes = new Set(Object.values(html).map(structure));
-    expect(shapes.size).toBe(4);
+    expect(shapes.size).toBe(7);
     // hallmark of each reference
     expect(html.template_2).toContain("linear-gradient(100deg"); // navy banner
     expect(html.template_3).toContain("borderBottomLeftRadius".replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)); // big curved header shape
     expect(html.template_3).toContain("text-right"); // right-aligned bill-to
     expect(html.template_4).toContain("border-radius:18px 0 0 18px"); // tinted metadata cards
     expect(html.template_1).toContain("rounded-l-full"); // pill table header
+    expect(html.template_5).toContain("Faktur No"); // classic monochrome faktur
+    expect(html.template_5).toContain("border-collapse"); // full bordered grid table
+    expect(html.template_6).toContain("#1d4ed8"); // modern document-oriented accent
+    expect(html.template_6).toContain("bg-slate-50"); // boxed notes/terms headers
+    expect(html.template_7).toContain("Kepada Yth"); // formal customer box
+    expect(html.template_7).toContain(">No.<"); // running row numbers
   });
 
   it("falls back to template_1 for an unknown/missing template instead of breaking", () => {
@@ -142,7 +164,7 @@ describe("one renderer for every printable document", () => {
     expect(pi.dueDate).toBeDefined();
   });
 
-  it("all four templates render every document type", () => {
+  it("all seven templates render every document type", () => {
     for (const d of ["sales_order", "purchase_order", "purchase_invoice"] as const) {
       for (const t of INVOICE_TEMPLATES) {
         const html = renderToStaticMarkup(createElement(InvoiceTemplate, { template: t.id, view: build(d) }));

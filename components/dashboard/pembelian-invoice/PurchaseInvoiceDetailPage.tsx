@@ -2,28 +2,34 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, MoreHorizontal, Pencil, Trash2, Wallet } from "lucide-react";
+import { Copy, Pencil, Trash2, Wallet, Package, FilePlus2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Tabs } from "@/components/ui/Tabs";
-import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { Status } from "@/components/ui/StatusBadge";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import PageHeader from "@/components/layouts/page/PageHeader";
+import DocumentHeaderActions, { type HeaderAction } from "../shared/DocumentHeaderActions";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
 import { formatDateStyle } from "@/utils/formatDate";
 import { getMitra, type Mitra } from "@/services/mitraService";
-import { deletePurchaseInvoice, getPurchaseInvoice, setPurchaseInvoiceTemplate, type PurchaseInvoice } from "@/services/purchaseInvoiceService";
+import {
+  deletePurchaseInvoice,
+  getPurchaseInvoice,
+  setPurchaseInvoiceTemplate,
+  confirmPurchaseInvoice,
+  cancelPurchaseInvoice,
+  draftPurchaseInvoice,
+  type PurchaseInvoice,
+} from "@/services/purchaseInvoiceService";
 import { getMyCompany, type Company } from "@/services/companyService";
 import { listAllTaxes, type Tax } from "@/services/taxService";
 import ConnectedDocuments from "../shared/ConnectedDocuments";
-import PrintPdfActions from "../shared/PrintPdfActions";
 import { asInvoiceShape } from "@/lib/documentShape";
 import { InvoiceDocument } from "../penjualan-invoice/InvoiceDocument";
 import { ScaledSheet } from "../penjualan-invoice/templates/ScaledSheet";
@@ -56,6 +62,7 @@ export default function PurchaseInvoiceDetailPage({ id }: { id: string }) {
   const canCreate = hasPermission(permissions, "invoice-bill-create");
   const canDelete = hasPermission(permissions, "invoice-bill-delete");
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [busy, setBusy] = useState(false);
   const [tab, setTab] = useState<"view" | "payments">("view");
   const canPay = hasPermission(permissions, "invoice-purchase-receipt-create");
   const canListPayments = hasPermission(permissions, "invoice-purchase-receipt-list");
@@ -124,51 +131,44 @@ export default function PurchaseInvoiceDetailPage({ id }: { id: string }) {
   };
   const canRecordPayment = canPay && invoice.status === "confirmed" && outstanding > 0;
 
+  const run = async (fn: () => Promise<unknown>, ok: string, fail: string) => {
+    setBusy(true);
+    try {
+      await fn();
+      toast.success(ok);
+      load();
+    } catch (err) {
+      toast.error(extractApiError(err, fail));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const headerActions: HeaderAction[] = [
+    ...(canUpdate ? [{ key: "edit", label: tr("Ubah", "Edit"), icon: <Pencil aria-hidden />, onSelect: () => router.push(`/dashboard/pembelian/invoice/${id}/edit`) }] : []),
+    ...(canRecordPayment
+      ? [{ key: "record-payment", label: tr("Catat Pembayaran", "Record Payment"), icon: <Wallet aria-hidden />, onSelect: () => router.push(`/dashboard/pembelian/kuitansi/add?dari_invoice=${id}`) }]
+      : []),
+    ...(canUpdate && invoice.status === "draft"
+      ? [{ key: "confirm", label: tr("Terbitkan", "Confirm"), icon: <FilePlus2 aria-hidden />, onSelect: () => run(() => confirmPurchaseInvoice(id), tr("Invoice diterbitkan", "Invoice confirmed"), tr("Gagal menerbitkan", "Failed to confirm")) }]
+      : []),
+    ...(canUpdate && invoice.status !== "draft"
+      ? [{ key: "draft", label: tr("Kembalikan ke draf", "Move back to draft"), icon: <Pencil aria-hidden />, onSelect: () => run(() => draftPurchaseInvoice(id), tr("Dikembalikan ke draf", "Moved back to draft"), tr("Gagal mengembalikan ke draf", "Failed to move back to draft")) }]
+      : []),
+    ...(canUpdate && invoice.status === "confirmed"
+      ? [{ key: "cancel", label: tr("Batalkan", "Cancel"), icon: <Package aria-hidden />, onSelect: () => run(() => cancelPurchaseInvoice(id), tr("Dibatalkan", "Cancelled"), tr("Gagal membatalkan", "Failed to cancel")) }]
+      : []),
+    ...(canCreate ? [{ key: "duplicate", label: tr("Duplikat", "Duplicate"), icon: <Copy aria-hidden />, onSelect: () => router.push(`/dashboard/pembelian/invoice/add?duplicate_from=${id}`) }] : []),
+    ...(canDelete ? [{ key: "delete", label: tr("Hapus", "Delete"), icon: <Trash2 aria-hidden />, onSelect: () => setConfirmDelete(true), destructive: true }] : []),
+  ];
+
   return (
     <div className="space-y-3">
       <PageHeader
         title={invoice.number}
         description={tr(`Tagihan dari ${mitra?.name ?? "-"}`, `Bill from ${mitra?.name ?? "-"}`)}
         meta={<Status status={effective} label={statusLabels[effective]} />}
-        actions={
-          <>
-            <PrintPdfActions kind="purchase-invoice" id={id} />
-            {(canCreate || canDelete) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" leftIcon={<MoreHorizontal className="size-4" />}>
-                    {tr("Lainnya", "More")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  {canCreate && (
-                    <DropdownMenuItem onSelect={() => router.push(`/dashboard/pembelian/invoice/add?duplicate_from=${id}`)}>
-                      <Copy aria-hidden /> {tr("Duplikat", "Duplicate")}
-                    </DropdownMenuItem>
-                  )}
-                  {canDelete && (
-                    <>
-                      {canCreate && <DropdownMenuSeparator />}
-                      <DropdownMenuItem onSelect={() => setConfirmDelete(true)} className="text-rose-600 focus:bg-rose-50 focus:text-rose-700 [&>svg:first-child]:bg-rose-500/10 [&>svg:first-child]:text-rose-600">
-                        <Trash2 aria-hidden /> {tr("Hapus", "Delete")}
-                      </DropdownMenuItem>
-                    </>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {canUpdate && (
-              <Button variant="primary" leftIcon={<Pencil className="size-4" />} onClick={() => router.push(`/dashboard/pembelian/invoice/${id}/edit`)}>
-                {tr("Ubah", "Edit")}
-              </Button>
-            )}
-            {canRecordPayment && (
-              <Button variant="primary" leftIcon={<Wallet className="size-4" />} onClick={() => router.push(`/dashboard/pembelian/kuitansi/add?dari_invoice=${id}`)}>
-                {tr("Catat Pembayaran", "Record Payment")}
-              </Button>
-            )}
-          </>
-        }
+        actions={<DocumentHeaderActions mode="detail" pdfKind="purchase-invoice" documentId={id} actions={headerActions} />}
       />
 
       {/* Facts on the left; the number that matters (what is still owed) tinted on the right. */}

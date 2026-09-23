@@ -9,6 +9,9 @@ export const INVOICE_TEMPLATES: { id: InvoiceTemplateId; label: string }[] = [
   { id: "template_2", label: "Template 2" },
   { id: "template_3", label: "Template 3" },
   { id: "template_4", label: "Template 4" },
+  { id: "template_5", label: "Template 5" },
+  { id: "template_6", label: "Template 6" },
+  { id: "template_7", label: "Template 7" },
 ];
 
 export function isInvoiceTemplateId(v: unknown): v is InvoiceTemplateId {

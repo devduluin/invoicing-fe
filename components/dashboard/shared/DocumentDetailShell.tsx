@@ -2,17 +2,15 @@
 
 import { useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Copy, Pencil, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { DeleteDocumentModal } from "./DeleteDocumentModal";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import DocumentHeaderActions, { type HeaderAction } from "./DocumentHeaderActions";
 import ConnectedDocuments from "./ConnectedDocuments";
-import PrintPdfActions from "./PrintPdfActions";
 import type { ConnectedDocType } from "@/services/connectedDocumentService";
 import type { PdfDocKind } from "@/services/pdfService";
 import { extractApiError } from "@/lib/apiError";
@@ -43,7 +41,6 @@ export default function DocumentDetailShell({
   listHref,
   listLabel,
   deleteTitle,
-  actions,
   connected,
   pdfKind,
   duplicateHref,
@@ -65,8 +62,6 @@ export default function DocumentDetailShell({
   listHref: string;
   listLabel: string;
   deleteTitle: string;
-  /** extra header actions (before Edit) */
-  actions?: ReactNode;
   /** Which document this is, for the "Dokumen Terhubung" panel every detail page carries. */
   connected: { type: ConnectedDocType; id: string };
   /** Only documents that can be printed (a receipt has a fixed layout; DN/GR do not print). */
@@ -102,45 +97,19 @@ export default function DocumentDetailShell({
     }
   };
 
+  const headerActions: HeaderAction[] = [
+    ...(canEdit ? [{ key: "edit", label: tr("Ubah", "Edit"), icon: <Pencil aria-hidden />, onSelect: () => router.push(editHref) }] : []),
+    ...(duplicateHref ? [{ key: "duplicate", label: tr("Duplikat", "Duplicate"), icon: <Copy aria-hidden />, onSelect: () => router.push(duplicateHref) }] : []),
+    ...(canDelete ? [{ key: "delete", label: tr("Hapus", "Delete"), icon: <Trash2 aria-hidden />, onSelect: () => setConfirm(true), destructive: true }] : []),
+  ];
+
   return (
     <div className="space-y-3">
       <PageHeader
         title={number}
         description={subtitle}
         meta={meta}
-        actions={
-          <>
-            {actions}
-            {pdfKind && <PrintPdfActions kind={pdfKind} id={connected.id} />}
-            {(canDelete || duplicateHref) && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Button variant="outline" leftIcon={<MoreHorizontal className="size-4" />}>
-                    {tr("Lainnya", "More")}
-                  </Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52">
-                  {duplicateHref && (
-                    <DropdownMenuItem onSelect={() => router.push(duplicateHref)}>
-                      <Copy aria-hidden /> {tr("Duplikat", "Duplicate")}
-                    </DropdownMenuItem>
-                  )}
-                  {duplicateHref && canDelete && <DropdownMenuSeparator />}
-                  {canDelete && (
-                  <DropdownMenuItem onSelect={() => setConfirm(true)} className="text-rose-600 focus:bg-rose-50 focus:text-rose-700 [&>svg:first-child]:bg-rose-500/10 [&>svg:first-child]:text-rose-600">
-                    <Trash2 aria-hidden /> {tr("Hapus", "Delete")}
-                  </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
-            {canEdit && (
-              <Button variant="primary" leftIcon={<Pencil className="size-4" />} onClick={() => router.push(editHref)}>
-                {tr("Ubah", "Edit")}
-              </Button>
-            )}
-          </>
-        }
+        actions={<DocumentHeaderActions mode="detail" pdfKind={pdfKind} documentId={connected.id} actions={headerActions} />}
       />
 
       <div className={`grid overflow-hidden rounded-xl border border-border bg-card shadow-card ${highlight ? "lg:grid-cols-[minmax(0,1fr)_260px]" : ""}`}>

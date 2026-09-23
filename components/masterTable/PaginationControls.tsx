@@ -4,6 +4,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTr } from "@/lib/useTr";
+import { Select } from "@/components/form";
 import type { TableMeta } from "@/app/types/apiResponses";
 
 const PAGE_SIZES = [10, 20, 50, 100];
@@ -71,18 +72,16 @@ export default function PaginationControls({
           <ChevronRight className="size-4" />
         </button>
 
-        <select
-          value={perPage}
-          onChange={(e) => onPageSizeChange(Number(e.target.value))}
-          aria-label={tr("Baris per halaman", "Rows per page")}
-          className="ml-2 h-8 cursor-pointer rounded-lg border border-border-strong bg-white px-2 text-[13px] text-slate-700 outline-none focus:border-primary"
-        >
-          {PAGE_SIZES.map((s) => (
-            <option key={s} value={s}>
-              {s} / {tr("hal.", "page")}
-            </option>
-          ))}
-        </select>
+        <label htmlFor="pagination-page-size" className="sr-only">
+          {tr("Baris per halaman", "Rows per page")}
+        </label>
+        <Select
+          id="pagination-page-size"
+          value={String(perPage)}
+          onChange={(v) => onPageSizeChange(Number(v))}
+          options={PAGE_SIZES.map((s) => ({ value: String(s), label: `${s} / ${tr("hal.", "page")}` }))}
+          className="ml-2 h-8 w-28"
+        />
       </nav>
     </div>
   );

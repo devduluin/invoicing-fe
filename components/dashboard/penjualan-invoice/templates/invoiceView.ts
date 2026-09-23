@@ -6,6 +6,7 @@ import type { InvoiceLang } from "./types";
 import type { PrintableDocKind } from "@/lib/documentShape";
 import { displayPhone } from "@/lib/phone";
 import { docConfigTypeFor, resolveDocConfig, type ResolvedDocConfig } from "@/lib/documentConfig";
+import { amountInWords } from "@/lib/amountInWords";
 
 /**
  * The single, template-agnostic description of what an invoice prints.
@@ -156,6 +157,13 @@ export interface InvoiceView {
   notes?: string;
   terms?: string;
   signature: { show: boolean; dateLong: string; image?: string; showStamp: boolean; name: string };
+  /** Grand total spelled out in words (Template 5 & 7's "Terbilang") — always computed,
+   *  templates that don't need it simply don't render it. */
+  terbilang: string;
+  /** The linked down-payment invoice this (regular) invoice references, when one exists —
+   *  informational only (its own number/date/amount), never affects this invoice's own totals.
+   *  Undefined when there is none, so templates hide the section instead of showing "undefined". */
+  downPayment?: { number: string; date: string; amount: string };
 }
 
 // ── formatting ──────────────────────────────────────────────────────────────
@@ -208,6 +216,10 @@ export interface BuildInvoiceViewInput {
   lang?: InvoiceLang;
   /** The document type's configuration (names, labels, visible fields). Defaults are used when omitted. */
   config?: ResolvedDocConfig;
+  /** The linked down-payment invoice's own number/date/amount, when this invoice has one —
+   *  looked up via the existing Connected Documents endpoint (see InvoiceDocument.tsx /
+   *  useDownPaymentRef). Omit when there is none, or it isn't known yet. */
+  downPaymentRef?: { number: string; date: string; amount?: number } | null;
 }
 
 export function buildInvoiceView({
@@ -219,6 +231,7 @@ export function buildInvoiceView({
   lang: langInput = "id",
   doc,
   config,
+  downPaymentRef,
 }: BuildInvoiceViewInput): InvoiceView {
   // The document configuration is the single source of wording, visible fields and language.
   const cfg = config ?? resolveDocConfig(docConfigTypeFor({ kind: invoice.kind, doc }), { language: langInput });
@@ -362,5 +375,9 @@ export function buildInvoiceView({
       showStamp: variant === "signed_stamped" || !!invoice.stamp_duty,
       name: cfg.signature.name || company?.name || "—",
     },
+    terbilang: amountInWords(invoice.grand_total ?? 0, lang),
+    downPayment: downPaymentRef
+      ? { number: downPaymentRef.number, date: formatShortDate(downPaymentRef.date), amount: formatRupiah(downPaymentRef.amount ?? 0) }
+      : undefined,
   };
 }

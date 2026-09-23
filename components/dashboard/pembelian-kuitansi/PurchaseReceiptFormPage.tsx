@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
+import { useDirtyForm } from "@/hooks/useDirtyForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
+import DocumentHeaderActions from "../shared/DocumentHeaderActions";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
@@ -170,12 +171,31 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
         savedId = (await createPurchaseReceipt(payload)).id;
         toast.success("Receipt added");
       }
+      markClean();
       router.push(isEdit ? `${"/dashboard/pembelian/kuitansi"}/${savedId}` : `${"/dashboard/pembelian/kuitansi"}/${savedId}/edit`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save receipt"));
     } finally {
       setBusy(false);
     }
+  };
+
+  const { isDirty, markClean, reset } = useDirtyForm(
+    { mitraId, purchaseInvoiceId, number, date, amount, paymentMethod, bankAccountId, notes },
+    !loading,
+  );
+  const applyReset = () => {
+    const snap = reset();
+    if (!snap) return;
+    setMitraId(snap.mitraId);
+    setPurchaseInvoiceId(snap.purchaseInvoiceId);
+    setNumber(snap.number);
+    setDate(snap.date);
+    setAmount(snap.amount);
+    setPaymentMethod(snap.paymentMethod);
+    setBankAccountId(snap.bankAccountId);
+    setNotes(snap.notes);
+    setErrors({});
   };
 
   const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
@@ -205,14 +225,11 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
         title={isEdit ? tr("Ubah Kuitansi Pembelian", "Edit Purchase Receipt") : tr("Buat Kuitansi Pembelian", "New Purchase Receipt")}
         description={tr("Isi informasi dokumen, lalu simpan.", "Fill in the document details, then save.")}
         actions={
-          <>
-            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/pembelian/kuitansi"}/${id}` : "/dashboard/pembelian/kuitansi")} disabled={busy}>
-              {tr("Batal", "Cancel")}
-            </Button>
-            <Button variant="primary" onClick={submit} loading={busy}>
-              {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
-            </Button>
-          </>
+          isEdit ? (
+            <DocumentHeaderActions mode="edit" busy={busy} isDirty={isDirty} onSave={submit} />
+          ) : (
+            <DocumentHeaderActions mode="create" canConfirm={false} busy={busy} isDirty={isDirty} onReset={applyReset} onSaveDraft={submit} />
+          )
         }
       />
 

@@ -43,7 +43,7 @@ export const NAV: NavGroup[] = [
     label: { id: "Data Master", en: "Master Data" },
     items: [
       { label: { id: "Mitra", en: "Partners" }, icon: Users, href: "/dashboard/mitra", permission: "invoice-mitra-list" },
-      { label: { id: "Satuan", en: "Units" }, icon: Ruler, href: "/dashboard/units", permission: "invoice-unit-list" },
+      // { label: { id: "Satuan", en: "Units" }, icon: Ruler, href: "/dashboard/units", permission: "invoice-unit-list" },
       // { label: { id: "Pengguna", en: "Users" }, icon: UserCog, href: "/dashboard/users", permission: "invoice-user-list" },
     ],
   },

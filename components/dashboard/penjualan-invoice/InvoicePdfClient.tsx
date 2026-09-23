@@ -74,6 +74,7 @@ export default function InvoicePdfClient({ variant }: { variant: InvoiceDocument
       variant={variant}
       doc={data.doc}
       config={config}
+      downPaymentRef={data.downPaymentRef ?? null}
     />
     </>
   );

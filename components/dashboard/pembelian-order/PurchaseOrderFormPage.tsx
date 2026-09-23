@@ -7,7 +7,6 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { ShoppingCart } from "lucide-react";
 import toast from "react-hot-toast";
 
-import { Button } from "@/components/ui";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
@@ -24,8 +23,6 @@ import {
   createPurchaseOrder,
   updatePurchaseOrder,
   confirmPurchaseOrder,
-  cancelPurchaseOrder,
-  draftPurchaseOrder,
   PURCHASE_ORDER_STATUS_LABEL,
   type PurchaseOrderInput,
   type PurchaseOrderStatus,
@@ -39,6 +36,8 @@ import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
+import DocumentHeaderActions from "../shared/DocumentHeaderActions";
+import { useDirtyForm } from "@/hooks/useDirtyForm";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -117,6 +116,49 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
     skipDefault: !!searchParams.get("duplicate_from"),
   });
   const canChangeLockedTemplate = hasPermission(useAuthStore((st) => st.permissions), "invoice-purchase-order-update");
+
+  const { isDirty, markClean, reset } = useDirtyForm(
+    {
+      mitraId,
+      contactPersonId,
+      contactInfo,
+      number,
+      date,
+      refNo,
+      notes,
+      lines,
+      additionalDiscountType,
+      additionalDiscountValue,
+      shipTo,
+      attachmentData,
+      attachmentName,
+      signatureData,
+      stampDuty,
+      template: tpl.template,
+    },
+    !loading,
+  );
+  const applyReset = () => {
+    const snap = reset();
+    if (!snap) return;
+    setMitraId(snap.mitraId);
+    setContactPersonId(snap.contactPersonId);
+    setContactInfo(snap.contactInfo);
+    setNumber(snap.number);
+    setDate(snap.date);
+    setRefNo(snap.refNo);
+    setNotes(snap.notes);
+    setLines(snap.lines);
+    setAdditionalDiscountType(snap.additionalDiscountType);
+    setAdditionalDiscountValue(snap.additionalDiscountValue);
+    setShipTo(snap.shipTo);
+    setAttachmentData(snap.attachmentData);
+    setAttachmentName(snap.attachmentName);
+    setSignatureData(snap.signatureData);
+    setStampDuty(snap.stampDuty);
+    tpl.adopt(snap.template);
+    setErrors({});
+  };
   const previewMitra = useMemo(() => mitras.find((mi) => mi.id === mitraId) ?? null, [mitras, mitraId]);
   // The form state shaped like a saved document; totals come from the same calc as the totals panel.
   const draftDoc = useMemo<PrintableDoc>(() => {
@@ -325,7 +367,7 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
     return active;
   };
 
-  const submit = async () => {
+  const submit = async (confirmAfter = false) => {
     const active = validate();
     if (!active) return;
 
@@ -365,51 +407,14 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
         savedId = (await createPurchaseOrder(payload)).id;
         toast.success("Purchase order added");
       }
-      router.push(isEdit ? `${"/dashboard/pembelian/order"}/${savedId}` : `${"/dashboard/pembelian/order"}/${savedId}/edit`);
+      if (confirmAfter && savedId) {
+        await confirmPurchaseOrder(savedId);
+        toast.success("Purchase order confirmed");
+      }
+      markClean();
+      router.push(isEdit ? `${"/dashboard/pembelian/order"}/${savedId}` : `${"/dashboard/pembelian/order"}/${savedId}${confirmAfter ? "" : "/edit"}`);
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save purchase order"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doConfirm = async () => {
-    if (!id) return;
-    setBusy(true);
-    try {
-      const updated = await confirmPurchaseOrder(id);
-      setStatus(updated.status);
-      toast.success("Purchase order confirmed");
-    } catch (err) {
-      toast.error(extractApiError(err, "Failed to confirm purchase order"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doBackToDraft = async () => {
-    if (!id) return;
-    setBusy(true);
-    try {
-      const updated = await draftPurchaseOrder(id);
-      setStatus(updated.status);
-      toast.success("Purchase order moved back to draft");
-    } catch (err) {
-      toast.error(extractApiError(err, "Failed to move order back to draft"));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const doCancel = async () => {
-    if (!id) return;
-    setBusy(true);
-    try {
-      const updated = await cancelPurchaseOrder(id);
-      setStatus(updated.status);
-      toast.success("Purchase order cancelled");
-    } catch (err) {
-      toast.error(extractApiError(err, "Failed to cancel purchase order"));
     } finally {
       setBusy(false);
     }
@@ -427,35 +432,6 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
     );
   }
 
-  // Primary/secondary actions live in the page header and the sticky summary card, like Sales Invoice.
-  const saveActions = (
-    <>
-      <Button variant="primary" fullWidth onClick={submit} loading={busy} className="hidden xl:inline-flex">
-        {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
-      </Button>
-      {isEdit && status === "draft" && (
-        <Button variant="outline" fullWidth onClick={doConfirm} disabled={busy}>
-          {tr("Terbitkan", "Confirm")}
-        </Button>
-      )}
-      {status === "confirmed" && (
-        <>
-          <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
-            {tr("Kembalikan ke Draf", "Move Back to Draft")}
-          </Button>
-          <Button variant="outline" fullWidth onClick={doCancel} disabled={busy}>
-            {tr("Batalkan", "Cancel")}
-          </Button>
-        </>
-      )}
-      {status === "cancelled" && (
-        <Button variant="outline" fullWidth onClick={doBackToDraft} loading={busy}>
-          {tr("Kembalikan ke Draf", "Move Back to Draft")}
-        </Button>
-      )}
-    </>
-  );
-
   return (
     <div className="space-y-3">
       <PageHeader
@@ -467,22 +443,15 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
         }
         meta={isEdit ? <Status status={status as StatusKey} label={PURCHASE_ORDER_STATUS_LABEL[status]} /> : undefined}
         actions={
-          <>
-            <Button variant="outline" onClick={() => router.push(isEdit && id ? `${"/dashboard/pembelian/order"}/${id}` : "/dashboard/pembelian/order")} disabled={busy}>
-              {readOnly ? tr("Tutup", "Close") : tr("Batal", "Cancel")}
-            </Button>
-            {/* The sticky summary column carries Save on wide screens; this one only shows below xl. */}
-            {!readOnly && (
-              <Button variant="primary" onClick={submit} loading={busy} className="xl:hidden">
-                {busy ? tr("Menyimpan…", "Saving…") : tr("Simpan", "Save")}
-              </Button>
-            )}
-          </>
+          isEdit ? (
+            <DocumentHeaderActions mode="edit" busy={busy} isDirty={isDirty} onSave={() => submit(false)} />
+          ) : (
+            <DocumentHeaderActions mode="create" canConfirm busy={busy} isDirty={isDirty} onReset={applyReset} onSaveDraft={() => submit(false)} onSaveAndConfirm={() => submit(true)} />
+          )
         }
       />
 
       <DocumentFormLayout
-        summaryActions={saveActions}
         aside={
           <DocumentTemplateAside
             doc="purchase_order"
