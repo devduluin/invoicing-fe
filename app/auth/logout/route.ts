@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+import { resolveSelfBase } from "@/utils/resolveSelfBase";
+
 const COOKIE_NAMES = [
   "app_token",
   "APP_TOKEN",
@@ -75,8 +77,12 @@ export async function GET(request: NextRequest) {
   // a token and redirects right back here — logout would look like it did nothing. This page lets
   // the user see they're signed out and choose to sign back in, rather than being silently
   // re-authenticated in the same round trip.
-  const response = NextResponse.redirect(new URL("/auth/signed-out", request.url));
-  const hostname = new URL(request.url).hostname;
+  //
+  // selfBase (not request.url) so the redirect never resolves to the container's own bind address
+  // (e.g. 0.0.0.0:8006) behind a reverse proxy / Cloudflare Tunnel — see utils/resolveSelfBase.ts.
+  const selfBase = resolveSelfBase(request);
+  const response = NextResponse.redirect(new URL("/auth/signed-out", selfBase));
+  const hostname = new URL(selfBase).hostname;
   const clearOpts = { path: "/", expires: new Date(0), maxAge: 0 } as const;
   for (const name of COOKIE_NAMES) {
     for (const domain of cookieDomainVariants(hostname)) {
