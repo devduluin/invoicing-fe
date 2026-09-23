@@ -43,15 +43,27 @@ export default function AuthInitializer() {
     fetched.current = true;
 
     const { setStatus, clear } = useAuthStore.getState();
-    if (!readAppToken()) {
-      clear();
+    const start = () => {
+      setStatus("loading");
+      syncIdentity().catch((err) => {
+        if (isUnauthorized(err)) clear();
+        else setStatus("error");
+      });
+    };
+
+    if (readAppToken()) {
+      start();
       return;
     }
-    setStatus("loading");
-    syncIdentity().catch((err) => {
-      if (isUnauthorized(err)) clear();
-      else setStatus("error");
-    });
+    // middleware.ts already confirmed the SSO cookie is present server-side (that's the only way
+    // this page rendered at all) — a missing cookie here means the browser just hasn't flushed a
+    // freshly-set cross-subdomain cookie (right after the Launchpad redirect) into document.cookie
+    // for this tick yet. Retry once next tick before concluding the session is really gone.
+    const id = setTimeout(() => {
+      if (readAppToken()) start();
+      else clear();
+    }, 50);
+    return () => clearTimeout(id);
   }, []);
 
   useEffect(() => {

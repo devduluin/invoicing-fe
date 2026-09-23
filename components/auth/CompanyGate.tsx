@@ -23,6 +23,13 @@ const LOGIN_LOGGED_KEY = "invoice-audit-login-logged";
  * context turns out to be missing or stale; this gate just makes sure the page is never shown in
  * between.
  */
+/** One automatic recovery reload per tab — if the cookie is genuinely gone, middleware's real
+ *  redirect takes over on the reload; if this was just the client missing a freshly-set SSO
+ *  cookie, the reload re-mounts AuthInitializer, which reads it fine the second time. Capped so a
+ *  browser that persistently blocks the cookie (private mode, 3rd-party cookie block) fails
+ *  visibly instead of reload-looping. */
+const AUTO_RELOAD_KEY = "invoice-auth-auto-reload";
+
 export default function CompanyGate({ children }: { children: ReactNode }) {
   const tr = useTr();
   const status = useAuthStore((s) => s.status);
@@ -38,6 +45,7 @@ export default function CompanyGate({ children }: { children: ReactNode }) {
     if (!ready || loggedRef.current) return;
     loggedRef.current = true;
     try {
+      sessionStorage.removeItem(AUTO_RELOAD_KEY);
       if (sessionStorage.getItem(LOGIN_LOGGED_KEY) === activeCompanyId) return;
       sessionStorage.setItem(LOGIN_LOGGED_KEY, activeCompanyId ?? "");
     } catch {
@@ -45,6 +53,24 @@ export default function CompanyGate({ children }: { children: ReactNode }) {
     }
     logAuditLogin();
   }, [ready, activeCompanyId]);
+
+  // "unauthenticated" means AuthInitializer decided there's no session — usually because the
+  // client read document.cookie a beat before the SSO redirect's freshly-set cookie was visible
+  // to it (middleware, reading the same cookie server-side, already let this request through, so
+  // the cookie IS there). Nothing was actually redirecting to sign-in when this happened, so the
+  // page just sat on this spinner forever until the user refreshed by hand. Do that reload for
+  // them, once: middleware resolves it correctly either way (bounces to sign-in if the session is
+  // really gone, or lets a fresh AuthInitializer mount read the cookie that's there by now).
+  useEffect(() => {
+    if (status !== "unauthenticated") return;
+    try {
+      if (sessionStorage.getItem(AUTO_RELOAD_KEY) === "1") return;
+      sessionStorage.setItem(AUTO_RELOAD_KEY, "1");
+    } catch {
+      return;
+    }
+    window.location.reload();
+  }, [status]);
 
   if (ready) return <>{children}</>;
 

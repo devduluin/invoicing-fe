@@ -8,12 +8,10 @@ const COOKIE_NAMES = [
   "account_type",
   "sso_user_id",
   "company_id",
+  "app_company_id",
   "user_role",
 ];
 
-const LAUNCHPAD_URL = (
-  process.env.NEXT_PUBLIC_LAUNCHPAD_URL || "https://workspace.duluin.com"
-).replace(/\/$/, "");
 const ACCOUNT_TYPE = process.env.NEXT_PUBLIC_X_ACCOUNT_TYPE || "duluin_invoice";
 const AUTH_API_URL = (
   process.env.NEXT_PUBLIC_AUTH_API_URL || "https://ssodev.duluin.com/api"
@@ -72,10 +70,12 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  const signin = new URL("/auth/signin", LAUNCHPAD_URL);
-  signin.searchParams.set("account_type", ACCOUNT_TYPE);
-
-  const response = NextResponse.redirect(signin);
+  // Land on our own "signed out" page instead of bouncing straight into Launchpad's /auth/signin:
+  // if the browser still has a live Launchpad hub session, hitting that URL immediately re-issues
+  // a token and redirects right back here — logout would look like it did nothing. This page lets
+  // the user see they're signed out and choose to sign back in, rather than being silently
+  // re-authenticated in the same round trip.
+  const response = NextResponse.redirect(new URL("/auth/signed-out", request.url));
   const hostname = new URL(request.url).hostname;
   const clearOpts = { path: "/", expires: new Date(0), maxAge: 0 } as const;
   for (const name of COOKIE_NAMES) {
