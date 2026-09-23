@@ -1,17 +1,19 @@
 import axios, { type AxiosError, type InternalAxiosRequestConfig } from "axios";
-import { INVOICE_API_URL, ACCOUNT_TYPE } from "@/utils/env";
+import { ACCOUNT_TYPE } from "@/utils/env";
 import { readAppToken, writeAppToken } from "@/utils/ssoCookies";
 import { clearActiveCompanyCookie, getCookie } from "@/utils/cookies";
 import { getRootCookieDomain } from "@/utils/cookieDomain";
 
 /**
- * Talks to invoice-service. In local dev this goes through the API gateway
- * (`NEXT_PUBLIC_INVOICE_API_URL=http://localhost:9996/api/proxy/v1/invoice`),
- * same as acc-frontend. The gateway rewrites `/<path>` → `invoice-service:/api/v1/<path>`,
- * so call resource paths WITHOUT a `/v1` prefix here (e.g. `api.get("/me")`).
+ * Talks to invoice-service through this app's own BFF route
+ * (`app/api/proxy/v1/invoice/[...path]/route.ts`), same-origin — not the API gateway
+ * directly. That route forwards to the gateway (or, inside Docker,
+ * INVOICE_API_INTERNAL_URL straight to invoice-service) using the exact headers this
+ * client already sets below, so call resource paths WITHOUT a `/v1` prefix here (e.g.
+ * `api.get("/me")`), same as before the BFF existed.
  */
 const api = axios.create({
-  baseURL: INVOICE_API_URL,
+  baseURL: "/api/proxy/v1/invoice",
   headers: {
     "Content-Type": "application/json",
     "X-Account-Type": ACCOUNT_TYPE,
