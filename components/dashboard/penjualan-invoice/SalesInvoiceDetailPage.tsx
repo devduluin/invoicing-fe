@@ -104,26 +104,14 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
         setTaxes(taxList);
         setPayments(paymentList);
         setReceipts(receiptList);
-        try {
-          setMitra(await getMitra(inv.mitra_id));
-        } catch {
-          setMitra(null);
-        }
-        if (inv.sales_order_id) {
-          try {
-            setOrder(await getSalesOrder(inv.sales_order_id));
-          } catch {
-            setOrder(null);
-          }
-          try {
-            setDeliveryNotes(await listAllDeliveryNotesBySalesOrder(inv.sales_order_id));
-          } catch {
-            setDeliveryNotes([]);
-          }
-        } else {
-          setOrder(null);
-          setDeliveryNotes([]);
-        }
+        const [m, order, dns] = await Promise.all([
+          getMitra(inv.mitra_id).catch(() => null),
+          inv.sales_order_id ? getSalesOrder(inv.sales_order_id).catch(() => null) : Promise.resolve(null),
+          inv.sales_order_id ? listAllDeliveryNotesBySalesOrder(inv.sales_order_id).catch(() => []) : Promise.resolve([]),
+        ]);
+        setMitra(m);
+        setOrder(order);
+        setDeliveryNotes(dns);
       })
       .catch((err) => {
         toast.error(extractApiError(err, "Failed to load invoice"));
@@ -188,12 +176,14 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   // Edit is available in every status (paid, partially paid, issued…); permission is the only gate.
   const canRecordReceipt = canCreateReceipt && invoice.status === "confirmed" && remaining > 0;
 
-  const run = async (fn: () => Promise<unknown>, ok: string, fail: string) => {
+  // Confirm/draft/cancel each return the full updated invoice already — apply it directly instead
+  // of calling load() again, which used to re-fetch company/taxes/payments/receipts/mitra/order/
+  // delivery-notes too, none of which a status change ever touches.
+  const run = async (fn: () => Promise<SalesInvoice>, ok: string, fail: string) => {
     setBusy(true);
     try {
-      await fn();
+      setInvoice(await fn());
       toast.success(ok);
-      load();
     } catch (err) {
       toast.error(extractApiError(err, fail));
     } finally {

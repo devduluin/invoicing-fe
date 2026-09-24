@@ -33,9 +33,14 @@ export default function PurchaseReceiptDetailPage({ id }: { id: string }) {
     getPurchaseReceipt(id)
       .then(async (r) => {
         setReceipt(r);
-        setMitra(await getMitra(r.mitra_id).catch(() => null));
-        setCompany(await getMyCompany().catch(() => null));
-        setInvoice(r.purchase_invoice_id ? await getPurchaseInvoice(r.purchase_invoice_id).catch(() => null) : null);
+        const [m, co, inv] = await Promise.all([
+          getMitra(r.mitra_id).catch(() => null),
+          getMyCompany().catch(() => null),
+          r.purchase_invoice_id ? getPurchaseInvoice(r.purchase_invoice_id).catch(() => null) : Promise.resolve(null),
+        ]);
+        setMitra(m);
+        setCompany(co);
+        setInvoice(inv);
       })
       .catch(() => setFailed(true))
       .finally(() => setLoading(false));

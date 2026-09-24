@@ -19,6 +19,9 @@ const AUTH_API_URL = (
   process.env.NEXT_PUBLIC_AUTH_API_URL || "https://ssodev.duluin.com/api"
 ).replace(/\/$/, "");
 const INVOICE_API_URL = (process.env.NEXT_PUBLIC_INVOICE_API_URL || "").replace(/\/$/, "");
+const LAUNCHPAD_URL = (
+  process.env.NEXT_PUBLIC_LAUNCHPAD_URL || "https://workspace.duluin.com"
+).replace(/\/$/, "");
 
 function cookieDomainVariants(hostname: string): string[] {
   if (hostname === "localhost" || /^\d+\.\d+\.\d+\.\d+$/.test(hostname)) return [""];
@@ -72,16 +75,25 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  // Land on our own "signed out" page instead of bouncing straight into Launchpad's /auth/signin:
-  // if the browser still has a live Launchpad hub session, hitting that URL immediately re-issues
-  // a token and redirects right back here — logout would look like it did nothing. This page lets
-  // the user see they're signed out and choose to sign back in, rather than being silently
-  // re-authenticated in the same round trip.
+  // Redirect straight into Launchpad's own /auth/signin?logout=true — this is NOT the same as a
+  // plain signin redirect. Launchpad's LogoutHandler (components/auth/LogoutHandler.tsx in the
+  // launchpad repo) specifically watches for `logout=true` and wipes the SAME shared SSO cookies
+  // (app_token, company_id, …) on the shared root domain, i.e. it kills the Launchpad HUB session
+  // itself — not just this product's token (which is all the SSO /users/logout call above ever
+  // revoked). Without this, a live hub session silently re-issues a fresh token and bounces the
+  // user straight back in, making logout look like it did nothing. Same pattern as workin
+  // (app/api/launchpad-redirect/route.ts in workin_dashboard_nextjs), verified against the actual
+  // Launchpad handler rather than assumed.
   //
-  // selfBase (not request.url) so the redirect never resolves to the container's own bind address
+  // selfBase (not request.url) so `redirect` never resolves to the container's own bind address
   // (e.g. 0.0.0.0:8006) behind a reverse proxy / Cloudflare Tunnel — see utils/resolveSelfBase.ts.
   const selfBase = resolveSelfBase(request);
-  const response = NextResponse.redirect(new URL("/auth/signed-out", selfBase));
+  const signin = new URL("/auth/signin", LAUNCHPAD_URL);
+  signin.searchParams.set("account_type", ACCOUNT_TYPE);
+  signin.searchParams.set("logout", "true");
+  signin.searchParams.set("redirect", selfBase);
+
+  const response = NextResponse.redirect(signin);
   const hostname = new URL(selfBase).hostname;
   const clearOpts = { path: "/", expires: new Date(0), maxAge: 0 } as const;
   for (const name of COOKIE_NAMES) {

@@ -32,9 +32,14 @@ export default function GoodsReceiptDetailPage({ id }: { id: string }) {
     getGoodsReceipt(id)
       .then(async (r) => {
         setDoc(r);
-        setMitra(await getMitra(r.mitra_id).catch(() => null));
-        setCompany(await getMyCompany().catch(() => null));
-        setRel(r.purchase_order_id ? await getPurchaseOrder(r.purchase_order_id).then((x) => ({ id: x.id, number: x.number })).catch(() => null) : null);
+        const [m, co, po] = await Promise.all([
+          getMitra(r.mitra_id).catch(() => null),
+          getMyCompany().catch(() => null),
+          r.purchase_order_id ? getPurchaseOrder(r.purchase_order_id).then((x) => ({ id: x.id, number: x.number })).catch(() => null) : Promise.resolve(null),
+        ]);
+        setMitra(m);
+        setCompany(co);
+        setRel(po);
       })
       .catch(() => setFailed(true))
       .finally(() => setLoading(false));

@@ -9,11 +9,13 @@ import toast from "react-hot-toast";
 
 import PageHeader from "@/components/layouts/page/PageHeader";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
-import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect } from "@/components/form";
+import { useAuthStore } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
+import { listMitraPage, getMitra } from "@/services/mitraService";
+import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { getSalesOrder, listAllSalesOrders, type SalesOrder } from "@/services/salesOrderService";
 import { getSalesInvoice, listAllSalesInvoices, type SalesInvoice } from "@/services/salesInvoiceService";
 import { createDeliveryNote, getDeliveryNote, updateDeliveryNote, type DeliveryNoteInput } from "@/services/deliveryNoteService";
@@ -81,7 +83,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   // slower, and revealing the form before mitras loads would show the
   // Partner field blank even though mitraId is already correctly set.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "orders", "invoices"]);
+    const s = new Set<string>(["orders", "invoices"]);
     if (isEdit) s.add("entity");
     else if (searchParams.get("dari_order") || searchParams.get("dari_invoice") || searchParams.get("duplicate_from")) s.add("prefill");
     return s;
@@ -96,7 +98,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   const loading = pending.size > 0;
 
   const [busy, setBusy] = useState(false);
-  const [mitras, setMitras] = useState<Mitra[]>([]);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const [salesOrders, setSalesOrders] = useState<SalesOrder[]>([]);
   const [salesInvoices, setSalesInvoices] = useState<SalesInvoice[]>([]);
   const [addMitraOpen, setAddMitraOpen] = useState(false);
@@ -124,7 +126,6 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   ]);
 
   useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllSalesOrders().then(setSalesOrders).catch(() => setSalesOrders([])).finally(() => done("orders"));
     listAllSalesInvoices("invoice").then(setSalesInvoices).catch(() => setSalesInvoices([])).finally(() => done("invoices"));
   }, []);
@@ -300,8 +301,6 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
     setErrors({});
   };
 
-  const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
-
   if (loading) {
     return (
       <div className="space-y-3">
@@ -339,10 +338,14 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
         metaFields={
           <>
             <FormField label="Partner" htmlFor="dn-mitra" required error={errors.mitraId}>
-              <SearchableSelect
+              <RemoteSelect
                 id="dn-mitra"
                 value={mitraId}
-                options={mitraOptions}
+                resource="mitra"
+                companyId={activeCompanyId}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                resolveById={getMitra}
+                toOption={(m) => ({ value: m.id, label: m.name })}
                 onChange={(v) => {
                   setMitraId(v);
                   setSalesOrderId(null);
@@ -425,7 +428,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
           mitra={null}
           onClose={() => setAddMitraOpen(false)}
           onSaved={(created) => {
-            setMitras((prev) => [...prev, created]);
+            invalidateRemoteSelectOptions("mitra");
             setMitraId(created.id);
             setAddMitraOpen(false);
           }}

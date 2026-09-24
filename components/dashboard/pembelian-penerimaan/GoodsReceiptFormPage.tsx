@@ -9,11 +9,13 @@ import toast from "react-hot-toast";
 
 import PageHeader from "@/components/layouts/page/PageHeader";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
-import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect } from "@/components/form";
+import { useAuthStore } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
+import { listMitraPage, getMitra } from "@/services/mitraService";
+import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { getPurchaseOrder, listAllPurchaseOrders, type PurchaseOrder } from "@/services/purchaseOrderService";
 import { createGoodsReceipt, getGoodsReceipt, updateGoodsReceipt, type GoodsReceiptInput } from "@/services/goodsReceiptService";
 import { SimpleLineItemsEditor, emptySimpleLine, type EditableSimpleLine } from "../shared/SimpleLineItemsEditor";
@@ -79,7 +81,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   // slower, and revealing the form before mitras loads would show the
   // Partner field blank even though mitraId is already correctly set.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "orders"]);
+    const s = new Set<string>(["orders"]);
     if (isEdit) s.add("entity");
     else if (searchParams.get("dari_order")) s.add("prefill");
     return s;
@@ -94,7 +96,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   const loading = pending.size > 0;
 
   const [busy, setBusy] = useState(false);
-  const [mitras, setMitras] = useState<Mitra[]>([]);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [addMitraOpen, setAddMitraOpen] = useState(false);
 
@@ -120,7 +122,6 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   ]);
 
   useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllPurchaseOrders().then(setPurchaseOrders).catch(() => setPurchaseOrders([])).finally(() => done("orders"));
   }, []);
 
@@ -239,8 +240,6 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
     setErrors({});
   };
 
-  const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
-
   if (loading) {
     return (
       <div className="space-y-3">
@@ -278,10 +277,14 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
         metaFields={
           <>
             <FormField label="Partner" htmlFor="gr-mitra" required error={errors.mitraId}>
-              <SearchableSelect
+              <RemoteSelect
                 id="gr-mitra"
                 value={mitraId}
-                options={mitraOptions}
+                resource="mitra"
+                companyId={activeCompanyId}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                resolveById={getMitra}
+                toOption={(m) => ({ value: m.id, label: m.name })}
                 onChange={(v) => {
                   setMitraId(v);
                   setPurchaseOrderId(null);
@@ -346,7 +349,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
           mitra={null}
           onClose={() => setAddMitraOpen(false)}
           onSaved={(created) => {
-            setMitras((prev) => [...prev, created]);
+            invalidateRemoteSelectOptions("mitra");
             setMitraId(created.id);
             setAddMitraOpen(false);
           }}

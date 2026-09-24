@@ -33,9 +33,13 @@ export default function SalesReceiptDetailPage({ id }: { id: string }) {
     getSalesReceipt(id)
       .then(async (r) => {
         setReceipt(r);
-        setMitra(await getMitra(r.mitra_id).catch(() => null));
-        setCompany(await getMyCompany().catch(() => null));
-        const found = await Promise.all((r.allocations ?? []).map((a) => getSalesInvoice(a.sales_invoice_id).catch(() => null)));
+        const [m, co, found] = await Promise.all([
+          getMitra(r.mitra_id).catch(() => null),
+          getMyCompany().catch(() => null),
+          Promise.all((r.allocations ?? []).map((a) => getSalesInvoice(a.sales_invoice_id).catch(() => null))),
+        ]);
+        setMitra(m);
+        setCompany(co);
         setInvoices(Object.fromEntries(found.filter((x): x is SalesInvoice => !!x).map((x) => [x.id, x])));
       })
       .catch(() => setFailed(true))

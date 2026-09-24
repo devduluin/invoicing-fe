@@ -9,13 +9,14 @@ import toast from "react-hot-toast";
 
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, RemoteSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
 import { hasPermission, useAuthStore } from "@/store/useAuthStore";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
+import { listMitraPage, getMitra, type Mitra } from "@/services/mitraService";
+import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { listAllTaxes, type Tax } from "@/services/taxService";
 import {
   getPurchaseOrder,
@@ -57,11 +58,11 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
 
   // Tracks every initial-load fetch (base lists + whichever prefill source
   // applies) so the form only renders once ALL of them have settled — e.g.
-  // ?duplicate_from=<id> resolves fast (one record) while listAllMitra()
-  // can be slower, and revealing the form before mitras loads would show
-  // the Partner field blank even though mitraId is already correctly set.
+  // ?duplicate_from=<id> resolves fast (one record). Mitra (partner) is
+  // deliberately NOT in this set: it's fetched lazily by RemoteSelect only
+  // once the Partner dropdown is opened, never blocking initial render.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "taxes"]);
+    const s = new Set<string>(["taxes"]);
     if (isEdit) {
       s.add("entity");
     } else {
@@ -79,9 +80,10 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
     });
   const loading = pending.size > 0;
   const [busy, setBusy] = useState(false);
-  const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [previewMitra, setPreviewMitra] = useState<Mitra | null>(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [addMitraOpen, setAddMitraOpen] = useState(false);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
 
   const [mitraId, setMitraId] = useState("");
   const [contactPersonId, setContactPersonId] = useState("");
@@ -159,7 +161,6 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
     tpl.adopt(snap.template);
     setErrors({});
   };
-  const previewMitra = useMemo(() => mitras.find((mi) => mi.id === mitraId) ?? null, [mitras, mitraId]);
   // The form state shaped like a saved document; totals come from the same calc as the totals panel.
   const draftDoc = useMemo<PrintableDoc>(() => {
     const active = lines.filter((l) => l.product_name.trim() || l.quantity || l.unit_price);
@@ -219,7 +220,6 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
   ]);
 
   useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllTaxes().then(setTaxes).catch(() => setTaxes([])).finally(() => done("taxes"));
   }, []);
 
@@ -420,8 +420,6 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
     }
   };
 
-  const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
-
   if (loading) {
     return (
       <div className="space-y-4">
@@ -476,10 +474,15 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
         metaFields={
           <>
             <FormField label="Partner" htmlFor="po-mitra" required error={errors.mitraId}>
-              <SearchableSelect
+              <RemoteSelect
                 id="po-mitra"
                 value={mitraId}
-                options={mitraOptions}
+                resource="mitra"
+                companyId={activeCompanyId}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                resolveById={getMitra}
+                toOption={(m) => ({ value: m.id, label: m.name })}
+                onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);
                   setErrors((prev) => ({ ...prev, mitraId: undefined }));
@@ -597,7 +600,8 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
           mitra={null}
           onClose={() => setAddMitraOpen(false)}
           onSaved={(created) => {
-            setMitras((prev) => [...prev, created]);
+            invalidateRemoteSelectOptions("mitra");
+            setPreviewMitra(created);
             setMitraId(created.id);
             setAddMitraOpen(false);
           }}

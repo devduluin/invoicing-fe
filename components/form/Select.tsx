@@ -33,6 +33,11 @@ interface SelectProps {
    *  when its "+ Add" button is clicked). Falls back to internal state. */
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Fires once when the options list is scrolled near its bottom (infinite-scroll pagination —
+   *  e.g. RemoteSelect). Never fires for a plain static-options caller that doesn't pass it. */
+  onEndReached?: () => void;
+  /** Rendered below the options list (e.g. a "Loading more…" row while the next page fetches). */
+  footer?: React.ReactNode;
 }
 
 /** Custom dropdown — no native <select>, no react-select. Keyboard: ↑↓ move,
@@ -51,6 +56,8 @@ export function Select({
   emptyText = "No options",
   open: openProp,
   onOpenChange,
+  onEndReached,
+  footer,
 }: SelectProps) {
   const [openState, setOpenState] = useState(false);
   const open = openProp ?? openState;
@@ -158,7 +165,19 @@ export function Select({
           }}
         >
           {header}
-          <div ref={listRef} role="listbox" className="max-h-60 overflow-y-auto p-1">
+          <div
+            ref={listRef}
+            role="listbox"
+            className="max-h-60 overflow-y-auto p-1"
+            onScroll={
+              onEndReached
+                ? (e) => {
+                    const el = e.currentTarget;
+                    if (el.scrollHeight - el.scrollTop - el.clientHeight < 48) onEndReached();
+                  }
+                : undefined
+            }
+          >
             {options.length === 0 ? (
               <p className="px-3 py-3 text-[13px] text-slate-400">{emptyText}</p>
             ) : (
@@ -188,6 +207,7 @@ export function Select({
               ))
             )}
           </div>
+          {footer}
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>

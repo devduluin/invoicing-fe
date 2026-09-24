@@ -133,7 +133,7 @@ export default function TaxFormModal({
         </FormField>
         <FormField label="Tax Name" required error={errors.name}>
           <Input
-            placeholder="e.g. WHT Art. 23, Local Tax, Restaurant Tax"
+            placeholder="mis. PPh 23, Pajak Daerah, Pajak Restoran"
             value={form.name}
             disabled={locked}
             autoFocus={!locked}

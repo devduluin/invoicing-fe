@@ -10,12 +10,14 @@ import toast from "react-hot-toast";
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
-import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect, Select, NumberSeparatorInput } from "@/components/form";
+import { useAuthStore } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
+import { listMitraPage, getMitra } from "@/services/mitraService";
+import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { listAllSalesInvoices, getSalesInvoice, type SalesInvoice } from "@/services/salesInvoiceService";
 import { listAllBankAccounts, type BankAccount } from "@/services/bankAccountService";
 import {
@@ -61,7 +63,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   // loads would show the Partner field blank even though mitraId is
   // already correctly set.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "invoices", "bank-accounts"]);
+    const s = new Set<string>(["invoices", "bank-accounts"]);
     if (isEdit) s.add("receipt");
     else s.add("number");
     if (!isEdit && searchParams.get("dari_invoice")) s.add("prefill");
@@ -76,7 +78,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
     });
   const loading = pending.size > 0;
 
-  const [mitras, setMitras] = useState<Mitra[]>([]);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const [invoices, setInvoices] = useState<SalesInvoice[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [busy, setBusy] = useState(false);
@@ -105,7 +107,6 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   ]);
 
   useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllSalesInvoices("invoice").then(setInvoices).catch(() => setInvoices([])).finally(() => done("invoices"));
     listAllBankAccounts().then(setBankAccounts).catch(() => setBankAccounts([])).finally(() => done("bank-accounts"));
     if (!isEdit) previewSalesReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
@@ -244,7 +245,6 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
     setErrors({});
   };
 
-  const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
   const bankOptions = bankAccounts.map((b) => ({
     value: b.id,
     label: `${b.bank_name} — ${b.account_number}${b.is_primary ? " (Primary)" : ""}`,
@@ -278,10 +278,14 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
         metaFields={
           <>
             <FormField label="Partner" htmlFor="kw-mitra" required error={errors.mitraId}>
-              <SearchableSelect
+              <RemoteSelect
                 id="kw-mitra"
                 value={mitraId}
-                options={mitraOptions}
+                resource="mitra"
+                companyId={activeCompanyId}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                resolveById={getMitra}
+                toOption={(m) => ({ value: m.id, label: m.name })}
                 onChange={(v) => {
                   setMitraId(v);
                   setAllocations([]);
@@ -431,7 +435,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
           mitra={null}
           onClose={() => setAddMitraOpen(false)}
           onSaved={(created) => {
-            setMitras((prev) => [...prev, created]);
+            invalidateRemoteSelectOptions("mitra");
             setMitraId(created.id);
             setAddMitraOpen(false);
           }}

@@ -105,7 +105,7 @@ export default function CompoundTaxFormModal({
         <>
           <FormField label="Tax Name" required error={errors.name}>
             <Input
-              placeholder="e.g. VAT + WHT Art. 23"
+              placeholder="mis. PPN + PPh 23"
               value={form.name}
               autoFocus
               error={!!errors.name}

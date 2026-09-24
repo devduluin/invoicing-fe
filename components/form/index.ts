@@ -6,6 +6,7 @@ export { Textarea, type TextareaProps } from "./Textarea";
 export { RichTextEditor } from "./RichTextEditor";
 export { Select, type SelectOption } from "./Select";
 export { SearchableSelect } from "./SearchableSelect";
+export { RemoteSelect } from "./RemoteSelect";
 export { MultiSelect } from "./MultiSelect";
 export { CheckboxField } from "./CheckboxField";
 export { RadioField, type RadioOption } from "./RadioField";

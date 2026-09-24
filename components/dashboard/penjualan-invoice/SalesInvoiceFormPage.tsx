@@ -11,11 +11,12 @@ import { Status } from "@/components/ui/StatusBadge";
 import { useTr } from "@/lib/useTr";
 import { useInvoiceStatusLabels } from "./statusBadges";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
+import { listMitraPage, getMitra, type Mitra } from "@/services/mitraService";
+import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { listAllTaxes, type Tax } from "@/services/taxService";
 import { getSalesOrder } from "@/services/salesOrderService";
 import { getMyCompany, type Company } from "@/services/companyService";
@@ -87,11 +88,11 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
 
   // Tracks every initial-load fetch (base lists + whichever prefill source
   // applies) so the form only renders once ALL of them have settled — e.g.
-  // ?dari_order=<id> resolves fast (one record) while listAllMitra() can be
-  // slower, and revealing the form before mitras loads would show the
-  // Partner field blank even though mitraId is already correctly set.
+  // ?dari_order=<id> resolves fast (one record). Mitra (partner) is
+  // deliberately NOT in this set: it's fetched lazily by RemoteSelect only
+  // once the Partner dropdown is opened, never blocking initial render.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "taxes"]);
+    const s = new Set<string>(["taxes"]);
     if (kind === "down_payment") s.add("linkable-invoices");
     if (isEdit) {
       s.add("entity");
@@ -117,7 +118,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     });
   const loading = pending.size > 0;
   const [busy, setBusy] = useState(false);
-  const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [previewMitra, setPreviewMitra] = useState<Mitra | null>(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [linkableInvoices, setLinkableInvoices] = useState<SalesInvoice[]>([]);
   const [company, setCompany] = useState<Company | null>(null);
@@ -256,7 +257,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   // the preview can never disagree with the numbers next to it (the server stays
   // authoritative on save).
   const taxByID = useMemo(() => new Map(taxes.map((t) => [t.id, t])), [taxes]);
-  const previewMitra = useMemo(() => mitras.find((m) => m.id === mitraId) ?? null, [mitras, mitraId]);
   const draftInvoice = useMemo<SalesInvoice>(() => {
     const active = lines.filter((l) => l.product_name.trim() || l.quantity || l.unit_price);
     const totals = calcDocumentTotals(
@@ -327,7 +327,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   ]);
 
   useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllTaxes().then(setTaxes).catch(() => setTaxes([])).finally(() => done("taxes"));
     getMyCompany().then(setCompany).catch(() => setCompany(null));
     if (kind === "down_payment") {
@@ -643,8 +642,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     }
   };
 
-  const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
-  const selectedMitra = mitras.find((m) => m.id === mitraId) ?? null;
+  const selectedMitra = previewMitra;
 
   if (loading) {
     return (
@@ -703,10 +701,15 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         metaFields={
           <>
             <FormField label={tr("Mitra", "Partner")} htmlFor="inv-mitra" required error={errors.mitraId}>
-              <SearchableSelect
+              <RemoteSelect
                 id="inv-mitra"
                 value={mitraId}
-                options={mitraOptions}
+                resource="mitra"
+                companyId={activeCompanyId}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                resolveById={getMitra}
+                toOption={(m) => ({ value: m.id, label: m.name })}
+                onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);
                   if (kind === "down_payment") setLinkedInvoiceId(null);
@@ -906,7 +909,8 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
           mitra={null}
           onClose={() => setAddMitraOpen(false)}
           onSaved={(created) => {
-            setMitras((prev) => [...prev, created]);
+            invalidateRemoteSelectOptions("mitra");
+            setPreviewMitra(created);
             setMitraId(created.id);
             setAddMitraOpen(false);
           }}

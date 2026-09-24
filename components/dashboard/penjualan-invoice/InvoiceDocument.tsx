@@ -52,7 +52,10 @@ export function InvoiceDocument({ invoice, mitra, company, taxByID, variant, tem
   const type = docConfigTypeFor({ kind: invoice.kind, doc });
   const loaded = useDocConfig(type, !config);
   const cfg = config ?? loaded.config;
-  const selfFetchedDownPaymentRef = useDownPaymentRef(invoice, downPaymentRef === undefined);
+  // `doc` is only set when this is an order/purchase-invoice coerced into invoice shape
+  // (asInvoiceShape hardcodes kind:"invoice" on those too) — never a real sales invoice, so a
+  // down-payment lookup for it would just be wasted requests against an id that isn't one.
+  const selfFetchedDownPaymentRef = useDownPaymentRef(invoice, downPaymentRef === undefined && !doc);
   const dpRef = downPaymentRef === undefined ? selfFetchedDownPaymentRef : (downPaymentRef ?? undefined);
   const view = useMemo(
     () => buildInvoiceView({ invoice, mitra, company, taxByID, variant, doc, config: cfg, downPaymentRef: dpRef }),

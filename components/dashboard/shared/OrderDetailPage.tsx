@@ -114,12 +114,14 @@ export default function OrderDetailPage({ kind, id }: { kind: OrderKind; id: str
     );
   }
 
-  const run = async (fn: () => Promise<unknown>, ok: string, fail: string) => {
+  // Confirm/draft/cancel each return the full updated order already — apply it directly instead of
+  // calling load() again, which used to re-fetch mitra/company/taxes too, none of which a status
+  // change ever touches.
+  const run = async (fn: () => Promise<Order>, ok: string, fail: string) => {
     setBusy(true);
     try {
-      await fn();
+      setOrder(await fn());
       toast.success(ok);
-      load();
     } catch (err) {
       toast.error(extractApiError(err, fail));
     } finally {

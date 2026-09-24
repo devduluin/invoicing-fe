@@ -79,6 +79,21 @@ export async function listAllMitra(): Promise<Mitra[]> {
   return res.items;
 }
 
+/** One page of mitra, for RemoteSelect (see components/form/RemoteSelect.tsx) — lazy-fetched only
+ *  when the partner dropdown actually opens, instead of listAllMitra's eager "up to 500 rows on
+ *  every Create/Edit form mount" (which also silently loses anything past row 500). */
+export async function listMitraPage(params: { page: number; search: string; pageSize: number; type?: MitraType }): Promise<{ items: Mitra[]; hasNextPage: boolean }> {
+  const res = await fetchList<Mitra>("/mitra", {
+    page: params.page,
+    limit: params.pageSize,
+    search: params.search || undefined,
+    type: params.type,
+    sort: "name",
+    order: "ASC",
+  });
+  return { items: res.items, hasNextPage: res.meta.hasNextPage };
+}
+
 export async function getMitra(id: string): Promise<Mitra> {
   const { data } = await api.get<Envelope<Mitra>>(`/mitra/${encodeURIComponent(id)}`);
   return data.data;

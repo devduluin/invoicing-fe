@@ -34,10 +34,16 @@ export default function DeliveryNoteDetailPage({ id }: { id: string }) {
     getDeliveryNote(id)
       .then(async (r) => {
         setDoc(r);
-        setMitra(await getMitra(r.mitra_id).catch(() => null));
-        setCompany(await getMyCompany().catch(() => null));
-        setRel(r.sales_order_id ? await getSalesOrder(r.sales_order_id).then((x) => ({ id: x.id, number: x.number })).catch(() => null) : null);
-        setRel2(r.sales_invoice_id ? await getSalesInvoice(r.sales_invoice_id).then((x) => ({ id: x.id, number: x.number })).catch(() => null) : null);
+        const [m, co, so, inv] = await Promise.all([
+          getMitra(r.mitra_id).catch(() => null),
+          getMyCompany().catch(() => null),
+          r.sales_order_id ? getSalesOrder(r.sales_order_id).then((x) => ({ id: x.id, number: x.number })).catch(() => null) : Promise.resolve(null),
+          r.sales_invoice_id ? getSalesInvoice(r.sales_invoice_id).then((x) => ({ id: x.id, number: x.number })).catch(() => null) : Promise.resolve(null),
+        ]);
+        setMitra(m);
+        setCompany(co);
+        setRel(so);
+        setRel2(inv);
       })
       .catch(() => setFailed(true))
       .finally(() => setLoading(false));

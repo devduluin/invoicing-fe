@@ -131,12 +131,14 @@ export default function PurchaseInvoiceDetailPage({ id }: { id: string }) {
   };
   const canRecordPayment = canPay && invoice.status === "confirmed" && outstanding > 0;
 
-  const run = async (fn: () => Promise<unknown>, ok: string, fail: string) => {
+  // Confirm/draft/cancel each return the full updated invoice already — apply it directly instead
+  // of calling load() again, which used to re-fetch payments/mitra/company/taxes too, none of
+  // which a status change ever touches.
+  const run = async (fn: () => Promise<PurchaseInvoice>, ok: string, fail: string) => {
     setBusy(true);
     try {
-      await fn();
+      setInvoice(await fn());
       toast.success(ok);
-      load();
     } catch (err) {
       toast.error(extractApiError(err, fail));
     } finally {

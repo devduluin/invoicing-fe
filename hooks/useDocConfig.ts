@@ -12,6 +12,25 @@ const listeners = new Set<() => void>();
 
 const keyOf = (companyId: string | null | undefined, type: DocConfigType) => `${companyId ?? ""}:${type}`;
 
+/** Shared by useDocConfig and useNewDocumentDefaults so both hit the SAME in-flight/cached
+ *  request for a given (company, type) instead of each firing their own GET — a create page
+ *  renders both (the template preview via useDocConfig, the notes/terms/signature defaults via
+ *  useNewDocumentDefaults) for the identical resource. */
+function fetchDocConfig(companyId: string | null | undefined, type: DocConfigType): Promise<StoredDocConfig> {
+  const k = keyOf(companyId, type);
+  let p = cache.get(k);
+  if (!p) {
+    p = getDocumentConfig(type)
+      .then((r) => r.config)
+      .catch(() => {
+        cache.delete(k);
+        return {} as StoredDocConfig;
+      });
+    cache.set(k, p);
+  }
+  return p;
+}
+
 /** Drop cached configuration (after saving or resetting) and tell mounted documents to refetch. */
 export function invalidateDocConfig(type?: DocConfigType) {
   for (const k of [...cache.keys()]) if (!type || k.endsWith(`:${type}`)) cache.delete(k);
@@ -38,19 +57,7 @@ export function useDocConfig(type: DocConfigType, enabled = true): { config: Res
   useEffect(() => {
     if (!enabled) return;
     let alive = true;
-    const k = keyOf(companyId, type);
-    let p = cache.get(k);
-    if (!p) {
-      // A failed read must not break printing: fall back to the defaults (and try again next time).
-      p = getDocumentConfig(type)
-        .then((r) => r.config)
-        .catch(() => {
-          cache.delete(k);
-          return {} as StoredDocConfig;
-        });
-      cache.set(k, p);
-    }
-    p.then((c) => alive && setStored(c));
+    fetchDocConfig(companyId, type).then((c) => alive && setStored(c));
     return () => {
       alive = false;
     };
@@ -70,9 +77,7 @@ export function useNewDocumentDefaults(type: DocConfigType, isEdit: boolean, app
   useEffect(() => {
     if (isEdit || (typeof window !== "undefined" && new URLSearchParams(window.location.search).has("duplicate_from"))) return;
     let alive = true;
-    getDocumentConfig(type)
-      .then((r) => alive && apply(resolveDocConfig(type, r.config)))
-      .catch(() => {});
+    fetchDocConfig(companyId, type).then((c) => alive && apply(resolveDocConfig(type, c)));
     return () => {
       alive = false;
     };

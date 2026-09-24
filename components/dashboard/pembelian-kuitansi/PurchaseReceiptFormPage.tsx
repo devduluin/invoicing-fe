@@ -9,11 +9,13 @@ import toast from "react-hot-toast";
 
 import PageHeader from "@/components/layouts/page/PageHeader";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
-import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Select, NumberSeparatorInput } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect, Select, NumberSeparatorInput } from "@/components/form";
+import { useAuthStore } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
+import { listMitraPage, getMitra } from "@/services/mitraService";
+import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { listAllPurchaseInvoices, getPurchaseInvoice } from "@/services/purchaseInvoiceService";
 import { listAllBankAccounts, type BankAccount } from "@/services/bankAccountService";
 import {
@@ -45,7 +47,7 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
   // ?dari_invoice prefill, if present) so the form only renders once ALL of
   // them have settled — see SalesReceiptFormPage for why.
   const [pending, setPending] = useState<Set<string>>(() => {
-    const s = new Set<string>(["mitras", "invoices", "bank-accounts"]);
+    const s = new Set<string>(["invoices", "bank-accounts"]);
     if (isEdit) s.add("receipt");
     else s.add("number");
     if (!isEdit && searchParams.get("dari_invoice")) s.add("prefill");
@@ -60,7 +62,7 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
     });
   const loading = pending.size > 0;
 
-  const [mitras, setMitras] = useState<Mitra[]>([]);
+  const activeCompanyId = useAuthStore((s) => s.activeCompanyId);
   const [invoices, setInvoices] = useState<PurchaseInvoice[]>([]);
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
   const [busy, setBusy] = useState(false);
@@ -87,7 +89,6 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
   ]);
 
   useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([])).finally(() => done("mitras"));
     listAllPurchaseInvoices().then(setInvoices).catch(() => setInvoices([])).finally(() => done("invoices"));
     listAllBankAccounts().then(setBankAccounts).catch(() => setBankAccounts([])).finally(() => done("bank-accounts"));
     if (!isEdit) previewPurchaseReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
@@ -198,7 +199,6 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
     setErrors({});
   };
 
-  const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
   // Only bills that can still take a payment (confirmed, something owed) plus the one already linked.
   const owedOf = (i: PurchaseInvoice) => Math.max(0, i.grand_total - i.paid_amount) + (original?.invoiceId === i.id ? original.amount : 0);
   const invoiceOptions = invoices
@@ -237,10 +237,14 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
         metaFields={
           <>
             <FormField label="Partner" htmlFor="kw-mitra" required error={errors.mitraId}>
-              <SearchableSelect
+              <RemoteSelect
                 id="kw-mitra"
                 value={mitraId}
-                options={mitraOptions}
+                resource="mitra"
+                companyId={activeCompanyId}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                resolveById={getMitra}
+                toOption={(m) => ({ value: m.id, label: m.name })}
                 onChange={(v) => {
                   setMitraId(v);
                   setPurchaseInvoiceId("");
@@ -333,7 +337,7 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
           mitra={null}
           onClose={() => setAddMitraOpen(false)}
           onSaved={(created) => {
-            setMitras((prev) => [...prev, created]);
+            invalidateRemoteSelectOptions("mitra");
             setMitraId(created.id);
             setAddMitraOpen(false);
           }}
