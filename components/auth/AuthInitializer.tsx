@@ -104,6 +104,15 @@ export default function AuthInitializer() {
         setStatus("ready");
         return;
       }
+      // On /select-company itself, that page's own auto-pick effect already owns fixing this
+      // (cookie + /me + explicit "ready") — running this repair here too would race it: whichever
+      // finishes second sees a pointer that's already fine and, depending on timing, can leave
+      // status stuck on "loading" since only one of the two paths is guaranteed to still run after
+      // the other's navigation. Only take over here for a page that can't drive its own picker.
+      if (!isDashboardPath(pathname)) {
+        setStatus("ready");
+        return;
+      }
       if (!repairedPointer.current) {
         repairedPointer.current = true;
         setStatus("loading");

@@ -135,7 +135,7 @@ export default function SelectCompanyClient() {
   const router = useRouter();
   // The requested page is untrusted input: only an in-app /dashboard path is followed.
   const redirect = sanitizeRedirect(useSearchParams().get("redirect"));
-  const { companies, setUser, status, name, email, activeCompanyId } = useAuthStore();
+  const { companies, setUser, setStatus, status, name, email, activeCompanyId } = useAuthStore();
   const [switchingId, setSwitchingId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [role, setRole] = useState("");
@@ -181,6 +181,12 @@ export default function SelectCompanyClient() {
         return;
       }
       setUser(me);
+      // This is the moment the app authoritatively knows the active company is valid — declare
+      // ready right here instead of navigating away and hoping AuthInitializer's own background
+      // effect notices the store change and catches up (it usually does, but racing two
+      // independent "fix the active company" paths against each other is how this used to get
+      // stuck on the loading splash until a manual refresh).
+      setStatus("ready");
       router.replace(redirect);
     } catch (err) {
       toast.error(extractApiError(err, tr("Gagal berpindah perusahaan", "Failed to switch company")));
