@@ -58,12 +58,25 @@ export default function AuthInitializer() {
     // middleware.ts already confirmed the SSO cookie is present server-side (that's the only way
     // this page rendered at all) — a missing cookie here means the browser just hasn't flushed a
     // freshly-set cross-subdomain cookie (right after the Launchpad redirect) into document.cookie
-    // for this tick yet. Retry once next tick before concluding the session is really gone.
-    const id = setTimeout(() => {
-      if (readAppToken()) start();
-      else clear();
-    }, 50);
-    return () => clearTimeout(id);
+    // for this tick yet. Poll for a bit before concluding the session is really gone: a single
+    // 50ms retry turned out to not always be enough (the app was falling back to "unauthenticated"
+    // — which CompanyGate then only gets ONE automatic reload for — before the cookie had actually
+    // flushed, leaving the user stuck on the loading splash until they refreshed by hand a moment
+    // later, by which point it had). Checking every 100ms for up to 2s costs nothing once the cookie
+    // is already there (resolves on the very first tick either way).
+    let attempts = 0;
+    const MAX_ATTEMPTS = 20;
+    const id = setInterval(() => {
+      attempts += 1;
+      if (readAppToken()) {
+        clearInterval(id);
+        start();
+      } else if (attempts >= MAX_ATTEMPTS) {
+        clearInterval(id);
+        clear();
+      }
+    }, 100);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {

@@ -30,6 +30,16 @@ const LOGIN_LOGGED_KEY = "invoice-audit-login-logged";
  *  visibly instead of reload-looping. */
 const AUTO_RELOAD_KEY = "invoice-auth-auto-reload";
 
+function autoReloadOnce() {
+  try {
+    if (sessionStorage.getItem(AUTO_RELOAD_KEY) === "1") return;
+    sessionStorage.setItem(AUTO_RELOAD_KEY, "1");
+  } catch {
+    return;
+  }
+  window.location.reload();
+}
+
 export default function CompanyGate({ children }: { children: ReactNode }) {
   const tr = useTr();
   const status = useAuthStore((s) => s.status);
@@ -63,14 +73,20 @@ export default function CompanyGate({ children }: { children: ReactNode }) {
   // really gone, or lets a fresh AuthInitializer mount read the cookie that's there by now).
   useEffect(() => {
     if (status !== "unauthenticated") return;
-    try {
-      if (sessionStorage.getItem(AUTO_RELOAD_KEY) === "1") return;
-      sessionStorage.setItem(AUTO_RELOAD_KEY, "1");
-    } catch {
-      return;
-    }
-    window.location.reload();
+    autoReloadOnce();
   }, [status]);
+
+  // Watchdog for the same class of problem via a different door: launching the app from an
+  // already-signed-in Launchpad tab (a NEW tab, opened via window.open, landing on "/" and
+  // redirected here) never goes through the "unauthenticated" branch above at all — cookies are
+  // present, so it sits in "loading"/"idle" instead, indefinitely, if whatever set them up hasn't
+  // settled yet. Rather than chase that one entry point's exact timing, treat "still not ready
+  // after a few seconds" itself as the signal: one reload, same cap as above so it can't loop.
+  useEffect(() => {
+    if (ready || status === "error") return;
+    const id = setTimeout(autoReloadOnce, 6000);
+    return () => clearTimeout(id);
+  }, [ready, status]);
 
   if (ready) return <>{children}</>;
 
