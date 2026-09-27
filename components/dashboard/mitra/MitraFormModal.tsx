@@ -60,7 +60,7 @@ export default function MitraFormModal({
     address: mitra?.address ?? "",
     is_active: mitra?.is_active ?? true,
   });
-  const [errors, setErrors] = useState<Partial<Record<"name" | "email", string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<"name" | "contact_name" | "email" | "phone", string>>>({});
   const [busy, setBusy] = useState(false);
   // Contact persons are part of this form: edited in place and saved (added / changed / removed)
   // together with the partner by the Save button; Cancel discards them.
@@ -89,7 +89,7 @@ export default function MitraFormModal({
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
-    if (k === "name" || k === "email") setErrors((e) => ({ ...e, [k]: undefined }));
+    if (k === "name" || k === "contact_name" || k === "email" || k === "phone") setErrors((e) => ({ ...e, [k]: undefined }));
   };
 
   useEffect(() => {
@@ -130,7 +130,10 @@ export default function MitraFormModal({
   const submit = async () => {
     const next: typeof errors = {};
     if (!form.name.trim()) next.name = "Company name is required.";
-    if (form.email && !EMAIL_RE.test(form.email)) next.email = "Invalid email format.";
+    if (!form.contact_name.trim()) next.contact_name = "PIC name is required.";
+    if (!form.email.trim()) next.email = "PIC email is required.";
+    else if (!EMAIL_RE.test(form.email.trim())) next.email = "Invalid email format.";
+    if (!form.phone.replace(/\D/g, "")) next.phone = "PIC phone is required.";
     setErrors(next);
     if (Object.keys(next).length) {
       setTab("perusahaan");
@@ -294,10 +297,11 @@ export default function MitraFormModal({
                 />
               </FormField>
 
-              <FormField label="Contact Name (PIC)">
+              <FormField label="Contact Name (PIC)" required error={errors.contact_name}>
                 <Input
                   placeholder="e.g. Budi Santoso"
                   value={form.contact_name}
+                  error={!!errors.contact_name}
                   onChange={(e) => set("contact_name", e.target.value)}
                 />
               </FormField>
@@ -311,7 +315,7 @@ export default function MitraFormModal({
               </FormField>
 
               <div className="grid gap-4 sm:grid-cols-2">
-                <FormField label="Email" error={errors.email}>
+                <FormField label="Email (PIC)" required error={errors.email}>
                   <Input
                     type="email"
                     placeholder="hello@partner.com"
@@ -320,12 +324,13 @@ export default function MitraFormModal({
                     onChange={(e) => set("email", e.target.value)}
                   />
                 </FormField>
-                <FormField label="Primary Phone No.">
+                <FormField label="Phone (PIC)" required error={errors.phone}>
                   <Input
                     inputMode="numeric"
                     prefix="+62"
                     placeholder="812xxxxxxxx"
                     value={form.phone}
+                    error={!!errors.phone}
                     onChange={(e) => set("phone", localPhone(e.target.value))}
                   />
                 </FormField>

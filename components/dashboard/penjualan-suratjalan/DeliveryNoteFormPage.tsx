@@ -273,7 +273,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
         toast.success("Delivery note added");
       }
       markClean();
-      router.push(isEdit ? `${"/dashboard/penjualan/surat-jalan"}/${savedId}` : `${"/dashboard/penjualan/surat-jalan"}/${savedId}/edit`);
+      router.push(`${"/dashboard/penjualan/surat-jalan"}/${savedId}`); // detail of the saved record (id from the create response)
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save delivery note"));
     } finally {

@@ -58,6 +58,17 @@ describe("buildInvoiceView — the shared, template-agnostic data", () => {
     expect(v.summary.find((r) => r.key === "outstanding")?.value).toBe("Rp0");
   });
 
+  it("subtracts the applied down payment from the printed outstanding (total - DP - paid)", () => {
+    const v = buildInvoiceView({
+      invoice: { ...invoice, grand_total: 10_000_000, paid_amount: 2_000_000, applied_dp_amount: 3_000_000 },
+      mitra: null, company: null, taxByID: new Map(),
+    });
+    const rows = Object.fromEntries(v.summary.map((r) => [r.key, r.value]));
+    expect(rows.downPayment).toBe("Rp3.000.000");
+    expect(rows.paid).toBe("Rp2.000.000");
+    expect(rows.outstanding).toBe("Rp5.000.000");
+  });
+
   it("omits the shipping row when there is no shipping cost", () => {
     const v = buildInvoiceView({ invoice: { ...invoice, shipping_cost: 0 }, mitra: null, company: null, taxByID: new Map() });
     expect(v.summary.some((r) => r.key === "shipping")).toBe(false);

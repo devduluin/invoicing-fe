@@ -145,7 +145,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
     getSalesInvoice(invoiceId)
       .then((invoice) => {
         setMitraId(invoice.mitra_id);
-        const remaining = Math.max(0, invoice.grand_total - invoice.paid_amount);
+        const remaining = invoice.outstanding_amount;
         setAllocations([{ key: crypto.randomUUID(), salesInvoiceId: invoice.id, amount: remaining || null }]);
         toast.success(`Auto-filled from invoice ${invoice.number}`);
       })
@@ -156,7 +156,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
 
   const invoiceByID = useMemo(() => new Map(invoices.map((i) => [i.id, i])), [invoices]);
   const remainingOf = (inv: SalesInvoice) =>
-    Math.max(0, inv.grand_total - inv.paid_amount + (originalAllocated.get(inv.id) ?? 0));
+    inv.outstanding_amount + (originalAllocated.get(inv.id) ?? 0);
 
   const updateRow = (key: string, patch: Partial<AllocationRow>) =>
     setAllocations((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -220,7 +220,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
         toast.success("Receipt added");
       }
       markClean();
-      router.push(isEdit ? `${"/dashboard/penjualan/kuitansi"}/${savedId}` : `${"/dashboard/penjualan/kuitansi"}/${savedId}/edit`);
+      router.push(`${"/dashboard/penjualan/kuitansi"}/${savedId}`); // detail of the saved record (id from the create response)
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save receipt"));
     } finally {

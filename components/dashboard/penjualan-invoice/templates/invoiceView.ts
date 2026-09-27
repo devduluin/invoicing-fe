@@ -1,4 +1,6 @@
 import type { SalesInvoice } from "@/services/salesInvoiceService";
+import { salesBalance } from "@/lib/salesBalance";
+import { paymentTermLabel } from "@/lib/paymentTerms";
 import type { Mitra } from "@/services/mitraService";
 import type { Company } from "@/services/companyService";
 import type { Tax } from "@/services/taxService";
@@ -40,6 +42,7 @@ export interface InvoiceLabels {
   shipping: string;
   total: string;
   totalPaid: string;
+  downPayment: string;
   outstanding: string;
   notes: string;
   terms: string;
@@ -69,6 +72,7 @@ const LABELS: Record<InvoiceLang, InvoiceLabels> = {
     shipping: "Biaya Kirim",
     total: "Total",
     totalPaid: "Total Terbayar",
+    downPayment: "Uang Muka",
     outstanding: "Sisa Tagihan",
     notes: "Keterangan",
     terms: "Syarat & Ketentuan",
@@ -96,6 +100,7 @@ const LABELS: Record<InvoiceLang, InvoiceLabels> = {
     shipping: "Shipping",
     total: "Total",
     totalPaid: "Total Paid",
+    downPayment: "Down Payment",
     outstanding: "Balance Due",
     notes: "Notes",
     terms: "Terms & Conditions",
@@ -131,7 +136,7 @@ export interface InvoiceViewMetaRow {
 }
 
 export interface InvoiceViewSummaryRow {
-  key: "subtotal" | "discount" | "tax" | "shipping" | "total" | "paid" | "outstanding" | "paymentStatus";
+  key: "subtotal" | "discount" | "tax" | "shipping" | "total" | "downPayment" | "paid" | "outstanding" | "paymentStatus";
   label: string;
   value: string;
   /** Rendered heavier (the grand total / amount due). */
@@ -258,6 +263,7 @@ export function buildInvoiceView({
     shipping: cfg.label("sum.shipping"),
     total: cfg.label("sum.total"),
     totalPaid: has("sum.paid") ? cfg.label("sum.paid") : LABELS[lang].totalPaid,
+    downPayment: LABELS[lang].downPayment,
     outstanding: has("sum.outstanding") ? cfg.label("sum.outstanding") : LABELS[lang].outstanding,
     notes: cfg.notes.label,
     terms: cfg.terms.label,
@@ -299,7 +305,8 @@ export function buildInvoiceView({
 
   const discountTotal = (invoice.discount_total ?? 0) + (invoice.additional_discount_amount ?? 0);
   const paid = invoice.paid_amount ?? 0;
-  const outstanding = Math.max(0, (invoice.grand_total ?? 0) - paid);
+  const appliedDp = invoice.applied_dp_amount ?? 0;
+  const { outstanding, status: paymentState } = salesBalance(invoice.grand_total ?? 0, appliedDp, paid);
   const shipping = invoice.shipping_cost ?? 0;
 
   const statusText: Record<string, { id: string; en: string }> = {
@@ -307,7 +314,6 @@ export function buildInvoiceView({
     partially_paid: { id: "Dibayar sebagian", en: "Partially paid" },
     paid: { id: "Lunas", en: "Paid" },
   };
-  const paymentState = paid >= (invoice.grand_total ?? 0) && (invoice.grand_total ?? 0) > 0 ? "paid" : paid > 0 ? "partially_paid" : "unpaid";
 
   const summary: InvoiceViewSummaryRow[] = [
     ...(cfg.visible("sum.subtotal") ? [{ key: "subtotal" as const, label: labels.subtotal, value: formatRupiah(invoice.subtotal ?? 0) }] : []),
@@ -318,6 +324,7 @@ export function buildInvoiceView({
     ...(isOrder
       ? []
       : [
+          ...(appliedDp > 0 ? [{ key: "downPayment" as const, label: labels.downPayment, value: formatRupiah(appliedDp) }] : []),
           ...(cfg.visible("sum.paid") ? [{ key: "paid" as const, label: labels.totalPaid, value: formatRupiah(paid) }] : []),
           ...(cfg.visible("sum.outstanding") ? [{ key: "outstanding" as const, label: labels.outstanding, value: formatRupiah(outstanding), emphasis: true }] : []),
           ...(cfg.visible("sum.paymentStatus") ? [{ key: "paymentStatus" as const, label: cfg.label("sum.paymentStatus"), value: statusText[paymentState][lang] }] : []),
@@ -340,6 +347,7 @@ export function buildInvoiceView({
       { key: "no", label: labels.invoiceNo, value: invoice.number },
       ...(cfg.visible("hdr.reference") && invoice.ref_no ? [{ key: "ref", label: labels.reference, value: invoice.ref_no }] : []),
       { key: "date", label: labels.date, value: formatShortDate(invoice.date) },
+      ...(!isOrder && invoice.payment_term ? [{ key: "term", label: lang === "id" ? "Termin" : "Terms", value: paymentTermLabel(invoice.payment_term, lang) }] : []),
       ...(!isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? [{ key: "due", label: labels.dueDate, value: formatShortDate(invoice.due_date) }] : []),
     ],
     columns: cfg.columns().map((key) => ({ key, label: cfg.label(key), align: key === "col.product" ? ("left" as const) : ("right" as const) })),

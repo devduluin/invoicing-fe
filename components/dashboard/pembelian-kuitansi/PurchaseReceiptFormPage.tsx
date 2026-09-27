@@ -173,7 +173,7 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
         toast.success("Receipt added");
       }
       markClean();
-      router.push(isEdit ? `${"/dashboard/pembelian/kuitansi"}/${savedId}` : `${"/dashboard/pembelian/kuitansi"}/${savedId}/edit`);
+      router.push(`${"/dashboard/pembelian/kuitansi"}/${savedId}`); // detail of the saved record (id from the create response)
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save receipt"));
     } finally {

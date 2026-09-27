@@ -68,7 +68,6 @@ export function useDocumentTemplate({
     if (isEdit && locked && id) {
       try {
         await save(id, next);
-        toast.success(tr("Template disimpan", "Template saved"));
       } catch (err) {
         setTemplate(prev);
         toast.error(extractApiError(err, tr("Gagal mengganti template", "Failed to change the template")));

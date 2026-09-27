@@ -45,6 +45,8 @@ export interface SalesInvoice {
   ref_no?: string;
   notes?: string;
   terms?: string;
+  /** Terms of Payment key (cod, net_7 … net_60, custom); empty = none. */
+  payment_term?: string;
   template?: InvoiceTemplateId;
   status: SalesInvoiceStatus;
   subtotal: number;
@@ -61,10 +63,11 @@ export interface SalesInvoice {
   attachment_name?: string;
   signature_data?: string;
   stamp_duty?: boolean;
-  // Recomputed server-side only (SalesPaymentRepository.Verify) — never
-  // sent in SalesInvoiceInput.
+  // Server-derived balance parts — never sent in SalesInvoiceInput.
   paid_amount: number;
-  /** max(grand_total - paid_amount, 0), computed by the server on every read. */
+  /** Sum of the CONFIRMED down payments linked to this invoice (draft/cancelled/deleted ones don't count). */
+  applied_dp_amount: number;
+  /** max(grand_total - applied_dp_amount - paid_amount, 0), computed by the server on every read. */
   outstanding_amount: number;
   payment_status: SalesInvoicePaymentStatus;
   lines: SalesInvoiceLine[];
@@ -84,6 +87,7 @@ export interface SalesInvoiceInput {
   ref_no?: string;
   notes?: string;
   terms?: string;
+  payment_term?: string;
   template?: InvoiceTemplateId;
   additional_discount_type?: DiscountType;
   additional_discount_value?: number;

@@ -2,7 +2,7 @@
 
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Copy, FilePlus2, Trash2, Package, Pencil, Plus, Truck, Wallet } from "lucide-react";
+import { Copy, FilePlus2, Trash2, Package, Pencil, Truck, Wallet } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Card } from "@/components/ui";
@@ -12,7 +12,6 @@ import { useTr } from "@/lib/useTr";
 import { effectiveStatus, useInvoiceStatusLabels } from "./statusBadges";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import DocumentHeaderActions, { type HeaderAction } from "../shared/DocumentHeaderActions";
-import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { useAuthStore, hasPermission } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
@@ -36,18 +35,16 @@ import { getSalesOrder, type SalesOrder } from "@/services/salesOrderService";
 import { listAllDeliveryNotesBySalesOrder, type DeliveryNote } from "@/services/deliveryNoteService";
 import {
   listAllSalesPaymentsForInvoice,
-  verifySalesPayment,
-  SALES_PAYMENT_STATUS_LABEL,
   type SalesPayment,
 } from "@/services/salesPaymentService";
 import { PAYMENT_METHOD_LABEL, listAllSalesReceiptsForInvoice, type SalesReceipt } from "@/services/salesReceiptService";
 import ConnectedDocuments from "../shared/ConnectedDocuments";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import { paymentTermLabel } from "@/lib/paymentTerms";
 import { InvoiceDocument } from "./InvoiceDocument";
 import { ScaledSheet } from "./templates/ScaledSheet";
 import { InvoiceTemplatePanel } from "./templates/InvoiceTemplatePanel";
 import { resolveInvoiceTemplate, type InvoiceTemplateId } from "./templates/types";
-import SalesPaymentFormModal from "./SalesPaymentFormModal";
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
@@ -63,9 +60,7 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   const cfg = KIND_CONFIG[kind];
   const permissions = useAuthStore((s) => s.permissions);
   const canUpdate = hasPermission(permissions, "invoice-sales-invoice-update");
-  const canCreatePayment = hasPermission(permissions, "invoice-sales-payment-create");
   const canUpdateReceipt = hasPermission(permissions, "invoice-receipt-update");
-  const canVerifyPayment = hasPermission(permissions, "invoice-sales-payment-verify");
   const canCreateReceipt = hasPermission(permissions, "invoice-receipt-create");
   const canCreateInvoice = hasPermission(permissions, "invoice-sales-invoice-create");
   const canDelete = hasPermission(permissions, "invoice-sales-invoice-delete");
@@ -79,14 +74,14 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   const [company, setCompany] = useState<Company | null>(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
   const [order, setOrder] = useState<SalesOrder | null>(null);
+  // A down payment's source when it is an invoice (its Sales Order source is `order` above).
+  const [sourceInvoice, setSourceInvoice] = useState<SalesInvoice | null>(null);
   const [deliveryNotes, setDeliveryNotes] = useState<DeliveryNote[]>([]);
   const [payments, setPayments] = useState<SalesPayment[]>([]);
   // Receipts (Kuitansi) allocated to this invoice — the other way money gets applied.
   const [receipts, setReceipts] = useState<SalesReceipt[]>([]);
 
   const [tab, setTab] = useState<"view" | "payments">("view");
-  const [paymentModalOpen, setPaymentModalOpen] = useState(false);
-  const [verifyTarget, setVerifyTarget] = useState<SalesPayment | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -104,11 +99,14 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
         setTaxes(taxList);
         setPayments(paymentList);
         setReceipts(receiptList);
-        const [m, order, dns] = await Promise.all([
+        const [m, order, dns, srcInv] = await Promise.all([
           getMitra(inv.mitra_id).catch(() => null),
           inv.sales_order_id ? getSalesOrder(inv.sales_order_id).catch(() => null) : Promise.resolve(null),
           inv.sales_order_id ? listAllDeliveryNotesBySalesOrder(inv.sales_order_id).catch(() => []) : Promise.resolve([]),
+          // Only a down payment names an invoice as its source; a regular invoice's link points the other way.
+          inv.kind === "down_payment" && inv.linked_invoice_id ? getSalesInvoice(inv.linked_invoice_id).catch(() => null) : Promise.resolve(null),
         ]);
+        setSourceInvoice(srcInv);
         setMitra(m);
         setOrder(order);
         setDeliveryNotes(dns);
@@ -139,7 +137,8 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
     );
   }
 
-  const remaining = Math.max(0, invoice.grand_total - invoice.paid_amount);
+  // The balance is the server's number (Total - Applied Down Payment - Paid); never recomputed here.
+  const remaining = invoice.outstanding_amount;
   const effective = effectiveStatus(invoice);
   const amountOnThisInvoice = (r: SalesReceipt) =>
     (r.allocations ?? []).filter((a) => a.sales_invoice_id === invoice.id).reduce((sum, a) => sum + a.amount, 0);
@@ -164,14 +163,11 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
     setInvoice({ ...invoice, template: next });
     try {
       setInvoice(await setSalesInvoiceTemplate(invoice.id, next));
-      toast.success(tr("Template disimpan", "Template saved"));
     } catch (err) {
       setInvoice({ ...invoice, template: prev });
       toast.error(extractApiError(err, tr("Gagal mengganti template", "Failed to change the template")));
     }
   };
-
-  const showManualPayment = canCreatePayment && invoice.status === "confirmed" && remaining > 0;
 
   // Edit is available in every status (paid, partially paid, issued…); permission is the only gate.
   const canRecordReceipt = canCreateReceipt && invoice.status === "confirmed" && remaining > 0;
@@ -195,9 +191,6 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
   const headerActions: HeaderAction[] = [
     ...(canUpdate ? [{ key: "edit", label: tr("Ubah", "Edit"), icon: <Pencil aria-hidden />, onSelect: () => router.push(`${cfg.basePath}/${id}/edit`) }] : []),
     ...createActions.map((a) => ({ key: a.href, label: a.label, icon: <a.icon aria-hidden />, onSelect: () => router.push(a.href), section: createDocLabel })),
-    ...(showManualPayment
-      ? [{ key: "manual-payment", label: tr("Tambah pembayaran manual", "Add manual payment"), icon: <Plus aria-hidden />, onSelect: () => setPaymentModalOpen(true) }]
-      : []),
     ...(canRecordReceipt
       ? [{ key: "record-payment", label: tr("Catat Pembayaran", "Record Payment"), icon: <Wallet aria-hidden />, onSelect: () => router.push(`/dashboard/penjualan/kuitansi/add?dari_invoice=${id}`) }]
       : []),
@@ -230,9 +223,23 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
       <div className="grid overflow-hidden rounded-xl border border-border bg-card shadow-card lg:grid-cols-[minmax(0,1fr)_260px]">
         <div className="grid grid-cols-2 gap-x-5 gap-y-2.5 px-4 py-3 sm:grid-cols-4">
           <SummaryField label={tr("Mitra", "Partner")} value={mitra?.name ?? "-"} />
+          {kind === "down_payment" && (
+            <SummaryField
+              label={tr("Sumber", "Source")}
+              value={sourceInvoice?.number ?? order?.number ?? "-"}
+              href={sourceInvoice ? `/dashboard/penjualan/invoice/${sourceInvoice.id}` : order ? `/dashboard/penjualan/order/${order.id}` : undefined}
+            />
+          )}
           <SummaryField label={tr("Tanggal", "Date")} value={formatDateStyle(invoice.date)} />
+          {invoice.payment_term && <SummaryField label={tr("Termin Pembayaran", "Terms of Payment")} value={tr(paymentTermLabel(invoice.payment_term, "id"), paymentTermLabel(invoice.payment_term, "en"))} />}
           <SummaryField label={tr("Jatuh Tempo", "Due Date")} value={invoice.due_date ? formatDateStyle(invoice.due_date) : "-"} />
           <SummaryField label={tr("Total Tagihan", "Total")} value={money.format(invoice.grand_total)} />
+          {kind === "invoice" && invoice.applied_dp_amount > 0 && (
+            <SummaryField label={tr("Uang Muka", "Down Payment")} value={money.format(invoice.applied_dp_amount)} />
+          )}
+          {kind === "invoice" && invoice.paid_amount > 0 && (
+            <SummaryField label={tr("Sudah Dibayar", "Paid")} value={money.format(invoice.paid_amount)} />
+          )}
         </div>
         <div className="overview-gradient border-t border-[var(--tint-border)] px-4 py-3 lg:border-t-0 lg:border-l">
           <div className="text-xs font-semibold tracking-wide text-primary-ink uppercase">{tr("Sisa Tagihan", "Balance Due")}</div>
@@ -295,17 +302,6 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
                             <Status status="paid" label={tr("Terverifikasi", "Verified")} />
                           ) : (
                             <Status status="pending" label={tr("Menunggu", "Pending")} />
-                          )}
-                        </td>
-                        <td className="px-4 py-2.5 text-right">
-                          {p.status === "pending" && canVerifyPayment && (
-                            <button
-                              type="button"
-                              onClick={() => setVerifyTarget(p)}
-                              className="rounded-lg px-2 py-1 text-xs font-semibold text-primary-ink hover:bg-secondary"
-                            >
-                              {tr("Verifikasi", "Verify")}
-                            </button>
                           )}
                         </td>
                       </tr>
@@ -390,51 +386,23 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
         }}
         onClose={() => setDeleteOpen(false)}
       />
-
-      {paymentModalOpen && (
-        <SalesPaymentFormModal
-          invoice={invoice}
-          onClose={() => setPaymentModalOpen(false)}
-          onSaved={() => {
-            setPaymentModalOpen(false);
-            setTab("payments");
-            load();
-          }}
-        />
-      )}
-
-      <ConfirmDeleteModal
-        open={!!verifyTarget}
-        title="Verify this payment?"
-        description={
-          verifyTarget
-            ? `Mark ${verifyTarget.number} (${money.format(verifyTarget.amount)}) as verified. This updates the invoice's paid amount and can't be undone.`
-            : undefined
-        }
-        confirmLabel="Verify"
-        destructive={false}
-        onClose={() => setVerifyTarget(null)}
-        onConfirm={async () => {
-          if (!verifyTarget) return;
-          try {
-            await verifySalesPayment(verifyTarget.id);
-            toast.success("Payment verified");
-            setVerifyTarget(null);
-            load();
-          } catch (err) {
-            toast.error(extractApiError(err, "Failed to verify payment"));
-          }
-        }}
-      />
     </div>
   );
 }
 
-function SummaryField({ label, value }: { label: string; value: string }) {
+function SummaryField({ label, value, href }: { label: string; value: string; href?: string }) {
   return (
     <div>
       <div className="text-xs font-medium text-slate-500">{label}</div>
-      <div className="mt-0.5 truncate text-sm font-semibold text-slate-900">{value}</div>
+      <div className="mt-0.5 truncate text-sm font-semibold text-slate-900">
+        {href ? (
+          <a href={href} className="text-primary-ink hover:underline">
+            {value}
+          </a>
+        ) : (
+          value
+        )}
+      </div>
     </div>
   );
 }

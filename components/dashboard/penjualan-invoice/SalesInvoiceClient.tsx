@@ -88,7 +88,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
 
   const goTo = (id: string) => router.push(`${basePath}/${id}`);
   const goToEdit = (id: string) => router.push(`${basePath}/${id}/edit`);
-  const create = () => (isDP ? setChoiceOpen(true) : router.push(`${basePath}/add`));
+  const create = () => setChoiceOpen(true);
 
   const view = currentView(list.params);
   const setView = (v: View) => list.updateParams({ ...CLEARED, ...VIEW_PARAMS[v], page: 1 });
@@ -243,7 +243,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         onClose={() => setConfirm(null)}
       />
 
-      {choiceOpen && <DownPaymentInvoiceChoiceModal onClose={() => setChoiceOpen(false)} />}
+      {choiceOpen && <DownPaymentInvoiceChoiceModal kind={kind} onClose={() => setChoiceOpen(false)} />}
     </>
   );
 }

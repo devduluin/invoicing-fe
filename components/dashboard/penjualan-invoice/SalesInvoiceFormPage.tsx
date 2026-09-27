@@ -11,18 +11,22 @@ import { Status } from "@/components/ui/StatusBadge";
 import { useTr } from "@/lib/useTr";
 import { useInvoiceStatusLabels } from "./statusBadges";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect } from "@/components/form";
+import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect, NumberSeparatorInput } from "@/components/form";
+import { Select } from "@/components/form/Select";
+import { PAYMENT_TERMS, dueDateFor, paymentTermDays } from "@/lib/paymentTerms";
 import { extractApiError } from "@/lib/apiError";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listMitraPage, getMitra, type Mitra } from "@/services/mitraService";
-import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
+import { invalidateRemoteSelectOptions, primeRemoteSelectItem } from "@/hooks/useRemoteSelectOptions";
+import { salesBalance } from "@/lib/salesBalance";
+import SourceDocumentSelect, { SOURCE_RESOURCE } from "../shared/SourceDocumentSelect";
+import { encodeSource, type SourceDoc, type SourceRef } from "@/services/sourceDocumentService";
 import { listAllTaxes, type Tax } from "@/services/taxService";
-import { getSalesOrder } from "@/services/salesOrderService";
+import { getSalesOrder, type SalesOrder } from "@/services/salesOrderService";
 import { getMyCompany, type Company } from "@/services/companyService";
 import {
   getSalesInvoice,
-  listAllSalesInvoices,
   previewSalesInvoiceNumber,
   createSalesInvoice,
   updateSalesInvoice,
@@ -56,6 +60,7 @@ import { useDirtyForm } from "@/hooks/useDirtyForm";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const noop = () => {};
+const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
 const KIND_LABEL: Record<SalesInvoiceKind, { title: string; breadcrumb: string; basePath: string }> = {
   invoice: { title: "Sales Invoice", breadcrumb: "Sales Invoices", basePath: "/dashboard/penjualan/invoice" },
@@ -85,6 +90,13 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const searchParams = useSearchParams();
   const isEdit = mode === "edit";
   const label = KIND_LABEL[kind];
+  // A Down Payment is ONE amount the user types, not the source's product lines. This gives it the
+  // single description line (quantity 1, price left for the user) that carries that amount.
+  const dpLine = (sourceNumber: string): EditableLine => ({
+    ...emptyLine(),
+    product_name: tr(`Uang Muka ${sourceNumber}`, `Down Payment of ${sourceNumber}`),
+    quantity: 1,
+  });
 
   // Tracks every initial-load fetch (base lists + whichever prefill source
   // applies) so the form only renders once ALL of them have settled — e.g.
@@ -93,7 +105,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   // once the Partner dropdown is opened, never blocking initial render.
   const [pending, setPending] = useState<Set<string>>(() => {
     const s = new Set<string>(["taxes"]);
-    if (kind === "down_payment") s.add("linkable-invoices");
     if (isEdit) {
       s.add("entity");
     } else {
@@ -120,7 +131,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const [busy, setBusy] = useState(false);
   const [previewMitra, setPreviewMitra] = useState<Mitra | null>(null);
   const [taxes, setTaxes] = useState<Tax[]>([]);
-  const [linkableInvoices, setLinkableInvoices] = useState<SalesInvoice[]>([]);
+  const [sourceDoc, setSourceDoc] = useState<SourceDoc | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
   const [addMitraOpen, setAddMitraOpen] = useState(false);
 
@@ -133,6 +144,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(todayISO());
   const [dueDate, setDueDate] = useState("");
+  const [paymentTerm, setPaymentTerm] = useState("");
   const [refNo, setRefNo] = useState("");
   const [notes, setNotes] = useState("");
   const [terms, setTerms] = useState("");
@@ -155,6 +167,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const permissions = useAuthStore((st) => st.permissions);
   const activeCompanyId = useAuthStore((st) => st.activeCompanyId);
   const canChangeIssuedTemplate = hasPermission(permissions, "invoice-sales-invoice-update");
+  const [appliedDpAmount, setAppliedDpAmount] = useState(0);
   const [paidAmount, setPaidAmount] = useState(0);
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string; dueDate?: string }>({});
 
@@ -172,6 +185,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       number,
       date,
       dueDate,
+      paymentTerm,
       refNo,
       notes,
       terms,
@@ -200,6 +214,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     setNumber(snap.number);
     setDate(snap.date);
     setDueDate(snap.dueDate);
+    setPaymentTerm(snap.paymentTerm);
     setRefNo(snap.refNo);
     setNotes(snap.notes);
     setTerms(snap.terms);
@@ -244,7 +259,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     if (isEdit && readOnly && id) {
       try {
         await setSalesInvoiceTemplate(id, next);
-        toast.success(tr("Template disimpan", "Template saved"));
       } catch (err) {
         setTemplate(prev);
         toast.error(extractApiError(err, tr("Gagal mengganti template", "Failed to change the template")));
@@ -279,6 +293,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       number: number.trim() || "—",
       date,
       due_date: dueDate || undefined,
+      payment_term: paymentTerm || undefined,
       ref_no: refNo.trim() || undefined,
       notes: notes.trim() || undefined,
       terms: terms.trim() || undefined,
@@ -293,7 +308,8 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       signature_data: signatureData || undefined,
       stamp_duty: stampDuty,
       paid_amount: paidAmount,
-      outstanding_amount: Math.max(0, totals.grandTotal - paidAmount),
+      applied_dp_amount: appliedDpAmount,
+      outstanding_amount: salesBalance(totals.grandTotal, appliedDpAmount, paidAmount).outstanding,
       payment_status: "unpaid",
       lines: active.map((l) => ({
         id: l.key,
@@ -329,12 +345,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   useEffect(() => {
     listAllTaxes().then(setTaxes).catch(() => setTaxes([])).finally(() => done("taxes"));
     getMyCompany().then(setCompany).catch(() => setCompany(null));
-    if (kind === "down_payment") {
-      listAllSalesInvoices("invoice")
-        .then(setLinkableInvoices)
-        .catch(() => setLinkableInvoices([]))
-        .finally(() => done("linkable-invoices"));
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -349,6 +359,15 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit]);
 
+  // Create mode + ?mitra=<id> → the partner already chosen in the Down Payment entry modal
+  // ("Create New"): fill it in so it is never picked twice. The select resolves its label by id.
+  useEffect(() => {
+    if (isEdit || kind !== "down_payment") return;
+    const m = searchParams.get("mitra");
+    if (m) setMitraId(m);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEdit]);
+
   // Create mode + ?linked_invoice=<id> → the down-payment invoice was
   // started from "Pilih Invoice" in DownPaymentInvoiceChoiceModal: pre-fill
   // the partner and pre-select the linked invoice.
@@ -358,37 +377,72 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     if (!invoiceId) return;
     getSalesInvoice(invoiceId)
       .then((source) => {
+        // The selector resolves its label from this same record: hand it over so it isn't fetched twice.
+        primeRemoteSelectItem(SOURCE_RESOURCE, activeCompanyId, encodeSource({ type: "sales_invoice", id: source.id }), { type: "sales_invoice", doc: source } satisfies SourceDoc);
         setLinkedInvoiceId(source.id);
         setMitraId(source.mitra_id);
+        setLines([dpLine(source.number)]);
+        adoptTerm(source.payment_term);
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load invoice")))
       .finally(() => done("prefill"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEdit]);
 
-  // Create mode + ?dari_order=<id> → pre-fill mitra & lines from that order.
+  // Terms of Payment carried over from a source document: the term itself, and the due date it implies.
+  const adoptTerm = (term: string | undefined, on?: string) => {
+    setPaymentTerm(term ?? "");
+    const due = term ? dueDateFor(term, on || date) : undefined;
+    if (due) setDueDate(due);
+  };
+
+  // The ONE place an order fills an invoice — used by ?dari_order=<id> and by the in-form order picker,
+  // so the two can never drift. Everything the order knows is carried over; the amounts follow the order.
+  const applyOrder = (order: SalesOrder) => {
+    setSalesOrderId(order.id);
+    setMitraId(order.mitra_id);
+    setErrors((prev) => ({ ...prev, mitraId: undefined }));
+    primeRemoteSelectItem(SOURCE_RESOURCE, activeCompanyId, encodeSource({ type: "sales_order", id: order.id }), { type: "sales_order", doc: order } satisfies SourceDoc);
+    setSourceDoc({ type: "sales_order", doc: order });
+    if (kind === "down_payment") {
+      // Down Payment from an order: link + partner only; the amount is the user's to enter.
+      setLines([dpLine(order.number)]);
+      return;
+    }
+    if (order.contact_person_id) {
+      setContactPersonId(order.contact_person_id);
+      setContactInfo({ name: order.contact_name, position: order.contact_position, phone: order.contact_phone, email: order.contact_email });
+    }
+    if (order.ref_no) setRefNo(order.ref_no);
+    if (order.notes) setNotes(order.notes);
+    setAdditionalDiscountType(order.additional_discount_type ?? "percent");
+    setAdditionalDiscountValue(order.additional_discount_value || null);
+    setShipFrom(order.ship_from ?? "");
+    setSalesperson(order.salesperson ?? "");
+    if (order.lines.length) {
+      setLines(
+        order.lines.map((l) => ({
+          key: crypto.randomUUID(),
+          product_name: l.product_name,
+          description: l.description ?? "",
+          quantity: l.quantity,
+          unit_price: l.unit_price,
+          discount_type: l.discount_type ?? "percent",
+          discount_value: l.discount_value || null,
+          tax_ids: l.tax_ids ?? [],
+        })),
+      );
+    }
+  };
+
+  // Create mode + ?dari_order=<id> → pre-fill everything from that order.
   useEffect(() => {
     if (isEdit) return;
     const orderId = searchParams.get("dari_order");
     if (!orderId) return;
     getSalesOrder(orderId)
       .then((order) => {
-        setSalesOrderId(order.id);
-        setMitraId(order.mitra_id);
-        if (order.lines.length) {
-          setLines(
-            order.lines.map((l) => ({
-              key: crypto.randomUUID(),
-              product_name: l.product_name,
-              description: l.description ?? "",
-              quantity: l.quantity,
-              unit_price: l.unit_price,
-              discount_type: l.discount_type ?? "percent",
-              discount_value: l.discount_value || null,
-              tax_ids: l.tax_ids ?? [],
-            })),
-          );
-        }
+        applyOrder(order);
         toast.success(`Auto-filled from order ${order.number}`);
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load sales order")))
@@ -483,6 +537,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         setNumber(invoice.number);
         setDate(invoice.date.slice(0, 10));
         setDueDate(invoice.due_date ? invoice.due_date.slice(0, 10) : "");
+        setPaymentTerm(invoice.payment_term ?? "");
         setRefNo(invoice.ref_no ?? "");
         setNotes(invoice.notes ?? "");
         setTerms(invoice.terms ?? "");
@@ -498,6 +553,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         setStampDuty(invoice.stamp_duty ?? false);
         setTemplate(resolveInvoiceTemplate(invoice.template));
         setPaidAmount(invoice.paid_amount ?? 0);
+        setAppliedDpAmount(invoice.applied_dp_amount ?? 0);
         setLines(
           invoice.lines.length
             ? invoice.lines.map((l) => ({
@@ -534,6 +590,28 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     if (active.length < 1) {
       toast.error("An invoice must have at least 1 line");
       return null;
+    }
+    if (kind === "down_payment") {
+      const total = calcDocumentTotals(
+        active,
+        taxes,
+        { type: additionalDiscountType, value: additionalDiscountValue, onTypeChange: noop, onValueChange: noop },
+        { value: shippingCost, onChange: noop },
+      ).grandTotal;
+      if (!(total > 0)) {
+        toast.error(tr("Jumlah uang muka harus lebih dari 0", "Down payment amount must be greater than 0"));
+        return null;
+      }
+      // Only an invoice source has an outstanding to respect; an order has none, so nothing is invented.
+      if (sourceDoc?.type === "sales_invoice" && total > sourceDoc.doc.outstanding_amount + 0.005) {
+        toast.error(
+          tr(
+            `Jumlah uang muka melebihi sisa tagihan invoice sumber (${money.format(sourceDoc.doc.outstanding_amount)})`,
+            `Down payment exceeds the source invoice's outstanding (${money.format(sourceDoc.doc.outstanding_amount)})`,
+          ),
+        );
+        return null;
+      }
     }
     for (let i = 0; i < active.length; i++) {
       const l = active[i];
@@ -595,6 +673,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       number: number.trim() || undefined,
       date,
       due_date: dueDate || undefined,
+      payment_term: paymentTerm || undefined,
       ref_no: refNo.trim() || undefined,
       notes: notes.trim() || undefined,
       terms: terms.trim() || undefined,
@@ -655,6 +734,10 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   }
 
   const isDP = kind === "down_payment";
+  // A down payment is one description + one amount. An older DP that was saved with several lines,
+  // or a per-line tax or discount keeps the full editor so nothing already on it is hidden or lost.
+  const simpleDP = isDP && lines.length <= 1 && !lines[0]?.tax_ids?.length && !lines[0]?.discount_value;
+  const sourceRef: SourceRef | null = linkedInvoiceId ? { type: "sales_invoice", id: linkedInvoiceId } : salesOrderId && isDP ? { type: "sales_order", id: salesOrderId } : null;
   const docTitle = isDP ? tr("Invoice Uang Muka", "Down Payment Invoice") : tr("Invoice Penjualan", "Sales Invoice");
 
   return (
@@ -700,6 +783,37 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         }
         metaFields={
           <>
+            {kind === "invoice" && !isEdit && (
+              <>
+                <FormField
+                  label={tr("Pesanan Penjualan", "Sales Order")}
+                  htmlFor="inv-order"
+                  optional
+                  hint={tr("Opsional: hubungkan invoice ini ke pesanan tanpa mengubah isinya.", "Optional: link this invoice to an order without changing its content.")}
+                >
+                  <SourceDocumentSelect
+                    id="inv-order"
+                    value={salesOrderId ? { type: "sales_order", id: salesOrderId } : null}
+                    companyId={activeCompanyId}
+                    mitraId={mitraId || undefined}
+                    types={["sales_order"]}
+                    orderStatus="confirmed"
+                    onChange={(ref) => {
+                      setSalesOrderId(ref?.id ?? null);
+                      if (!ref) setSourceDoc(null);
+                    }}
+                    onDocChange={setSourceDoc}
+                    onPick={(picked) => {
+                      if (picked.type !== "sales_order") return;
+                      // Link only: the partner follows the order, nothing the user typed is overwritten.
+                      // (Filling the invoice FROM an order is the "Create from Order" step of the add modal.)
+                      setMitraId(picked.doc.mitra_id);
+                      setErrors((prev) => ({ ...prev, mitraId: undefined }));
+                    }}
+                  />
+                </FormField>
+              </>
+            )}
             <FormField label={tr("Mitra", "Partner")} htmlFor="inv-mitra" required error={errors.mitraId}>
               <RemoteSelect
                 id="inv-mitra"
@@ -712,7 +826,11 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);
-                  if (kind === "down_payment") setLinkedInvoiceId(null);
+                  if (sourceDoc && sourceDoc.doc.mitra_id !== v) {
+                    setLinkedInvoiceId(null);
+                    setSalesOrderId(null);
+                    setSourceDoc(null);
+                  }
                   setErrors((prev) => ({ ...prev, mitraId: undefined }));
                 }}
                 placeholder={tr("Pilih mitra…", "Select a partner…")}
@@ -747,8 +865,11 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 value={date}
                 onChange={(v) => {
                   setDate(v);
-                  // Due date can't precede the invoice date: pull it forward with the date.
-                  if (v && dueDate && dueDate < v) setDueDate(v);
+                  // A Terms of Payment keeps the due date in step with the date; otherwise a due date
+                  // can't precede the invoice date, so it is pulled forward with the date.
+                  const termDue = dueDateFor(paymentTerm, v);
+                  if (termDue) setDueDate(termDue);
+                  else if (v && dueDate && dueDate < v) setDueDate(v);
                   setErrors((prev) => ({ ...prev, date: undefined, dueDate: undefined }));
                 }}
                 id="inv-date"
@@ -756,11 +877,31 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 error={errors.date}
               />
             </FormField>
+            <FormField label={tr("Termin Pembayaran", "Terms of Payment")} htmlFor="inv-term" optional>
+              <Select
+                id="inv-term"
+                value={paymentTerm}
+                options={PAYMENT_TERMS.map((t) => ({ value: t.value, label: tr(t.id, t.en) }))}
+                onChange={(v) => {
+                  setPaymentTerm(v);
+                  const due = dueDateFor(v, date);
+                  if (due) {
+                    setDueDate(due);
+                    setErrors((prev) => ({ ...prev, dueDate: undefined }));
+                  }
+                }}
+                placeholder={tr("Pilih termin…", "Select terms…")}
+                clearable
+                disabled={readOnly}
+              />
+            </FormField>
             <FormField label={tr("Jatuh Tempo", "Due Date")} htmlFor="inv-due" required error={errors.dueDate}>
               <DatePickerInput
                 value={dueDate}
                 onChange={(v) => {
                   setDueDate(v);
+                  // Picking the date by hand while a fixed term is chosen makes the term "custom".
+                  if (paymentTermDays(paymentTerm) !== undefined && v !== dueDateFor(paymentTerm, date)) setPaymentTerm("custom");
                   setErrors((prev) => ({ ...prev, dueDate: undefined }));
                 }}
                 id="inv-due"
@@ -798,20 +939,40 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
             </FormField>
             {kind === "down_payment" && (
               <FormField
-                label={tr("Invoice Terkait", "Linked Invoice")}
-                htmlFor="inv-linked"
+                label={tr("Sumber Invoice / Pesanan Penjualan", "Source Invoice / Sales Order")}
+                htmlFor="inv-source"
                 optional
-                hint={mitraId ? tr("Untuk invoice penjualan yang mana uang muka ini.", "Which sales invoice this down payment is for.") : tr("Pilih mitra terlebih dahulu.", "Select a partner first.")}
+                hint={
+                  sourceDoc
+                    ? sourceDoc.type === "sales_invoice"
+                      ? `${tr("Total", "Total")} ${money.format(sourceDoc.doc.grand_total)} · ${tr("Sisa tagihan", "Outstanding")} ${money.format(sourceDoc.doc.outstanding_amount)}`
+                      : `${tr("Total pesanan", "Order total")} ${money.format(sourceDoc.doc.grand_total)}`
+                    : tr("Boleh dikosongkan: uang muka tetap bisa dibuat tanpa sumber.", "Optional: a down payment can be created without a source.")
+                }
               >
-                <SearchableSelect
-                  id="inv-linked"
-                  value={linkedInvoiceId ?? ""}
-                  options={linkableInvoices
-                    .filter((i) => i.mitra_id === mitraId)
-                    .map((i) => ({ value: i.id, label: i.number }))}
-                  onChange={(v) => setLinkedInvoiceId(v || null)}
-                  placeholder={tr("Tanpa invoice terkait", "No linked invoice")}
-                  disabled={readOnly || !mitraId}
+                <SourceDocumentSelect
+                  id="inv-source"
+                  value={sourceRef}
+                  companyId={activeCompanyId}
+                  mitraId={mitraId || undefined}
+                  disabled={readOnly}
+                  onChange={(ref) => {
+                    setLinkedInvoiceId(ref?.type === "sales_invoice" ? ref.id : null);
+                    setSalesOrderId(ref?.type === "sales_order" ? ref.id : null);
+                    if (!ref) setSourceDoc(null);
+                  }}
+                  onDocChange={setSourceDoc}
+                  onPick={(picked) => {
+                    // The partner follows the source, and the description names it; the amount stays the user's.
+                    setMitraId(picked.doc.mitra_id);
+                    setErrors((prev) => ({ ...prev, mitraId: undefined }));
+                    if (picked.type === "sales_invoice" && picked.doc.payment_term) adoptTerm(picked.doc.payment_term);
+                    setLines((prev) => {
+                      const blank = prev.every((l) => !l.product_name.trim() && !l.unit_price);
+                      const auto = prev.length === 1 && /^(Uang Muka|Down Payment of) /.test(prev[0].product_name);
+                      return blank || auto ? [{ ...dpLine(picked.doc.number), unit_price: prev[0]?.unit_price ?? null }] : prev;
+                    });
+                  }}
                 />
               </FormField>
             )}
@@ -849,6 +1010,30 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
           </div>
         }
         lineItems={
+          simpleDP ? (
+            <div className="grid gap-4 px-4 py-4 sm:grid-cols-[1fr_260px]">
+              <FormField label={tr("Deskripsi", "Description")} htmlFor="dp-desc" required>
+                <Input
+                  id="dp-desc"
+                  value={lines[0]?.product_name ?? ""}
+                  disabled={readOnly}
+                  onChange={(e) => setLines((prev) => [{ ...(prev[0] ?? emptyLine()), product_name: e.target.value, quantity: 1 }])}
+                  placeholder={tr("mis. Uang Muka INV/2026/0004", "e.g. Down Payment of INV/2026/0004")}
+                />
+              </FormField>
+              <FormField label={tr("Jumlah Uang Muka", "Down Payment Amount")} htmlFor="dp-amount" required>
+                <NumberSeparatorInput
+                  id="dp-amount"
+                  value={lines[0]?.unit_price ?? null}
+                  disabled={readOnly}
+                  min={0}
+                  prefix="Rp"
+                  onChange={(v) => setLines((prev) => [{ ...(prev[0] ?? emptyLine()), quantity: 1, unit_price: v }])}
+                  placeholder="0"
+                />
+              </FormField>
+            </div>
+          ) : (
           <LineItemsEditor
             lines={lines}
             onChange={setLines}
@@ -865,6 +1050,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
             hideTotals
             embedded
           />
+          )
         }
         notes={
           <div className="space-y-4">

@@ -123,7 +123,6 @@ export default function PurchaseInvoiceDetailPage({ id }: { id: string }) {
     setInvoice({ ...invoice, template: next });
     try {
       setInvoice(await setPurchaseInvoiceTemplate(invoice.id, next));
-      toast.success(tr("Template disimpan", "Template saved"));
     } catch (err) {
       setInvoice({ ...invoice, template: prev });
       toast.error(extractApiError(err, tr("Gagal mengganti template", "Failed to change the template")));

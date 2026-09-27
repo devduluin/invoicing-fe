@@ -22,7 +22,12 @@ export interface ConnectedDocument {
 }
 
 /** Real, stored relationships of one document (server-side, company-scoped, permission-filtered). */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export async function listConnectedDocuments(type: ConnectedDocType, id: string): Promise<ConnectedDocument[]> {
+  // A document that isn't saved yet has a placeholder id (e.g. "draft" in a create-page preview) —
+  // it has no relationships, and the server would only 404/422 on it. Never send one.
+  if (!UUID.test(id)) return [];
   const { data } = await api.get<{ data: ConnectedDocument[] }>(`/connected-documents/${type}/${encodeURIComponent(id)}`);
   return data.data ?? [];
 }

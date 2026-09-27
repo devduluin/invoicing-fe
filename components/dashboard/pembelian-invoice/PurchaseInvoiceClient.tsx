@@ -6,6 +6,7 @@ import { FileText, Plus, Copy } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
+import DownPaymentInvoiceChoiceModal from "../penjualan-invoice/DownPaymentInvoiceChoiceModal";
 import { useTr } from "@/lib/useTr";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -63,6 +64,7 @@ export default function PurchaseInvoiceClient() {
   const canDelete = hasPermission(permissions, "invoice-bill-delete");
 
   const [confirm, setConfirm] = useState<PurchaseInvoice | null>(null);
+  const [choiceOpen, setChoiceOpen] = useState(false);
   const [mitras, setMitras] = useState<Mitra[]>([]);
 
   // ?view=outstanding|overdue|draft|paid — lets the dashboard link straight to a filtered list.
@@ -158,7 +160,7 @@ export default function PurchaseInvoiceClient() {
                 <Button
                   variant="primary"
                   leftIcon={<Plus className="size-4" />}
-                  onClick={() => router.push(`${BASE_PATH}/add`)}
+                  onClick={() => setChoiceOpen(true)}
                 >
                   Add Invoice
                 </Button>
@@ -226,6 +228,7 @@ export default function PurchaseInvoiceClient() {
         }}
       />
 
+      {choiceOpen && <DownPaymentInvoiceChoiceModal kind="purchase_invoice" onClose={() => setChoiceOpen(false)} />}
       <DeleteDocumentModal
         open={!!confirm}
         title="Delete invoice?"

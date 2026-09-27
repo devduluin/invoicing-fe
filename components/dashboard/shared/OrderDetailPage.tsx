@@ -135,7 +135,6 @@ export default function OrderDetailPage({ kind, id }: { kind: OrderKind; id: str
     try {
       const saved = (await cfg.setTemplate(order.id, next)) as unknown as Order;
       setOrder(saved);
-      toast.success(tr("Template disimpan", "Template saved"));
     } catch (err) {
       setOrder({ ...order, template: prev });
       toast.error(extractApiError(err, tr("Gagal mengganti template", "Failed to change the template")));

@@ -82,7 +82,7 @@ export default function OverviewContent() {
   useEffect(load, [load]);
 
   const mitraName = (id: string) => data?.mitras.find((m) => m.id === id)?.name ?? "—";
-  const outstandingOf = (i: SalesInvoice) => Math.max(0, i.grand_total - i.paid_amount);
+  const outstandingOf = (i: SalesInvoice) => i.outstanding_amount;
 
   const canCreateSales = canCreate && canListSales;
 

@@ -213,7 +213,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
         toast.success("Goods receipt added");
       }
       markClean();
-      router.push(isEdit ? `${"/dashboard/pembelian/penerimaan"}/${savedId}` : `${"/dashboard/pembelian/penerimaan"}/${savedId}/edit`);
+      router.push(`${"/dashboard/pembelian/penerimaan"}/${savedId}`); // detail of the saved record (id from the create response)
     } catch (err) {
       toast.error(extractApiError(err, "Failed to save goods receipt"));
     } finally {

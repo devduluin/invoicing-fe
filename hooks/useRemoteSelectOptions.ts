@@ -200,6 +200,12 @@ export function useRemoteSelectOptions<T>({
   };
 }
 
+/** Hand the select a record the parent already fetched, so resolving `value` to its label doesn't
+ *  issue a second GET for the same thing (e.g. a form that prefills from ?linked_invoice=<id>). */
+export function primeRemoteSelectItem<T>(resource: string, companyId: string | null | undefined, value: string, item: T) {
+  resolveCache.set(`${resource}::${companyId ?? ""}::${value}`, Promise.resolve(item));
+}
+
 /** Drop every cached page for a resource (e.g. after creating a new partner inline, so the next
  *  open re-fetches and shows it) — mirrors invalidateDocConfig's shape in hooks/useDocConfig.ts. */
 export function invalidateRemoteSelectOptions(resource: string) {
