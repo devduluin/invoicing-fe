@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FileText, Plus, Copy } from "lucide-react";
+import { FileText, Plus, Copy, Download, Trash2 } from "lucide-react";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui";
@@ -14,11 +14,15 @@ import { useLanguageStore } from "@/store/useLanguageStore";
 import type { GetAllPayload, TableRow } from "@/app/types/apiResponses";
 import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
+import BulkActionMenu, { type BulkAction } from "@/components/masterTable/BulkActionMenu";
+import BulkProgressModal from "@/components/masterTable/BulkProgressModal";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { listSalesInvoices, deleteSalesInvoice, type SalesInvoice, type SalesInvoiceKind } from "@/services/salesInvoiceService";
+import { downloadDocumentPdf, downloadInvoicesZip } from "@/services/pdfService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
+import { bulkDelete as bulkDeleteRequest } from "@/services/bulk";
 import DownPaymentInvoiceChoiceModal from "./DownPaymentInvoiceChoiceModal";
 import { InvoiceStatusBadge, daysOverdue, isOverdue } from "./statusBadges";
 import { formatDateStyle } from "@/utils/formatDate";
@@ -65,6 +69,10 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
   const [confirm, setConfirm] = useState<SalesInvoice | null>(null);
   const [mitras, setMitras] = useState<Mitra[]>([]);
   const [choiceOpen, setChoiceOpen] = useState(false);
+  const [selectedRows, setSelectedRows] = useState<SalesInvoice[]>([]);
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
 
   // ?view=outstanding|overdue|draft|paid — lets the dashboard link straight to a filtered list.
   const initialView = useSearchParams().get("view");
@@ -149,6 +157,82 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
     }
   };
 
+  // No partner restriction for invoices (unlike Sales Order's Create Invoice/Delivery Note) — both
+  // actions here apply to each selected invoice independently.
+  const bulkDownload = async () => {
+    setBulkBusy(true);
+    try {
+      if (selectedRows.length === 1) {
+        // A single invoice still gets its own plain PDF — no zip wrapper, no progress bar for one file.
+        await downloadDocumentPdf("sales-invoice", selectedRows[0].id, language);
+        toast.success(tr("PDF diunduh", "PDF downloaded"));
+      } else {
+        setDownloadProgress({ done: 0, total: selectedRows.length });
+        const { failedCount } = await downloadInvoicesZip(
+          selectedRows.map((i) => i.id),
+          language,
+          (done, total) => setDownloadProgress({ done, total }),
+        );
+        const ok = selectedRows.length - failedCount;
+        if (failedCount === 0) {
+          toast.success(tr(`${ok} PDF diunduh (ZIP)`, `${ok} PDF(s) downloaded (ZIP)`));
+        } else {
+          toast.error(
+            tr(`${ok} berhasil, ${failedCount} gagal (lihat failed.json di dalam ZIP)`, `${ok} succeeded, ${failedCount} failed (see failed.json inside the ZIP)`),
+            { duration: 8000 },
+          );
+        }
+      }
+    } catch (err) {
+      toast.error(extractApiError(err, tr("Gagal mengunduh PDF", "Failed to download PDF")));
+    }
+    setDownloadProgress(null);
+    setBulkBusy(false);
+  };
+
+  const bulkDelete = async () => {
+    setBulkBusy(true);
+    const byID = new Map(selectedRows.map((i) => [i.id, i]));
+    try {
+      const results = await bulkDeleteRequest("sales-invoices", selectedRows.map((i) => i.id));
+      const ok = results.filter((r) => r.success).length;
+      const failed = results.filter((r) => !r.success).map((r) => `${byID.get(r.id)?.number ?? r.id}: ${r.message ?? tr("gagal", "failed")}`);
+      if (failed.length === 0) {
+        toast.success(tr(`${ok} invoice dihapus`, `${ok} invoice(s) deleted`));
+      } else {
+        toast.error(tr(`${ok} terhapus, ${failed.length} gagal: ${failed.join("; ")}`, `${ok} deleted, ${failed.length} failed: ${failed.join("; ")}`), { duration: 8000 });
+      }
+    } catch (err) {
+      toast.error(extractApiError(err, tr("Gagal menghapus invoice", "Failed to delete invoices")));
+    }
+    setBulkBusy(false);
+    setBulkDeleteOpen(false);
+    setSelectedRows([]);
+    list.refresh();
+  };
+
+  const bulkActions: BulkAction[] = [
+    {
+      key: "download",
+      label: tr("Unduh PDF", "Download PDF"),
+      icon: <Download className="size-4" aria-hidden />,
+      disabled: bulkBusy,
+      onSelect: bulkDownload,
+    },
+    ...(canDelete
+      ? [
+          {
+            key: "delete",
+            label: tr("Hapus", "Delete"),
+            icon: <Trash2 className="size-4" aria-hidden />,
+            disabled: bulkBusy,
+            destructive: true,
+            onSelect: () => setBulkDeleteOpen(true),
+          },
+        ]
+      : []),
+  ];
+
   return (
     <>
       <MasterTable
@@ -158,11 +242,14 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
             title={title}
             description={description}
             actions={
-              canCreate && (
-                <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={create}>
-                  {createLabel}
-                </Button>
-              )
+              <div className="flex items-center gap-2">
+                <BulkActionMenu selectedCount={selectedRows.length} actions={bulkActions} />
+                {canCreate && (
+                  <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={create}>
+                    {createLabel}
+                  </Button>
+                )}
+              </div>
             }
           />
         }
@@ -211,6 +298,8 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
             </Button>
           ) : undefined
         }
+        forceShowCheckbox
+        onSelectionChange={(rows) => setSelectedRows(rows as unknown as SalesInvoice[])}
         onRowClick={(row) => goTo(String(row.id))}
         renderRowActions={(row) => {
           const invoice = row as unknown as SalesInvoice;
@@ -243,7 +332,21 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         onClose={() => setConfirm(null)}
       />
 
+      <DeleteDocumentModal
+        open={bulkDeleteOpen}
+        title={tr(`Hapus ${selectedRows.length} invoice?`, `Delete ${selectedRows.length} invoices?`)}
+        onConfirm={bulkDelete}
+        onClose={() => setBulkDeleteOpen(false)}
+      />
+
       {choiceOpen && <DownPaymentInvoiceChoiceModal kind={kind} onClose={() => setChoiceOpen(false)} />}
+
+      <BulkProgressModal
+        open={!!downloadProgress}
+        done={downloadProgress?.done ?? 0}
+        total={downloadProgress?.total ?? 0}
+        label={tr("Mengunduh PDF…", "Downloading PDFs…")}
+      />
     </>
   );
 }

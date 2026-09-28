@@ -435,15 +435,37 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     }
   };
 
-  // Create mode + ?dari_order=<id> → pre-fill everything from that order.
+  // Create mode + ?dari_order=<id>[,<id>...] → pre-fill from that order (or, for a bulk "Create
+  // Invoice" across several same-partner orders, ONE invoice with every order's lines merged —
+  // `sales_order_id` can only reference one, so it points at the first; the header fields
+  // (discount, ship-from, salesperson, contact) also follow the first, same as picking it alone).
   useEffect(() => {
     if (isEdit) return;
-    const orderId = searchParams.get("dari_order");
-    if (!orderId) return;
-    getSalesOrder(orderId)
-      .then((order) => {
-        applyOrder(order);
-        toast.success(`Auto-filled from order ${order.number}`);
+    const orderIds = (searchParams.get("dari_order") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (orderIds.length === 0) return;
+    Promise.all(orderIds.map(getSalesOrder))
+      .then((orders) => {
+        applyOrder(orders[0]);
+        if (orders.length > 1 && kind !== "down_payment") {
+          const extraLines = orders.slice(1).flatMap((order) =>
+            order.lines.map((l) => ({
+              key: crypto.randomUUID(),
+              product_name: l.product_name,
+              description: l.description ?? "",
+              quantity: l.quantity,
+              unit_price: l.unit_price,
+              discount_type: l.discount_type ?? "percent",
+              discount_value: l.discount_value || null,
+              tax_ids: l.tax_ids ?? [],
+            })),
+          );
+          if (extraLines.length) setLines((prev) => [...prev, ...extraLines]);
+        }
+        toast.success(
+          orders.length === 1
+            ? `Auto-filled from order ${orders[0].number}`
+            : `Auto-filled from ${orders.length} orders: ${orders.map((o) => o.number).join(", ")}`,
+        );
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load sales order")))
       .finally(() => done("prefill"));

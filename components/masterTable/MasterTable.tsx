@@ -67,6 +67,13 @@ export interface MasterTableProps<T extends TableRow> {
   viewFiltered?: boolean;
   onClearView?: () => void;
   getRowId?: (row: T, index: number) => string;
+  /** Show the row-selection checkbox column regardless of the user's own column-settings toggle —
+   *  for pages that drive a bulk-action menu off `onSelectionChange`, selection must always be
+   *  reachable, not hidden behind an opt-in display preference. */
+  forceShowCheckbox?: boolean;
+  /** Fires with the full row objects currently checked, any time the selection changes (a row
+   *  toggled, select-all, cleared, or the page/filter reset it). */
+  onSelectionChange?: (rows: T[]) => void;
 }
 
 const EMPTY_VIS: Record<string, boolean> = {};
@@ -99,6 +106,8 @@ export default function MasterTable<T extends TableRow>({
   viewFiltered,
   onClearView,
   getRowId,
+  forceShowCheckbox,
+  onSelectionChange,
 }: MasterTableProps<T>) {
   const activeFilterCount = filters?.filter((f) => f.value).length ?? 0;
   const storedVis = useTableColumnStore((s) => s.visibility[tableKey] ?? EMPTY_VIS);
@@ -125,7 +134,7 @@ export default function MasterTable<T extends TableRow>({
   }, [dataColumnIds, attribute, storedVis]);
 
   const showActions = !!renderRowActions && (storedSettings?.showActions ?? true);
-  const showCheckbox = storedSettings?.showCheckbox ?? false;
+  const showCheckbox = forceShowCheckbox || (storedSettings?.showCheckbox ?? false);
   const showAutoNumber = storedSettings?.showAutoNumber ?? false;
 
   // ── sorting ───────────────────────────────────────────────────────────────
@@ -188,6 +197,36 @@ export default function MasterTable<T extends TableRow>({
   useEffect(() => setSelected({}), [params, meta.currentPage]);
 
   const selectedCount = Object.values(selected).filter(Boolean).length;
+  const rowsById = useMemo(() => {
+    const m = new Map<string, T>();
+    table.getRowModel().rows.forEach((r) => m.set(r.id, r.original));
+    return m;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [table, data]);
+  useEffect(() => {
+    if (!onSelectionChange) return;
+    const rows = Object.keys(selected)
+      .filter((id) => selected[id])
+      .map((id) => rowsById.get(id))
+      .filter((r): r is T => !!r);
+    onSelectionChange(rows);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selected, rowsById]);
+
+  const pageRowIds = table.getRowModel().rows.map((r) => r.id);
+  const allOnPageSelected = pageRowIds.length > 0 && pageRowIds.every((id) => selected[id]);
+  const someOnPageSelected = pageRowIds.some((id) => selected[id]);
+  const toggleSelectAll = () =>
+    setSelected((prev) => {
+      if (allOnPageSelected) {
+        const next = { ...prev };
+        pageRowIds.forEach((id) => delete next[id]);
+        return next;
+      }
+      const next = { ...prev };
+      pageRowIds.forEach((id) => (next[id] = true));
+      return next;
+    });
 
   const searching = !!(params.search && params.search.trim());
   const filtered = searching || activeFilterCount > 0 || !!viewFiltered;
@@ -232,7 +271,27 @@ export default function MasterTable<T extends TableRow>({
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="sticky top-0 z-10 bg-table-head">
-                {showCheckbox && <th className="w-10 px-4 py-3" />}
+                {showCheckbox && (
+                  <th className="w-10 px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={toggleSelectAll}
+                      aria-label={allOnPageSelected ? "Deselect all" : "Select all"}
+                      className={cn(
+                        "grid size-4 place-items-center rounded border transition-colors",
+                        allOnPageSelected || someOnPageSelected
+                          ? "border-primary bg-primary text-white"
+                          : "border-border-strong bg-card text-transparent",
+                      )}
+                    >
+                      {allOnPageSelected ? (
+                        <Check className="size-2.5" strokeWidth={3} />
+                      ) : (
+                        someOnPageSelected && <span className="size-1.5 rounded-[1px] bg-white" />
+                      )}
+                    </button>
+                  </th>
+                )}
                 {showAutoNumber && (
                   <th scope="col" className="w-12 px-4 py-2.5 text-xs font-semibold text-slate-600">
                     #

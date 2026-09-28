@@ -132,24 +132,31 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
 
   // ?dari_order=<id> → pre-fill mitra & lines from that confirmed order.
   useEffect(() => {
-    const orderId = searchParams.get("dari_order");
-    if (!orderId) return;
-    getSalesOrder(orderId)
-      .then((order) => {
-        setSalesOrderId(order.id);
-        setMitraId(order.mitra_id);
-        if (order.lines.length) {
-          setLines(
-            order.lines.map((l) => ({
-              key: crypto.randomUUID(),
-              product_name: l.product_name,
-              description: l.description ?? "",
-              quantity: l.quantity,
-              unit: "",
-            })),
-          );
-        }
-        toast.success(`Auto-filled from order ${order.number}`);
+    // A bulk "Create Delivery Note" (same-partner orders selected together) passes every order id
+    // comma-separated — one shipment covering all of them, items merged; `sales_order_id` can only
+    // reference one order, so it points at the first (the orders share a partner, already enforced
+    // by the bulk action, but not necessarily one exact source — traceability is best-effort here).
+    const orderIds = (searchParams.get("dari_order") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
+    if (orderIds.length === 0) return;
+    Promise.all(orderIds.map(getSalesOrder))
+      .then((orders) => {
+        setSalesOrderId(orders[0].id);
+        setMitraId(orders[0].mitra_id);
+        const mergedLines = orders.flatMap((order) =>
+          order.lines.map((l) => ({
+            key: crypto.randomUUID(),
+            product_name: l.product_name,
+            description: l.description ?? "",
+            quantity: l.quantity,
+            unit: "",
+          })),
+        );
+        if (mergedLines.length) setLines(mergedLines);
+        toast.success(
+          orders.length === 1
+            ? `Auto-filled from order ${orders[0].number}`
+            : `Auto-filled from ${orders.length} orders: ${orders.map((o) => o.number).join(", ")}`,
+        );
       })
       .catch((err) => toast.error(extractApiError(err, "Failed to load sales order")))
       .finally(() => done("prefill"));
