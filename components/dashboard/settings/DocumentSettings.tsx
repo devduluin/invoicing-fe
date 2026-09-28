@@ -1,11 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ArrowDown, ArrowUp, Pencil, RotateCcw, Upload, X } from "lucide-react";
+import { GripVertical, Pencil, RotateCcw, Upload, X } from "lucide-react";
+import { closestCenter, DndContext, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { arrayMove, SortableContext, sortableKeyboardCoordinates, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import toast from "react-hot-toast";
 
 import { Button } from "@/components/ui/Button";
 import { ErrorState } from "@/components/ui/ErrorState";
+import { AppearanceSection, FormatsSection, HeaderFooterSwitches, Section, TextStylesSection } from "./DocumentStyleSections";
 import { Skeleton } from "@/components/ui/Skeleton";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { FormField, Input, RichTextEditor, Select, ToggleSwitch } from "@/components/form";
@@ -20,7 +24,9 @@ import {
   type DocConfigType,
   type FieldDef,
   type FieldGroup,
+  FIXED_STYLE_KEY,
   type StoredDocConfig,
+  type StoredTemplateStyle,
 } from "@/lib/documentConfig";
 import { invalidateDocConfig } from "@/hooks/useDocConfig";
 import { getMyCompany, type Company } from "@/services/companyService";
@@ -33,7 +39,7 @@ import type { OperationalDocData, ReceiptDocData } from "@/lib/receiptDocument";
 import { InvoiceDocument } from "@/components/dashboard/penjualan-invoice/InvoiceDocument";
 import { ScaledSheet } from "@/components/dashboard/penjualan-invoice/templates/ScaledSheet";
 import { TemplateChoices } from "@/components/dashboard/penjualan-invoice/templates/InvoiceTemplatePanel";
-import { resolveInvoiceTemplate, type InvoiceTemplateId } from "@/components/dashboard/penjualan-invoice/templates/types";
+import { INVOICE_TEMPLATES, resolveInvoiceTemplate, type InvoiceTemplateId } from "@/components/dashboard/penjualan-invoice/templates/types";
 import FixedDocPreview from "@/components/dashboard/shared/FixedDocPreview";
 import type { PrintableDocKind } from "@/lib/documentShape";
 
@@ -78,17 +84,33 @@ const GROUP_TITLE: Record<FieldGroup, { id: string; en: string }> = {
   payment: { id: "Informasi pembayaran", en: "Payment information" },
   details: { id: "Detail dokumen", en: "Document details" },
 };
-const GROUP_ORDER: FieldGroup[] = ["header", "details", "table", "summary", "payment"];
+const GROUP_ORDER: FieldGroup[] = ["details", "table", "summary", "payment"];
 
 const emptyDraft: StoredDocConfig = {};
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border bg-card">
-      <h3 className="border-b border-border bg-[var(--surface-2)] px-4 py-2 font-display text-[13px] font-semibold text-slate-900">{title}</h3>
-      {children}
-    </section>
+/** What a sortable column row needs from dnd-kit: its ref/transform and the drag handle. */
+interface SortableBits {
+  setNodeRef: (el: HTMLElement | null) => void;
+  style: React.CSSProperties;
+  handle: React.ReactNode;
+  dragging: boolean;
+}
+
+function SortableColumn({ id, label, disabled, children }: { id: string; label: string; disabled: boolean; children: (bits: SortableBits) => React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const handle = (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      className="grid size-7 shrink-0 cursor-grab place-items-center rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 focus-visible:text-slate-700 active:cursor-grabbing disabled:cursor-not-allowed disabled:opacity-30"
+      {...attributes}
+      {...listeners}
+    >
+      <GripVertical className="size-4" />
+    </button>
   );
+  return <>{children({ setNodeRef, style: { transform: CSS.Translate.toString(transform), transition }, handle, dragging: isDragging })}</>;
 }
 
 export default function DocumentSettings() {
@@ -113,7 +135,11 @@ export default function DocumentSettings() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const spec = DOC_SPECS[type];
-  const resolved = useMemo(() => resolveDocConfig(type, draft), [type, draft]);
+  // A templated document's look is stored per template: what is shown and edited belongs to the
+  // template currently picked (Template 4's colour never touches Template 1's).
+  const styleKey = spec.templated ? tplDraft : FIXED_STYLE_KEY;
+  const resolved = useMemo(() => resolveDocConfig(type, draft, spec.templated ? tplDraft : null), [type, draft, tplDraft, spec.templated]);
+  const ratio = (resolved.page.widthMm / resolved.page.heightMm).toFixed(4);
   const dirty = !sameStoredConfig(saved, draft) || (spec.templated && tplSaved !== tplDraft);
 
   // Load the selected document type (and the ACTIVE company's default template for it).
@@ -193,13 +219,13 @@ export default function DocumentSettings() {
     const stored = (draft.columnOrder ?? []).filter((k) => def.includes(k));
     return [...stored, ...def.filter((k) => !stored.includes(k))];
   }, [spec, draft.columnOrder]);
-  const moveColumn = (key: string, dir: -1 | 1) => {
-    const i = allColumns.indexOf(key);
-    const j = i + dir;
-    if (i < 0 || j < 0 || j >= allColumns.length) return;
-    const next = [...allColumns];
-    [next[i], next[j]] = [next[j], next[i]];
-    patch({ columnOrder: next });
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }));
+  const onColumnDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const from = allColumns.indexOf(String(active.id));
+    const to = allColumns.indexOf(String(over.id));
+    if (from < 0 || to < 0) return;
+    patch({ columnOrder: arrayMove(allColumns, from, to) });
   };
 
   const requestType = (next: string) => {
@@ -252,14 +278,19 @@ export default function DocumentSettings() {
   if (failed) return <ErrorState onRetry={() => setReloadKey((k) => k + 1)} />;
 
   // ── rows ──
-  const fieldRow = (f: FieldDef, reorder?: boolean) => {
+  const fieldRow = (f: FieldDef, sortable?: SortableBits) => {
     const customLabel = draft.labels?.[f.key]?.trim();
     const visible = resolved.visible(f.key);
     const editing = editingKey === f.key;
-    const colIndex = allColumns.indexOf(f.key);
     return (
-      <div key={f.key} className="border-b border-border last:border-b-0">
+      <div
+        key={f.key}
+        ref={sortable?.setNodeRef}
+        style={sortable?.style}
+        className={`border-b border-border bg-card last:border-b-0 ${sortable?.dragging ? "relative z-10 shadow-md ring-1 ring-primary/30" : ""}`}
+      >
         <div className="flex items-center gap-3 px-4 py-2">
+          {sortable?.handle}
           <ToggleSwitch checked={visible} onChange={(on) => setVisible(f.key, on)} disabled={!canEdit || !f.toggle} className="shrink-0" />
           <div className="min-w-0 flex-1">
             <p className={`truncate text-[13px] font-medium ${visible ? "text-slate-900" : "text-slate-400"}`}>
@@ -268,16 +299,6 @@ export default function DocumentSettings() {
             </p>
             {customLabel && <p className="truncate text-xs text-slate-400">{tr("Default", "Default")}: {resolved.defaultLabel(f.key)}</p>}
           </div>
-          {reorder && canEdit && (
-            <div className="flex shrink-0">
-              <button type="button" aria-label={tr("Naikkan", "Move up")} disabled={colIndex <= 0} onClick={() => moveColumn(f.key, -1)} className="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30">
-                <ArrowUp className="size-3.5" />
-              </button>
-              <button type="button" aria-label={tr("Turunkan", "Move down")} disabled={colIndex >= allColumns.length - 1} onClick={() => moveColumn(f.key, 1)} className="grid size-7 place-items-center rounded-md text-slate-500 hover:bg-slate-100 disabled:opacity-30">
-                <ArrowDown className="size-3.5" />
-              </button>
-            </div>
-          )}
           {f.labelEditable && canEdit && (
             <button type="button" onClick={() => setEditingKey(editing ? null : f.key)} aria-expanded={editing} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-semibold text-primary-ink hover:bg-primary/10">
               <Pencil className="size-3" aria-hidden /> {tr("Ubah label", "Edit label")}
@@ -306,6 +327,16 @@ export default function DocumentSettings() {
   };
 
 
+  const patchStyle = (p: Partial<StoredTemplateStyle>) => {
+    const next: StoredTemplateStyle = { ...(draft.templateStyles?.[styleKey] ?? {}), ...p };
+    const all = { ...(draft.templateStyles ?? {}) };
+    if (Object.keys(next).length) all[styleKey] = next;
+    else delete all[styleKey];
+    patch({ templateStyles: all });
+  };
+  const templateName = INVOICE_TEMPLATES.find((t) => t.id === tplDraft)?.label ?? tplDraft;
+  const scope = spec.templated ? `${templateName} · ${spec.name[resolved.language]}` : spec.name[resolved.language];
+  const styleProps = { draft, patch, style: draft.templateStyles?.[styleKey] ?? {}, patchStyle, scope, resolved, spec, canEdit };
   const groups = GROUP_ORDER.map((g) => ({ g, fields: spec.fields.filter((f) => f.group === g) })).filter((x) => x.fields.length > 0);
   const partner: Mitra = { id: "s", name: spec.partner === "vendor" ? "PT Vendor Contoh" : "PT Pelanggan Contoh", address: "Jl. Contoh No. 1\nJakarta Selatan", email: "info@contoh.co.id", phone: "021-555-0100" } as unknown as Mitra;
 
@@ -395,16 +426,43 @@ export default function DocumentSettings() {
                 </Section>
               )}
 
+              <AppearanceSection {...styleProps} />
+
+              <HeaderFooterSwitches
+                {...styleProps}
+                fields={
+                  <div className="border-t border-border">
+                    <p className="px-4 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-slate-500 uppercase">{tr("Elemen header", "Header elements")}</p>
+                    {spec.fields.filter((f) => f.group === "header").map((f) => fieldRow(f))}
+                  </div>
+                }
+              />
+
+              <TextStylesSection {...styleProps} />
+
+              <FormatsSection {...styleProps} />
+
               {groups.map(({ g, fields }) => (
                 <Section key={g} title={tr(GROUP_TITLE[g].id, GROUP_TITLE[g].en)}>
-                  {(g === "table" && spec.family !== "operational"
-                    ? [...fields.filter((f) => !f.column), ...allColumns.map((k) => fields.find((f) => f.key === k)!).filter(Boolean)]
-                    : g === "table"
-                      ? allColumns.map((k) => fields.find((f) => f.key === k)!).filter(Boolean)
-                      : fields
-                  ).map((f) => (
-                    fieldRow(f, !!f.column)
-                  ))}
+                  {g === "table" ? (
+                    <>
+                      {fields.filter((f) => !f.column).map((f) => fieldRow(f))}
+                      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onColumnDragEnd}>
+                        <SortableContext items={allColumns} strategy={verticalListSortingStrategy}>
+                          {allColumns
+                            .map((k) => fields.find((f) => f.key === k))
+                            .filter((f): f is FieldDef => !!f)
+                            .map((f) => (
+                              <SortableColumn key={f.key} id={f.key} disabled={!canEdit} label={tr("Geser untuk mengubah urutan kolom", "Drag to reorder the column")}>
+                                {(bits) => fieldRow(f, bits)}
+                              </SortableColumn>
+                            ))}
+                        </SortableContext>
+                      </DndContext>
+                    </>
+                  ) : (
+                    fields.map((f) => fieldRow(f))
+                  )}
                 </Section>
               ))}
 
@@ -482,7 +540,7 @@ export default function DocumentSettings() {
             {loading ? (
               <Skeleton className="h-[70vh] rounded-md" />
             ) : spec.templated ? (
-              <div className="mx-auto overflow-hidden rounded-[3px] bg-white shadow-[0_1px_2px_rgba(20,30,60,0.08),0_10px_30px_-12px_rgba(20,30,60,0.25)] ring-1 ring-slate-900/5" style={{ maxWidth: "min(100%, calc((100svh - 11rem) * 0.7071))" }}>
+              <div className="mx-auto overflow-hidden rounded-[3px] bg-white shadow-[0_1px_2px_rgba(20,30,60,0.08),0_10px_30px_-12px_rgba(20,30,60,0.25)] ring-1 ring-slate-900/5" style={{ maxWidth: `min(100%, calc((100svh - 11rem) * ${ratio}))` }}>
                 <ScaledSheet>
                   <InvoiceDocument
                     invoice={sampleInvoice(type)}
@@ -497,9 +555,9 @@ export default function DocumentSettings() {
                 </ScaledSheet>
               </div>
             ) : spec.family === "receipt" ? (
-              <div className="mx-auto" style={{ maxWidth: "min(100%, calc((100svh - 11rem) * 0.7071))" }}><FixedDocPreview bare docType={type} config={resolved} receipt={sampleReceipt(type, partner, company)} /></div>
+              <div className="mx-auto" style={{ maxWidth: `min(100%, calc((100svh - 11rem) * ${ratio}))` }}><FixedDocPreview bare docType={type} config={resolved} receipt={sampleReceipt(type, partner, company)} /></div>
             ) : (
-              <div className="mx-auto" style={{ maxWidth: "min(100%, calc((100svh - 11rem) * 0.7071))" }}><FixedDocPreview bare docType={type} config={resolved} operational={sampleOperational(type, partner, company)} /></div>
+              <div className="mx-auto" style={{ maxWidth: `min(100%, calc((100svh - 11rem) * ${ratio}))` }}><FixedDocPreview bare docType={type} config={resolved} operational={sampleOperational(type, partner, company)} /></div>
             )}
           </div>
         </div>

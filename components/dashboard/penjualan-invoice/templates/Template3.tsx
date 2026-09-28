@@ -9,6 +9,7 @@ import {
   SummaryTable,
   type TemplateProps,
 } from "./parts";
+import { shade, textStyle } from "@/lib/documentTheme";
 
 /**
  * Template 3 — "Invoice Sample (3)": decorative header (grey blob top-left, large
@@ -20,8 +21,13 @@ const HEADING = "#1e3a9e";
 
 export default function Template3({ view }: TemplateProps) {
   const L = view.labels;
+  const accent = view.theme.accent ?? ORANGE;
+  const heading = view.theme.accent ?? HEADING;
+  const shape = view.theme.accent
+    ? `linear-gradient(90deg,${view.theme.accent} 0%,${shade(view.theme.accent, 62)} 100%)`
+    : "linear-gradient(90deg,#c2410c 0%,#8a3b45 42%,#1e3a8a 100%)";
   return (
-    <Sheet template="template_3">
+    <Sheet template="template_3" view={view} accent={accent}>
       <div className="relative min-h-[38mm] overflow-hidden">
         {/* grey blob, top-left */}
         <div
@@ -34,15 +40,15 @@ export default function Template3({ view }: TemplateProps) {
           aria-hidden
           className="absolute right-0 top-0 h-full w-[72%]"
           style={{
-            background: "linear-gradient(90deg,#c2410c 0%,#8a3b45 42%,#1e3a8a 100%)",
+            background: shape,
             borderBottomLeftRadius: "100% 72%",
           }}
         />
 
-        <div className="relative flex items-start justify-between px-[8.5mm] pb-[9mm] pt-[9mm] print:px-[12mm]">
+        <div className={`relative flex items-start justify-between ${GUTTER} pb-[9mm] pt-[9mm]`}>
           <Logo company={view.company} />
           <div className="w-[36%] text-white">
-            <p className="text-right text-[19px] font-bold">{view.title}</p>
+            <p className="text-right text-[19px] font-bold" style={textStyle(view.theme, "title")}>{view.title}</p>
             <dl className="mt-[1.2mm]">
               {metaRows(view).map((r) => (
                 <div key={r.key} className="flex justify-between py-[0.7mm] text-[12.5px]">
@@ -57,29 +63,27 @@ export default function Template3({ view }: TemplateProps) {
 
       <div className={`${GUTTER} py-[8mm] print:pb-0 print:pt-[8mm]`}>
         <div className="grid grid-cols-2 gap-[14mm]">
-          <Party
-            heading={L.companyInfo}
-            name={view.company.name}
-            lines={contactLines(view.company, L)}
-            align="left"
-          />
-          <Party
-            heading={L.billTo}
-            name={view.customer.name}
-            lines={contactLines(view.customer, L)}
-            align="right"
-          />
+          {view.show.companyInfo ? (
+            <Party view={view} color={heading} heading={L.companyInfo} name={view.company.name} lines={contactLines(view.company, L)} align="left" />
+          ) : (
+            <div />
+          )}
+          {view.show.customer ? (
+            <Party view={view} color={heading} heading={L.billTo} name={view.customer.name} lines={contactLines(view.customer, L)} align="right" />
+          ) : (
+            <div />
+          )}
         </div>
 
         <div className="mt-[10mm]">
-          <LinesTable view={view} style={{ head: "plain", accent: ORANGE, rowSeparator: "dashed" }} />
+          <LinesTable view={view} style={{ head: "plain", accent, rowSeparator: "dashed" }} />
         </div>
 
         <div className="mt-[7mm] flex justify-end">
           <SummaryTable view={view} className="w-[45%]" />
         </div>
 
-        <FooterBlock view={view} headingStyle={{ color: HEADING }} className="mt-[12mm]" />
+        <FooterBlock view={view} headingStyle={{ color: heading }} className="mt-[12mm]" />
       </div>
     </Sheet>
   );
@@ -90,7 +94,11 @@ function Party({
   name,
   lines,
   align,
+  view,
+  color,
 }: {
+  view: TemplateProps["view"];
+  color: string;
   heading: string;
   name: string;
   lines: string[];
@@ -98,7 +106,7 @@ function Party({
 }) {
   return (
     <section className={`break-inside-avoid ${align === "right" ? "text-right" : ""}`}>
-      <h3 className="border-b border-slate-300 pb-[1.6mm] text-[15px] font-bold" style={{ color: HEADING }}>
+      <h3 className="border-b border-slate-300 pb-[1.6mm] text-[15px] font-bold" style={{ color, ...textStyle(view.theme, "heading") }}>
         {heading}
       </h3>
       <p className="mt-[3mm] text-[15px] font-bold text-slate-800">{name}</p>

@@ -147,6 +147,8 @@ export interface RenderPdfOptions {
   footerLabel?: string;
   /** Attribute the page sets when it has finished rendering. */
   readySelector?: string;
+  /** The running footer. Omit for the default (number left, "Page x / y" right). */
+  footer?: { show: boolean; pageNumber: boolean; sideMm: number };
 }
 
 const escapeHtml = (s: string) =>
@@ -184,6 +186,7 @@ export async function renderPdf(opts: RenderPdfOptions): Promise<Buffer> {
     await page.emulateMedia({ media: "print" });
 
     const label = opts.footerLabel ? escapeHtml(opts.footerLabel) : "";
+    const footer = opts.footer ?? { show: true, pageNumber: true, sideMm: 12 };
     const pdf = await page.pdf({
       format: "A4",
       printBackground: true,
@@ -191,13 +194,14 @@ export async function renderPdf(opts: RenderPdfOptions): Promise<Buffer> {
       // Chromium only paints inside the page box, so margins must be CSS-side for a
       // template to have full-bleed areas.
       preferCSSPageSize: true,
-      displayHeaderFooter: true,
+      displayHeaderFooter: footer.show,
       headerTemplate: "<span></span>",
       footerTemplate:
-        `<div style="width:100%;padding:0 12mm;font-family:Arial,Helvetica,sans-serif;font-size:8px;color:#94a3b8;` +
+        `<div style="width:100%;padding:0 ${footer.sideMm}mm;font-family:Arial,Helvetica,sans-serif;font-size:8px;color:#94a3b8;` +
         `display:flex;justify-content:space-between;">` +
         `<span>${label}</span>` +
-        `<span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span></div>`,
+        (footer.pageNumber ? `<span>Page <span class="pageNumber"></span> / <span class="totalPages"></span></span>` : "") +
+        `</div>`,
     });
     return Buffer.from(pdf);
   } finally {

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import type { InvoicePdfPayload } from "@/lib/server/invoicePdfData";
 import type { Tax } from "@/services/taxService";
+import { pageCss as pageCssFor } from "@/lib/documentTheme";
 import { docConfigTypeFor, resolveDocConfig } from "@/lib/documentConfig";
 import { InvoiceDocument, type InvoiceDocumentVariant } from "./InvoiceDocument";
 import { resolveInvoiceTemplate } from "./templates/types";
@@ -54,14 +55,14 @@ export default function InvoicePdfClient({ variant }: { variant: InvoiceDocument
   }, [data]);
 
   if (!data) return null;
-  const config = resolveDocConfig(docConfigTypeFor({ kind: data.invoice.kind, doc: data.doc }), data.config);
+  const config = resolveDocConfig(docConfigTypeFor({ kind: data.invoice.kind, doc: data.doc }), data.config, resolveInvoiceTemplate(data.invoice.template));
 
   // Page geometry lives here, not in the templates. No side margins (the templates pad
   // themselves, which is what lets a banner reach the edge); top/bottom margins keep
   // continuation pages and the page-number footer clear. A banner template's FIRST page
   // has no top margin so the banner starts at the paper edge.
   const bleed = FULL_BLEED_TEMPLATES.has(resolveInvoiceTemplate(data.invoice.template));
-  const pageCss = `@page { size: A4; margin: 12mm 0 16mm 0; } @page :first { margin-top: ${bleed ? "0" : "12mm"}; }`;
+  const pageCss = pageCssFor(config.page, bleed);
 
   return (
     <>

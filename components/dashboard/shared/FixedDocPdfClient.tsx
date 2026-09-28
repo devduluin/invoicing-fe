@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 
+import { pageCss } from "@/lib/documentTheme";
 import { resolveDocConfig } from "@/lib/documentConfig";
 import type { FixedDocPdfPayload } from "@/lib/receiptDocument";
 import OperationalDocument from "./OperationalDocument";
@@ -37,7 +38,7 @@ export default function FixedDocPdfClient() {
   if (!data || !config) return null;
   return (
     <>
-      <style dangerouslySetInnerHTML={{ __html: "@page { size: A4; margin: 12mm 0 16mm 0; }" }} />
+      <style dangerouslySetInnerHTML={{ __html: pageCss(config.page, false) }} />
       {data.receipt && <ReceiptDocument data={data.receipt} config={config} />}
       {data.operational && <OperationalDocument data={data.operational} config={config} />}
     </>

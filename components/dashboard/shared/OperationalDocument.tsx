@@ -5,6 +5,8 @@ import { htmlToPlainText } from "@/lib/richText";
 import type { OperationalDocData } from "@/lib/receiptDocument";
 import DocumentLogo from "./DocumentLogo";
 import { formatLongDate } from "../penjualan-invoice/templates/invoiceView";
+import { makeFormatter } from "@/lib/documentFormat";
+import { pageInsets, textStyle } from "@/lib/documentTheme";
 
 const ACCENT = "#4863E6";
 
@@ -36,14 +38,17 @@ export default function OperationalDocument({ data, config }: { data: Operationa
   ].filter((d) => d.value && config.visible(d.key));
 
   const cols = config.columns();
+  const accent = config.accent ?? ACCENT;
+  const fmt = makeFormatter(config.formats);
+  const dateText = (iso: string) => (config.stored.formats?.date ? fmt.date(iso, lang) : formatLongDate(iso, lang));
   const cell = (key: string, l: OperationalDocData["lines"][number]) =>
     key === "col.product" ? l.name : key === "col.description" ? l.description ?? "" : key === "col.quantity" ? qtyNf.format(l.quantity) : l.unit ?? "";
 
   return (
-    <div data-operational-document className="min-h-[148mm] bg-white px-[14mm] py-[12mm] text-[13px] leading-snug text-slate-800" style={{ width: "210mm" }}>
-      <header className="flex items-start justify-between gap-8 border-b-2 pb-5" style={{ borderColor: ACCENT }}>
+    <div data-operational-document className="min-h-[148mm] bg-white px-[14mm] py-[12mm] text-[13px] leading-snug text-slate-800" style={{ width: `${config.page.widthMm}mm`, ...pageInsets(config.page), ...textStyle(config, "body") }}>
+      <header className="flex items-start justify-between gap-8 border-b-2 pb-5" style={{ borderColor: accent }}>
         <div className="flex min-w-0 items-start gap-3.5">
-          <DocumentLogo src={data.attachmentImage?.startsWith("data:image/") ? data.attachmentImage : co?.company_logo} className="h-14 w-14 shrink-0 rounded-md object-contain" reserve="h-14 w-14" />
+          <DocumentLogo src={config.header.showLogo ? (data.attachmentImage?.startsWith("data:image/") ? data.attachmentImage : co?.company_logo) : undefined} className="h-14 w-14 shrink-0 rounded-md object-contain" reserve="h-14 w-14" />
           <div className="min-w-0">
             <p className="text-[16px] font-bold text-slate-900">{co?.name ?? "-"}</p>
             {coAddress.map((l) => (
@@ -55,7 +60,7 @@ export default function OperationalDocument({ data, config }: { data: Operationa
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[24px] leading-none font-bold tracking-wide" style={{ color: ACCENT }}>
+          <p className="text-[24px] leading-none font-bold tracking-wide" style={{ color: accent, ...textStyle(config, "title") }}>
             {config.documentName.toUpperCase()}
           </p>
           <dl className="mt-3 space-y-0.5 text-[12px]">
@@ -65,7 +70,7 @@ export default function OperationalDocument({ data, config }: { data: Operationa
             </div>
             <div className="flex justify-end gap-3">
               <dt className="text-slate-500">{config.label("hdr.date")}</dt>
-              <dd className="font-semibold text-slate-900">{formatLongDate(data.date, lang)}</dd>
+              <dd className="font-semibold text-slate-900">{dateText(data.date)}</dd>
             </div>
             {config.visible("hdr.related") && data.related.length > 0 && (
               <div className="flex justify-end gap-3">
@@ -128,7 +133,7 @@ export default function OperationalDocument({ data, config }: { data: Operationa
       {sig.show && (
         <footer className="mt-12 flex justify-end">
           <div className="w-[60mm] text-center">
-            <p className="text-[12px] text-slate-500">{formatLongDate(data.date, lang)}</p>
+            <p className="text-[12px] text-slate-500">{dateText(data.date)}</p>
             <div className="flex h-16 items-center justify-center">
               {sig.image && (
                 // eslint-disable-next-line @next/next/no-img-element

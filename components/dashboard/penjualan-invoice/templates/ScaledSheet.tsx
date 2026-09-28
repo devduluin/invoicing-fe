@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { cn } from "@/lib/utils";
 
-/** 210mm at 96dpi. */
+/** A4 portrait (210mm at 96dpi) — used until the sheet reports its real width. */
 const A4_WIDTH_PX = 793.7;
 
 /**
@@ -24,18 +24,21 @@ export function ScaledSheet({
 }) {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
-  const [box, setBox] = useState({ scale: 1, height: undefined as number | undefined, left: 0 });
+  const [box, setBox] = useState({ scale: 1, height: undefined as number | undefined, left: 0, width: A4_WIDTH_PX });
 
   useEffect(() => {
     const outer = outerRef.current;
     const inner = innerRef.current;
     if (!outer || !inner) return;
     const measure = () => {
-      const scale = Math.min(maxScale, outer.clientWidth / A4_WIDTH_PX);
+      // The sheet sets its own width (paper size / orientation come from the document config).
+      const pageWidth = inner.offsetWidth || A4_WIDTH_PX;
+      const scale = Math.min(maxScale, outer.clientWidth / pageWidth);
       setBox({
         scale,
         height: inner.offsetHeight * scale,
-        left: Math.max(0, (outer.clientWidth - A4_WIDTH_PX * scale) / 2),
+        left: Math.max(0, (outer.clientWidth - pageWidth * scale) / 2),
+        width: pageWidth,
       });
     };
     const ro = new ResizeObserver(measure);
@@ -50,7 +53,7 @@ export function ScaledSheet({
       <div
         ref={innerRef}
         style={{
-          width: "210mm",
+          width: "max-content",
           transform: `scale(${box.scale})`,
           transformOrigin: "top left",
           marginLeft: box.left,

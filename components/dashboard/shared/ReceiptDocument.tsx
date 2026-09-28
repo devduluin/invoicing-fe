@@ -5,7 +5,9 @@ import type { ResolvedDocConfig } from "@/lib/documentConfig";
 import { htmlToPlainText } from "@/lib/richText";
 import type { ReceiptDocData } from "@/lib/receiptDocument";
 import DocumentLogo from "./DocumentLogo";
-import { formatLongDate, formatRupiah } from "../penjualan-invoice/templates/invoiceView";
+import { formatLongDate } from "../penjualan-invoice/templates/invoiceView";
+import { makeFormatter } from "@/lib/documentFormat";
+import { pageInsets, textStyle, tint } from "@/lib/documentTheme";
 
 const ACCENT = "#4863E6";
 
@@ -34,12 +36,16 @@ export default function ReceiptDocument({ data, config }: { data: ReceiptDocData
   const coAddress = [...lines(co?.alamat), [co?.kota, co?.provinsi].filter(Boolean).join(", ")].filter(Boolean);
   const purposeText = data.invoices.length > 0 ? data.invoices.map((i) => i.number).join(", ") : htmlToPlainText(data.notes).trim() || "-";
   const sig = config.signature;
+  const accent = config.accent ?? ACCENT;
+  const fmt = makeFormatter(config.formats);
+  const formatRupiah = fmt.money;
+  const dateText = (iso: string) => (config.stored.formats?.date ? fmt.date(iso, lang) : formatLongDate(iso, lang));
 
   return (
-    <div data-receipt-document className="min-h-[148mm] bg-white px-[14mm] py-[12mm] text-[13px] leading-snug text-slate-800" style={{ width: "210mm" }}>
-      <header className="flex items-start justify-between gap-8 border-b-2 pb-5" style={{ borderColor: ACCENT }}>
+    <div data-receipt-document className="min-h-[148mm] bg-white px-[14mm] py-[12mm] text-[13px] leading-snug text-slate-800" style={{ width: `${config.page.widthMm}mm`, ...pageInsets(config.page), ...textStyle(config, "body") }}>
+      <header className="flex items-start justify-between gap-8 border-b-2 pb-5" style={{ borderColor: accent }}>
         <div className="flex min-w-0 items-start gap-3.5">
-          <DocumentLogo src={co?.company_logo} className="h-14 w-14 shrink-0 rounded-md object-contain" reserve="h-14 w-14" />
+          <DocumentLogo src={config.header.showLogo ? co?.company_logo : undefined} className="h-14 w-14 shrink-0 rounded-md object-contain" reserve="h-14 w-14" />
           <div className="min-w-0">
             <p className="text-[16px] font-bold text-slate-900">{co?.name ?? "-"}</p>
             {coAddress.map((l) => (
@@ -52,7 +58,7 @@ export default function ReceiptDocument({ data, config }: { data: ReceiptDocData
           </div>
         </div>
         <div className="shrink-0 text-right">
-          <p className="text-[24px] leading-none font-bold tracking-wide" style={{ color: ACCENT }}>
+          <p className="text-[24px] leading-none font-bold tracking-wide" style={{ color: accent, ...textStyle(config, "title") }}>
             {config.documentName.toUpperCase()}
           </p>
           <dl className="mt-3 space-y-0.5 text-[12px]">
@@ -62,7 +68,7 @@ export default function ReceiptDocument({ data, config }: { data: ReceiptDocData
             </div>
             <div className="flex justify-end gap-3">
               <dt className="text-slate-500">{config.label("hdr.date")}</dt>
-              <dd className="font-semibold text-slate-900">{formatLongDate(data.date, lang)}</dd>
+              <dd className="font-semibold text-slate-900">{dateText(data.date)}</dd>
             </div>
           </dl>
         </div>
@@ -118,9 +124,9 @@ export default function ReceiptDocument({ data, config }: { data: ReceiptDocData
         </table>
       )}
 
-      <div className="mt-6 flex items-center justify-between rounded-md px-5 py-4" style={{ background: "#F3F5FE", border: `1px solid ${ACCENT}33` }}>
+      <div className="mt-6 flex items-center justify-between rounded-md px-5 py-4" style={{ background: config.accent ? tint(config.accent, 8) : "#F3F5FE", border: `1px solid color-mix(in srgb, ${accent} 20%, transparent)` }}>
         <span className="text-[12px] font-semibold tracking-wide text-slate-600 uppercase">{config.label("fld.amount")}</span>
-        <span className="text-[24px] font-bold tabular-nums" style={{ color: ACCENT }}>
+        <span className="text-[24px] font-bold tabular-nums" style={{ color: accent, ...textStyle(config, "total") }}>
           {formatRupiah(data.amount)}
         </span>
       </div>

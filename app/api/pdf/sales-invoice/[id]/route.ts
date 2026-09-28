@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { loadInvoicePdfData, PdfDataError } from "@/lib/server/invoicePdfData";
+import { resolveInvoiceTemplate } from "@/components/dashboard/penjualan-invoice/templates/types";
+import { pdfFooterOptions } from "@/lib/documentTheme";
 import { PdfBusyError, PdfEngineError, renderPdf } from "@/lib/server/pdfRenderer";
 
 export const runtime = "nodejs";
@@ -40,6 +42,7 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ id: str
       url: `${base.replace(/\/$/, "")}/pdf/sales-invoice/${id}?variant=${variant}`,
       initData: data,
       footerLabel: data.invoice.number,
+      footer: pdfFooterOptions(data.config, resolveInvoiceTemplate(data.invoice.template)),
     });
 
     const filename = `${data.invoice.kind === "down_payment" ? "DownPayment" : "Invoice"}-${data.invoice.number}`

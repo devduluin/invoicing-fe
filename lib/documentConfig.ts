@@ -65,7 +65,50 @@ export interface StoredBlock {
   content?: string;
 }
 
+export type PageSize = "a4" | "a5" | "letter";
+export type PageOrientation = "portrait" | "landscape";
+export type FontKey = "inter" | "sans" | "serif" | "mono";
+export type TextGroup = "title" | "heading" | "body" | "tableHead" | "tableBody" | "total";
+export type TextAlign = "left" | "center" | "right";
+
+export interface StoredTextStyle {
+  font?: FontKey;
+  /** pt */
+  size?: number;
+  color?: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  align?: TextAlign;
+}
+
+export interface StoredFormats {
+  number?: "id" | "en" | "space";
+  decimals?: number;
+  currency?: "rp" | "idr" | "usd" | "none";
+  date?: "dmy" | "dmy-dash" | "ymd" | "long";
+  tax?: "name" | "rate";
+  discount?: "entered" | "percent" | "amount";
+}
+
+/** The look of ONE template of ONE document type (sparse). Saving a colour for Template 4 of the
+ *  sales invoice touches this entry only — not the other templates, not other document types. */
+export interface StoredTemplateStyle {
+  /** One theme colour (#rrggbb). Unset = the template's own palette. */
+  appearance?: { color?: string };
+  page?: { size?: PageSize; orientation?: PageOrientation; margins?: { top?: number; bottom?: number; left?: number; right?: number } };
+  header?: { showHeader?: boolean; showLogo?: boolean; accentLine?: boolean; showFooter?: boolean; showPageNumber?: boolean };
+  /** Sparse per-group overrides of the template's own text styles. */
+  textStyles?: Partial<Record<TextGroup, StoredTextStyle>>;
+}
+
+/** Key under which the fixed (non-templated) documents keep their one look. */
+export const FIXED_STYLE_KEY = "default";
+
 export interface StoredDocConfig {
+  /** Look per template id (template_1..7), or FIXED_STYLE_KEY for documents without templates. */
+  templateStyles?: Record<string, StoredTemplateStyle>;
+  formats?: StoredFormats;
   language?: DocLang;
   documentName?: string;
   labels?: Record<string, string>;
@@ -96,11 +139,11 @@ function billingFields(o: {
   outstandingLabel?: Record<DocLang, string>;
 }): FieldDef[] {
   return [
-    field("hdr.number", "header", o.number, { toggle: false }),
+    field("hdr.number", "header", o.number),
     field("hdr.reference", "header", L("Referensi", "Reference")),
-    field("hdr.date", "header", L("Tanggal", "Date"), { toggle: false }),
+    field("hdr.date", "header", L("Tanggal", "Date")),
     ...(o.due ? [field("hdr.dueDate", "header", L("Tgl. Jatuh Tempo", "Due Date"))] : []),
-    field("hdr.partner", "header", o.partner, { toggle: false }),
+    field("hdr.partner", "header", o.partner),
     field("hdr.companyInfo", "header", L("Info Perusahaan:", "Company Info:")),
     // The partner's contact person, printed under the partner block. Off until enabled.
     field("hdr.contact", "header", L("Kontak Person", "Contact Person"), { defaultOff: true }),
@@ -238,8 +281,45 @@ export interface ResolvedBlock {
   content: string;
 }
 
+/** Paper sizes in mm (portrait). */
+export const PAGE_SIZES: Record<PageSize, { w: number; h: number; label: string }> = {
+  a4: { w: 210, h: 297, label: "A4" },
+  a5: { w: 148, h: 210, label: "A5" },
+  letter: { w: 215.9, h: 279.4, label: "Letter" },
+};
+
+/** What the built-in layouts already use, so an unconfigured company prints exactly as before. */
+export const DEFAULT_MARGINS = { top: 12, bottom: 16, left: 12, right: 12 };
+
+export const TEXT_GROUPS: TextGroup[] = ["title", "heading", "body", "tableHead", "tableBody", "total"];
+
+export interface ResolvedFormats {
+  number: "id" | "en" | "space";
+  decimals: number;
+  currency: "rp" | "idr" | "usd" | "none";
+  date: "dmy" | "dmy-dash" | "ymd" | "long";
+  tax: "name" | "rate";
+  discount: "entered" | "percent" | "amount";
+}
+
 export interface ResolvedDocConfig {
   type: DocConfigType;
+  /** Theme colour, or undefined to keep the template's own palette. */
+  accent?: string;
+  page: {
+    size: PageSize;
+    orientation: PageOrientation;
+    widthMm: number;
+    heightMm: number;
+    margins: { top: number; bottom: number; left: number; right: number };
+    /** True when the user changed a margin (otherwise the templates' built-in spacing applies). */
+    customMargins: { top: boolean; bottom: boolean; left: boolean; right: boolean };
+  };
+  header: { showHeader: boolean; showLogo: boolean; accentLine: boolean; showFooter: boolean; showPageNumber: boolean };
+  textStyles: Partial<Record<TextGroup, StoredTextStyle>>;
+  formats: ResolvedFormats;
+  /** The same configuration resolved for another template's look (everything else is identical). */
+  forTemplate(templateId?: string | null): ResolvedDocConfig;
   spec: DocTypeSpec;
   language: DocLang;
   /** The document's title as printed (custom name, or the default in the document language). */
@@ -255,9 +335,12 @@ export interface ResolvedDocConfig {
   stored: StoredDocConfig;
 }
 
-export function resolveDocConfig(type: DocConfigType, stored?: StoredDocConfig | null): ResolvedDocConfig {
+export function resolveDocConfig(type: DocConfigType, stored?: StoredDocConfig | null, templateId?: string | null): ResolvedDocConfig {
   const spec = DOC_SPECS[type];
   const s: StoredDocConfig = stored ?? {};
+  // A templated document's look belongs to a template; with no template named, defaults apply.
+  const styleKey = spec.templated ? templateId ?? "" : FIXED_STYLE_KEY;
+  const ts: StoredTemplateStyle = (styleKey && s.templateStyles?.[styleKey]) || {};
   const language: DocLang = s.language === "en" ? "en" : "id";
   const byKey = new Map(spec.fields.map((f) => [f.key, f]));
   const hidden = new Set(s.hidden ?? []);
@@ -286,8 +369,47 @@ export function resolveDocConfig(type: DocConfigType, stored?: StoredDocConfig |
     content: b?.content ?? "",
   });
 
-  return {
+  const hex = (v: unknown) => (typeof v === "string" && /^#[0-9a-f]{6}$/i.test(v) ? v : undefined);
+  const size: PageSize = ts.page?.size && ts.page.size in PAGE_SIZES ? ts.page.size : "a4";
+  const orientation: PageOrientation = ts.page?.orientation === "landscape" ? "landscape" : "portrait";
+  const dims = PAGE_SIZES[size];
+  const m = ts.page?.margins ?? {};
+  const side = (v: unknown, d: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 50 ? v : d);
+  const textStyles: Partial<Record<TextGroup, StoredTextStyle>> = {};
+  for (const g of TEXT_GROUPS) {
+    const st = ts.textStyles?.[g];
+    if (st && Object.keys(st).length) textStyles[g] = { ...st, color: hex(st.color) };
+  }
+  const f = s.formats ?? {};
+
+  const resolved: ResolvedDocConfig = {
     type,
+    accent: hex(ts.appearance?.color),
+    page: {
+      size,
+      orientation,
+      widthMm: orientation === "landscape" ? dims.h : dims.w,
+      heightMm: orientation === "landscape" ? dims.w : dims.h,
+      margins: { top: side(m.top, DEFAULT_MARGINS.top), bottom: side(m.bottom, DEFAULT_MARGINS.bottom), left: side(m.left, DEFAULT_MARGINS.left), right: side(m.right, DEFAULT_MARGINS.right) },
+      customMargins: { top: m.top !== undefined, bottom: m.bottom !== undefined, left: m.left !== undefined, right: m.right !== undefined },
+    },
+    header: {
+      showHeader: ts.header?.showHeader !== false,
+      showLogo: ts.header?.showLogo !== false,
+      accentLine: ts.header?.accentLine === true,
+      showFooter: ts.header?.showFooter !== false,
+      showPageNumber: ts.header?.showPageNumber !== false,
+    },
+    textStyles,
+    formats: {
+      number: f.number === "en" || f.number === "space" ? f.number : "id",
+      decimals: typeof f.decimals === "number" && f.decimals >= 0 && f.decimals <= 4 ? Math.round(f.decimals) : 0,
+      currency: f.currency === "idr" || f.currency === "usd" || f.currency === "none" ? f.currency : "rp",
+      date: f.date === "dmy-dash" || f.date === "ymd" || f.date === "long" ? f.date : "dmy",
+      tax: f.tax === "rate" ? "rate" : "name",
+      discount: f.discount === "percent" || f.discount === "amount" ? f.discount : "entered",
+    },
+    forTemplate: (id) => (!spec.templated || (id ?? "") === (templateId ?? "") ? resolved : resolveDocConfig(type, stored, id)),
     spec,
     language,
     documentName: s.documentName?.trim() || spec.name[language],
@@ -300,6 +422,7 @@ export function resolveDocConfig(type: DocConfigType, stored?: StoredDocConfig |
     signature: { show: s.signature?.show !== false, name: s.signature?.name?.trim() ?? "", image: s.signature?.image ?? "" },
     stored: s,
   };
+  return resolved;
 }
 
 /** Which configuration a printable invoice-shaped document belongs to. */
@@ -315,9 +438,19 @@ export function parseStoredConfig(raw: unknown): StoredDocConfig {
 }
 
 /** True when two stored configs mean the same thing (used for the "unsaved changes" state). */
+const EMPTY_STYLE = {
+  appearance: "",
+  page: { size: "a4", orientation: "portrait", margins: {} },
+  header: { showHeader: true, showLogo: true, accentLine: false, showFooter: true, showPageNumber: true },
+  textStyles: {},
+};
+
 export function sameStoredConfig(a: StoredDocConfig, b: StoredDocConfig): boolean {
+  // Key order must not matter (the server re-serialises what the draft built in another order).
+  const stable = (v: unknown): unknown =>
+    Array.isArray(v) ? v.map(stable) : v && typeof v === "object" ? Object.fromEntries(Object.entries(v as Record<string, unknown>).filter(([, x]) => x !== undefined).sort(([x], [y]) => x.localeCompare(y)).map(([k, x]) => [k, stable(x)])) : v;
   const norm = (c: StoredDocConfig) =>
-    JSON.stringify({
+    JSON.stringify(stable({
       language: c.language ?? "id",
       documentName: c.documentName?.trim() ?? "",
       labels: Object.fromEntries(Object.entries(c.labels ?? {}).filter(([, v]) => v.trim()).sort(([x], [y]) => x.localeCompare(y))),
@@ -327,6 +460,20 @@ export function sameStoredConfig(a: StoredDocConfig, b: StoredDocConfig): boolea
       notes: { show: c.notes?.show !== false, label: c.notes?.label?.trim() ?? "", content: c.notes?.content ?? "" },
       terms: { show: c.terms?.show !== false, label: c.terms?.label?.trim() ?? "", content: c.terms?.content ?? "" },
       signature: { show: c.signature?.show !== false, name: c.signature?.name?.trim() ?? "", image: c.signature?.image ?? "" },
-    });
+      templateStyles: Object.fromEntries(
+        Object.entries(c.templateStyles ?? {})
+          .map(([id, t]) => [
+            id,
+            {
+              appearance: (t.appearance?.color ?? "").toLowerCase(),
+              page: { size: t.page?.size ?? "a4", orientation: t.page?.orientation ?? "portrait", margins: t.page?.margins ?? {} },
+              header: { showHeader: t.header?.showHeader !== false, showLogo: t.header?.showLogo !== false, accentLine: t.header?.accentLine === true, showFooter: t.header?.showFooter !== false, showPageNumber: t.header?.showPageNumber !== false },
+              textStyles: Object.fromEntries(Object.entries(t.textStyles ?? {}).filter(([, v]) => v && Object.keys(v).length)),
+            },
+          ])
+          .filter(([, t]) => JSON.stringify(stable(t)) !== JSON.stringify(stable(EMPTY_STYLE))),
+      ),
+      formats: c.formats ?? {},
+    }));
   return norm(a) === norm(b);
 }

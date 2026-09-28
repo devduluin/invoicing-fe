@@ -58,8 +58,8 @@ export function InvoiceDocument({ invoice, mitra, company, taxByID, variant, tem
   const selfFetchedDownPaymentRef = useDownPaymentRef(invoice, downPaymentRef === undefined && !doc);
   const dpRef = downPaymentRef === undefined ? selfFetchedDownPaymentRef : (downPaymentRef ?? undefined);
   const view = useMemo(
-    () => buildInvoiceView({ invoice, mitra, company, taxByID, variant, doc, config: cfg, downPaymentRef: dpRef }),
-    [invoice, mitra, company, taxByID, variant, doc, cfg, dpRef],
+    () => buildInvoiceView({ invoice, mitra, company, taxByID, variant, doc, config: cfg, downPaymentRef: dpRef, template: template ?? invoice.template }),
+    [invoice, mitra, company, taxByID, variant, doc, cfg, dpRef, template],
   );
   // Never paint default wording and then swap it: wait for the saved configuration.
   if (!config && !loaded.ready) return <div className="min-h-[60vh]" aria-busy="true" />;

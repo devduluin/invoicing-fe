@@ -1,6 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { loadDocumentPdfData, loadFixedPdfData, PdfDataError } from "@/lib/server/invoicePdfData";
+import { resolveInvoiceTemplate } from "@/components/dashboard/penjualan-invoice/templates/types";
+import { pdfFooterOptions } from "@/lib/documentTheme";
 import { PdfBusyError, PdfEngineError, renderPdf } from "@/lib/server/pdfRenderer";
 import type { PrintableDocKind } from "@/lib/documentShape";
 
@@ -61,12 +63,12 @@ export async function GET(request: NextRequest, ctx: { params: Promise<{ kind: s
   try {
     if (fixedSpec) {
       const { payload, number } = await loadFixedPdfData(fixedSpec.kind, id, { token, companyId });
-      const pdf = await renderPdf({ url: `${base}/pdf/fixed/${id}`, initData: payload, footerLabel: number });
+      const pdf = await renderPdf({ url: `${base}/pdf/fixed/${id}`, initData: payload, footerLabel: number, footer: pdfFooterOptions(payload.config) });
       return send(pdf, fixedSpec.prefix, number);
     }
     const loaded = await loadDocumentPdfData(spec!.kind, id, { token, companyId });
     const data = { ...loaded, lang };
-    const pdf = await renderPdf({ url: `${base}/pdf/sales-invoice/${id}?variant=original`, initData: data, footerLabel: data.invoice.number });
+    const pdf = await renderPdf({ url: `${base}/pdf/sales-invoice/${id}?variant=original`, initData: data, footerLabel: data.invoice.number, footer: pdfFooterOptions(data.config, resolveInvoiceTemplate(data.invoice.template)) });
     return send(pdf, spec!.prefix, data.invoice.number);
   } catch (err) {
     if (err instanceof PdfDataError) {

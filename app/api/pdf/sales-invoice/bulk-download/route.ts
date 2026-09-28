@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import JSZip from "jszip";
 
 import { loadInvoicePdfData, PdfDataError } from "@/lib/server/invoicePdfData";
+import { resolveInvoiceTemplate } from "@/components/dashboard/penjualan-invoice/templates/types";
+import { pdfFooterOptions } from "@/lib/documentTheme";
 import { PdfBusyError, PdfEngineError, renderPdf } from "@/lib/server/pdfRenderer";
 
 export const runtime = "nodejs";
@@ -71,6 +73,7 @@ export async function POST(request: NextRequest) {
           url: `${base.replace(/\/$/, "")}/pdf/sales-invoice/${id}?variant=original`,
           initData: data,
           footerLabel: data.invoice.number,
+          footer: pdfFooterOptions(data.config, resolveInvoiceTemplate(data.invoice.template)),
         });
         let filename = `${data.invoice.kind === "down_payment" ? "DownPayment" : "Invoice"}-${data.invoice.number}`
           .replace(/[^A-Za-z0-9._-]+/g, "_")

@@ -4,11 +4,12 @@ import { paymentTermLabel } from "@/lib/paymentTerms";
 import type { Mitra } from "@/services/mitraService";
 import type { Company } from "@/services/companyService";
 import type { Tax } from "@/services/taxService";
-import type { InvoiceLang } from "./types";
+import { resolveInvoiceTemplate, type InvoiceLang } from "./types";
 import type { PrintableDocKind } from "@/lib/documentShape";
 import { displayPhone } from "@/lib/phone";
 import { docConfigTypeFor, resolveDocConfig, type ResolvedDocConfig } from "@/lib/documentConfig";
 import { amountInWords } from "@/lib/amountInWords";
+import { makeFormatter } from "@/lib/documentFormat";
 
 /**
  * The single, template-agnostic description of what an invoice prints.
@@ -169,6 +170,15 @@ export interface InvoiceView {
    *  informational only (its own number/date/amount), never affects this invoice's own totals.
    *  Undefined when there is none, so templates hide the section instead of showing "undefined". */
   downPayment?: { number: string; date: string; amount: string };
+  /** Look overrides from the document configuration; every field is optional/neutral by default. */
+  theme: {
+    accent?: string;
+    accentLine: boolean;
+    textStyles: ResolvedDocConfig["textStyles"];
+    page: ResolvedDocConfig["page"];
+  };
+  /** Which of the two party blocks print (Bill To / Company info toggles). */
+  show: { customer: boolean; companyInfo: boolean };
 }
 
 // ── formatting ──────────────────────────────────────────────────────────────
@@ -225,6 +235,8 @@ export interface BuildInvoiceViewInput {
    *  looked up via the existing Connected Documents endpoint (see InvoiceDocument.tsx /
    *  useDownPaymentRef). Omit when there is none, or it isn't known yet. */
   downPaymentRef?: { number: string; date: string; amount?: number } | null;
+  /** The layout this is rendered with — its saved look (colour, page, header, text styles) applies. */
+  template?: string | null;
 }
 
 export function buildInvoiceView({
@@ -237,10 +249,15 @@ export function buildInvoiceView({
   doc,
   config,
   downPaymentRef,
+  template,
 }: BuildInvoiceViewInput): InvoiceView {
   // The document configuration is the single source of wording, visible fields and language.
-  const cfg = config ?? resolveDocConfig(docConfigTypeFor({ kind: invoice.kind, doc }), { language: langInput });
+  const cfg = (config ?? resolveDocConfig(docConfigTypeFor({ kind: invoice.kind, doc }), { language: langInput })).forTemplate(resolveInvoiceTemplate(template ?? invoice.template));
   const lang: InvoiceLang = cfg.language;
+  const fmt = makeFormatter(cfg.formats);
+  const showHeader = cfg.header.showHeader;
+  // A default "(Rp)" in a column label follows the configured currency; a label the user typed is kept.
+  const currencyLabel = (key: string, text: string) => (fmt.currencyLabel === undefined || cfg.stored.labels?.[key]?.trim() ? text : text.replace(/\s*\(Rp\)/, fmt.currencyLabel ? ` (${fmt.currencyLabel})` : ""));
   const has = (k: string) => cfg.spec.fields.some((f) => f.key === k);
   const labels: InvoiceLabels = {
     ...LABELS[lang],
@@ -253,10 +270,10 @@ export function buildInvoiceView({
     companyInfo: cfg.label("hdr.companyInfo"),
     product: cfg.label("col.product"),
     quantity: cfg.label("col.quantity"),
-    price: cfg.label("col.price"),
+    price: currencyLabel("col.price", cfg.label("col.price")),
     discount: cfg.label("col.discount"),
     tax: cfg.label("col.tax"),
-    amount: cfg.label("col.amount"),
+    amount: currencyLabel("col.amount", cfg.label("col.amount")),
     subtotal: cfg.label("sum.subtotal"),
     totalDiscount: cfg.label("sum.discount"),
     taxTotal: cfg.label("sum.tax"),
@@ -273,16 +290,17 @@ export function buildInvoiceView({
 
   const lines: InvoiceViewLine[] = invoice.lines.map((l, i) => {
     const taxes = (l.tax_ids ?? []).map((id) => taxByID.get(id)).filter((t): t is Tax => !!t);
+    const gross = (l.quantity || 0) * (l.unit_price || 0);
+    const isAmount = l.discount_type === "amount";
+    const value = l.discount_value || 0;
+    const asPercent = () => `${isAmount ? (gross > 0 ? Math.round((value / gross) * 10000) / 100 : 0) : value}%`;
+    const asAmount = () => fmt.money(isAmount ? value : (gross * value) / 100);
     const discount =
-      l.discount_type === "amount"
-        ? l.discount_value
-          ? formatRupiah(l.discount_value)
-          : "0%"
-        : `${l.discount_value || 0}%`;
+      cfg.formats.discount === "percent" ? asPercent() : cfg.formats.discount === "amount" ? asAmount() : isAmount ? (value ? asAmount() : "0%") : asPercent();
     const quantity = qtyNf.format(l.quantity);
-    const price = formatNumber(l.unit_price);
-    const taxText = taxes.length ? taxes.map((t) => t.name).join(", ") : "—";
-    const amount = formatNumber(l.line_total ?? 0);
+    const price = fmt.number(l.unit_price);
+    const taxText = taxes.length ? taxes.map((t) => (cfg.formats.tax === "rate" ? `${t.rate}%` : t.name)).join(", ") : "—";
+    const amount = fmt.number(l.line_total ?? 0);
     return {
       key: l.id ?? String(i),
       name: l.product_name,
@@ -316,17 +334,17 @@ export function buildInvoiceView({
   };
 
   const summary: InvoiceViewSummaryRow[] = [
-    ...(cfg.visible("sum.subtotal") ? [{ key: "subtotal" as const, label: labels.subtotal, value: formatRupiah(invoice.subtotal ?? 0) }] : []),
-    ...(cfg.visible("sum.discount") ? [{ key: "discount" as const, label: labels.totalDiscount, value: formatRupiah(discountTotal) }] : []),
-    ...(cfg.visible("sum.tax") ? [{ key: "tax" as const, label: labels.taxTotal, value: formatRupiah(invoice.tax_total ?? 0) }] : []),
-    ...(shipping > 0 && cfg.visible("sum.shipping") ? [{ key: "shipping" as const, label: labels.shipping, value: formatRupiah(shipping) }] : []),
-    { key: "total", label: labels.total, value: formatRupiah(invoice.grand_total ?? 0), emphasis: true },
+    ...(cfg.visible("sum.subtotal") ? [{ key: "subtotal" as const, label: labels.subtotal, value: fmt.money(invoice.subtotal ?? 0) }] : []),
+    ...(cfg.visible("sum.discount") ? [{ key: "discount" as const, label: labels.totalDiscount, value: fmt.money(discountTotal) }] : []),
+    ...(cfg.visible("sum.tax") ? [{ key: "tax" as const, label: labels.taxTotal, value: fmt.money(invoice.tax_total ?? 0) }] : []),
+    ...(shipping > 0 && cfg.visible("sum.shipping") ? [{ key: "shipping" as const, label: labels.shipping, value: fmt.money(shipping) }] : []),
+    { key: "total", label: labels.total, value: fmt.money(invoice.grand_total ?? 0), emphasis: true },
     ...(isOrder
       ? []
       : [
-          ...(appliedDp > 0 ? [{ key: "downPayment" as const, label: labels.downPayment, value: formatRupiah(appliedDp) }] : []),
-          ...(cfg.visible("sum.paid") ? [{ key: "paid" as const, label: labels.totalPaid, value: formatRupiah(paid) }] : []),
-          ...(cfg.visible("sum.outstanding") ? [{ key: "outstanding" as const, label: labels.outstanding, value: formatRupiah(outstanding), emphasis: true }] : []),
+          ...(appliedDp > 0 ? [{ key: "downPayment" as const, label: labels.downPayment, value: fmt.money(appliedDp) }] : []),
+          ...(cfg.visible("sum.paid") ? [{ key: "paid" as const, label: labels.totalPaid, value: fmt.money(paid) }] : []),
+          ...(cfg.visible("sum.outstanding") ? [{ key: "outstanding" as const, label: labels.outstanding, value: fmt.money(outstanding), emphasis: true }] : []),
           ...(cfg.visible("sum.paymentStatus") ? [{ key: "paymentStatus" as const, label: cfg.label("sum.paymentStatus"), value: statusText[paymentState][lang] }] : []),
         ]),
   ];
@@ -338,23 +356,27 @@ export function buildInvoiceView({
   return {
     lang,
     labels,
-    title: labels.title,
-    number: invoice.number,
-    reference: cfg.visible("hdr.reference") ? invoice.ref_no || undefined : undefined,
-    date: formatShortDate(invoice.date),
-    dueDate: !isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? formatShortDate(invoice.due_date) : undefined,
-    meta: [
-      { key: "no", label: labels.invoiceNo, value: invoice.number },
-      ...(cfg.visible("hdr.reference") && invoice.ref_no ? [{ key: "ref", label: labels.reference, value: invoice.ref_no }] : []),
-      { key: "date", label: labels.date, value: formatShortDate(invoice.date) },
-      ...(!isOrder && invoice.payment_term ? [{ key: "term", label: lang === "id" ? "Termin" : "Terms", value: paymentTermLabel(invoice.payment_term, lang) }] : []),
-      ...(!isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? [{ key: "due", label: labels.dueDate, value: formatShortDate(invoice.due_date) }] : []),
-    ],
-    columns: cfg.columns().map((key) => ({ key, label: cfg.label(key), align: key === "col.product" ? ("left" as const) : ("right" as const) })),
+    title: showHeader ? labels.title : "",
+    number: showHeader && cfg.visible("hdr.number") ? invoice.number : "",
+    reference: showHeader && cfg.visible("hdr.reference") ? invoice.ref_no || undefined : undefined,
+    date: showHeader && cfg.visible("hdr.date") ? fmt.date(invoice.date, lang) : "",
+    dueDate: showHeader && !isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? fmt.date(invoice.due_date, lang) : undefined,
+    meta: !showHeader
+      ? []
+      : [
+          ...(cfg.visible("hdr.number") ? [{ key: "no", label: labels.invoiceNo, value: invoice.number }] : []),
+          ...(cfg.visible("hdr.reference") && invoice.ref_no ? [{ key: "ref", label: labels.reference, value: invoice.ref_no }] : []),
+          ...(cfg.visible("hdr.date") ? [{ key: "date", label: labels.date, value: fmt.date(invoice.date, lang) }] : []),
+          ...(!isOrder && invoice.payment_term ? [{ key: "term", label: lang === "id" ? "Termin" : "Terms", value: paymentTermLabel(invoice.payment_term, lang) }] : []),
+          ...(!isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? [{ key: "due", label: labels.dueDate, value: fmt.date(invoice.due_date, lang) }] : []),
+        ],
+    theme: { accent: cfg.accent, accentLine: cfg.header.accentLine, textStyles: cfg.textStyles, page: cfg.page },
+    show: { customer: cfg.visible("hdr.partner"), companyInfo: cfg.visible("hdr.companyInfo") },
+    columns: cfg.columns().map((key) => ({ key, label: currencyLabel(key, cfg.label(key)), align: key === "col.product" ? ("left" as const) : ("right" as const) })),
     company: {
       name: company?.name ?? "—",
       // The document's own attachment (when it is an image) is its logo; otherwise the company logo.
-      logo: attachmentLogo || company?.company_logo || undefined,
+      logo: showHeader && cfg.header.showLogo ? attachmentLogo || company?.company_logo || undefined : undefined,
       addressLines: [...splitLines(company?.alamat), ...(companyCity ? [companyCity] : [])],
       email: company?.email || undefined,
       phone: company?.phone || undefined,
@@ -385,7 +407,7 @@ export function buildInvoiceView({
     },
     terbilang: amountInWords(invoice.grand_total ?? 0, lang),
     downPayment: downPaymentRef
-      ? { number: downPaymentRef.number, date: formatShortDate(downPaymentRef.date), amount: formatRupiah(downPaymentRef.amount ?? 0) }
+      ? { number: downPaymentRef.number, date: fmt.date(downPaymentRef.date, lang), amount: fmt.money(downPaymentRef.amount ?? 0) }
       : undefined,
   };
 }

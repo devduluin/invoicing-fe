@@ -1,5 +1,6 @@
 import RichTextView from "../../shared/RichTextView";
-import { GUTTER, Logo, LinesTable, Sheet, SummaryTable, type TemplateProps } from "./parts";
+import { GUTTER, PAGE_PAD, Logo, LinesTable, Sheet, SummaryTable, type TemplateProps } from "./parts";
+import { textStyle } from "@/lib/documentTheme";
 
 /**
  * Template 6 — modern, document-oriented (PAPER-style reference): company block top-left,
@@ -11,25 +12,30 @@ const ACCENT = "#1d4ed8";
 
 export default function Template6({ view }: TemplateProps) {
   const L = view.labels;
+  const accent = view.theme.accent ?? ACCENT;
 
   return (
-    <Sheet template="template_6">
-      <div className={`${GUTTER} py-[9mm] print:py-0`}>
+    <Sheet template="template_6" view={view} accent={accent}>
+      <div className={`${GUTTER} ${PAGE_PAD}`}>
         <header className="flex items-start justify-between gap-[10mm]">
           <div className="min-w-0">
             <Logo company={view.company} />
-            <p className="mt-[2mm] text-[15px] font-bold text-slate-900">{view.company.name}</p>
-            <div className="mt-[1mm] space-y-[0.5mm] text-[12px] text-slate-600">
-              {view.company.addressLines.map((l, i) => (
-                <p key={i}>{l}</p>
-              ))}
-              {view.company.phone && <p>{L.phone}: {view.company.phone}</p>}
-              {view.company.email && <p>{L.email}: {view.company.email}</p>}
-            </div>
+            {view.show.companyInfo && (
+              <>
+                <p className="mt-[2mm] text-[15px] font-bold text-slate-900" style={textStyle(view.theme, "heading")}>{view.company.name}</p>
+                <div className="mt-[1mm] space-y-[0.5mm] text-[12px] text-slate-600">
+                  {view.company.addressLines.map((l, i) => (
+                    <p key={i}>{l}</p>
+                  ))}
+                  {view.company.phone && <p>{L.phone}: {view.company.phone}</p>}
+                  {view.company.email && <p>{L.email}: {view.company.email}</p>}
+                </div>
+              </>
+            )}
           </div>
 
           <div className="w-[52%] shrink-0 text-right">
-            <p className="text-[19px] font-bold" style={{ color: ACCENT }}>{view.title}</p>
+            <p className="text-[19px] font-bold" style={{ color: accent, ...textStyle(view.theme, "title") }}>{view.title}</p>
             <dl className="mt-[2mm] space-y-[0.5mm] text-[12.5px]">
               {view.meta.map((r) => (
                 <div key={r.key} className="flex justify-between gap-3">
@@ -38,8 +44,9 @@ export default function Template6({ view }: TemplateProps) {
                 </div>
               ))}
             </dl>
+            {view.show.customer && (
             <div className="mt-[4mm] text-left">
-              <p className="text-[12px] font-bold" style={{ color: ACCENT }}>{L.billTo}</p>
+              <p className="text-[12px] font-bold" style={{ color: accent, ...textStyle(view.theme, "heading") }}>{L.billTo}</p>
               <p className="mt-[1mm] text-[13px] font-bold text-slate-900">{view.customer.name}</p>
               <div className="mt-[0.5mm] space-y-[0.5mm] text-[12px] text-slate-600">
                 {view.customer.addressLines.map((l, i) => (
@@ -50,11 +57,12 @@ export default function Template6({ view }: TemplateProps) {
                 ))}
               </div>
             </div>
+            )}
           </div>
         </header>
 
         <div className="mt-[8mm]">
-          <LinesTable view={view} style={{ head: "plain", accent: ACCENT, rowSeparator: "dashed" }} />
+          <LinesTable view={view} style={{ head: "plain", accent, rowSeparator: "dashed" }} />
         </div>
 
         <div className="mt-[6mm] flex justify-end">
@@ -77,7 +85,7 @@ export default function Template6({ view }: TemplateProps) {
           <div className="w-[58%] space-y-[3mm]">
             {view.notes && (
               <div className="break-inside-avoid border border-slate-300">
-                <p className="border-b border-slate-300 bg-slate-50 px-[3mm] py-[1.5mm] text-[12px] font-bold text-slate-800">{L.notes}</p>
+                <p className="border-b border-slate-300 bg-slate-50 px-[3mm] py-[1.5mm] text-[12px] font-bold text-slate-800" style={textStyle(view.theme, "heading")}>{L.notes}</p>
                 <div className="px-[3mm] py-[2mm]">
                   <RichTextView value={view.notes} className="text-[12px] leading-relaxed text-slate-700" />
                 </div>
@@ -85,7 +93,7 @@ export default function Template6({ view }: TemplateProps) {
             )}
             {view.terms && (
               <div className="break-inside-avoid border border-slate-300">
-                <p className="border-b border-slate-300 bg-slate-50 px-[3mm] py-[1.5mm] text-[12px] font-bold text-slate-800">{L.terms}</p>
+                <p className="border-b border-slate-300 bg-slate-50 px-[3mm] py-[1.5mm] text-[12px] font-bold text-slate-800" style={textStyle(view.theme, "heading")}>{L.terms}</p>
                 <div className="px-[3mm] py-[2mm]">
                   <RichTextView value={view.terms} className="text-[12px] leading-relaxed text-slate-700" />
                 </div>

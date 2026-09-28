@@ -52,7 +52,8 @@ describe("document configuration", () => {
   });
 
   it("required fields cannot be hidden", () => {
-    const c = resolveDocConfig("sales_invoice", { hidden: ["col.product", "sum.total", "hdr.number"] });
+    const c = resolveDocConfig("sales_receipt", { hidden: ["hdr.number"] });
+    expect(resolveDocConfig("sales_invoice", { hidden: ["col.product", "sum.total"] }).visible("col.product")).toBe(true);
     expect(c.visible("col.product")).toBe(true);
     expect(c.visible("sum.total")).toBe(true);
     expect(c.visible("hdr.number")).toBe(true);

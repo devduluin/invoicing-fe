@@ -1,5 +1,6 @@
 import RichTextView from "../../shared/RichTextView";
-import { GUTTER, Logo, Sheet, SummaryTable, type TemplateProps } from "./parts";
+import { GUTTER, PAGE_PAD, Logo, Sheet, SummaryTable, type TemplateProps } from "./parts";
+import { textStyle } from "@/lib/documentTheme";
 
 /**
  * Template 7 — formal & detailed (big centered "INVOICE" reference): logo top-left, title
@@ -15,17 +16,18 @@ const HEADING = "#1e293b";
 
 export default function Template7({ view }: TemplateProps) {
   const L = view.labels;
+  const heading = view.theme.accent ?? HEADING;
 
   return (
-    <Sheet template="template_7">
-      <div className={`${GUTTER} py-[9mm] print:py-0`}>
+    <Sheet template="template_7" view={view} accent={heading}>
+      <div className={`${GUTTER} ${PAGE_PAD}`}>
         <header className="grid grid-cols-3 items-start gap-4">
           <div>
             <Logo company={view.company} />
           </div>
           <div className="text-center">
-            <p className="text-[24px] font-bold tracking-wide" style={{ color: HEADING }}>{view.title}</p>
-            <p className="mt-[1mm] font-mono text-[13px] text-slate-600">{view.number}</p>
+            <p className="text-[24px] font-bold tracking-wide" style={{ color: heading, ...textStyle(view.theme, "title") }}>{view.title}</p>
+            {view.number && <p className="mt-[1mm] font-mono text-[13px] text-slate-600">{view.number}</p>}
           </div>
           <dl className="justify-self-end text-right text-[12px]">
             {view.meta.map((r) => (
@@ -37,6 +39,7 @@ export default function Template7({ view }: TemplateProps) {
           </dl>
         </header>
 
+        {view.show.customer && (
         <section className="mt-[8mm] w-[60%] break-inside-avoid border border-slate-300 p-[3mm]">
           <p className="text-[11px] font-semibold text-slate-500 uppercase">Kepada Yth</p>
           <p className="mt-[1mm] text-[14px] font-bold text-slate-900">{view.customer.name}</p>
@@ -49,6 +52,7 @@ export default function Template7({ view }: TemplateProps) {
             ))}
           </div>
         </section>
+        )}
 
         <table className="mt-[8mm] w-full table-fixed border-collapse text-[12px]">
           <colgroup>
@@ -59,9 +63,9 @@ export default function Template7({ view }: TemplateProps) {
           </colgroup>
           <thead>
             <tr>
-              <th className="border border-slate-400 py-[1.8mm] text-center text-[12px] font-bold">No.</th>
+              <th className="border border-slate-400 py-[1.8mm] text-center text-[1em] font-bold" style={{ color: view.theme.accent, ...textStyle(view.theme, "tableHead") }}>No.</th>
               {view.columns.map((c) => (
-                <th key={c.key} className={`border border-slate-400 px-[2mm] py-[1.8mm] text-[12px] font-bold ${c.align === "left" ? "text-left" : "text-right"}`}>
+                <th key={c.key} style={{ color: view.theme.accent, ...textStyle(view.theme, "tableHead") }} className={`border border-slate-400 px-[2mm] py-[1.8mm] text-[1em] font-bold ${c.align === "left" ? "text-left" : "text-right"}`}>
                   {c.label}
                 </th>
               ))}
@@ -70,9 +74,9 @@ export default function Template7({ view }: TemplateProps) {
           <tbody>
             {view.lines.map((l, i) => (
               <tr key={l.key}>
-                <td className="border border-slate-300 py-[1.8mm] text-center">{i + 1}</td>
+                <td className="border border-slate-300 py-[1.8mm] text-center" style={textStyle(view.theme, "tableBody")}>{i + 1}</td>
                 {view.columns.map((c) => (
-                  <td key={c.key} className={`border border-slate-300 px-[2mm] py-[1.8mm] align-top ${c.align === "right" ? "text-right tabular-nums" : ""}`}>
+                  <td key={c.key} style={textStyle(view.theme, "tableBody")} className={`border border-slate-300 px-[2mm] py-[1.8mm] align-top ${c.align === "right" ? "text-right tabular-nums" : ""}`}>
                     <span className="block">{l.cells[c.key]}</span>
                     {c.key === "col.product" && l.description && <span className="block text-[10.5px] text-slate-400">{l.description}</span>}
                   </td>
@@ -109,13 +113,13 @@ export default function Template7({ view }: TemplateProps) {
           <div className="w-[58%] space-y-[3mm]">
             {view.notes && (
               <section className="break-inside-avoid">
-                <h3 className="mb-[1mm] text-[13px] font-bold" style={{ color: HEADING }}>{L.notes}</h3>
+                <h3 className="mb-[1mm] text-[13px] font-bold" style={{ color: heading, ...textStyle(view.theme, "heading") }}>{L.notes}</h3>
                 <RichTextView value={view.notes} className="text-[12px] leading-relaxed text-slate-700" />
               </section>
             )}
             {view.terms && (
               <section className="break-inside-avoid">
-                <h3 className="mb-[1mm] text-[13px] font-bold" style={{ color: HEADING }}>{L.terms}</h3>
+                <h3 className="mb-[1mm] text-[13px] font-bold" style={{ color: heading, ...textStyle(view.theme, "heading") }}>{L.terms}</h3>
                 <RichTextView value={view.terms} className="text-[12px] leading-relaxed text-slate-700" />
               </section>
             )}
@@ -135,13 +139,15 @@ export default function Template7({ view }: TemplateProps) {
           )}
         </div>
 
-        <div className="mt-[8mm] border-t border-slate-200 pt-[3mm] text-[11px] text-slate-500">
-          {view.company.npwp && <p>NPWP: {view.company.npwp}</p>}
-          <p>{view.company.name}</p>
-          {view.company.addressLines.map((l, i) => (
-            <p key={i}>{l}</p>
-          ))}
-        </div>
+        {view.show.companyInfo && (
+          <div className="mt-[8mm] border-t border-slate-200 pt-[3mm] text-[11px] text-slate-500">
+            {view.company.npwp && <p>NPWP: {view.company.npwp}</p>}
+            <p>{view.company.name}</p>
+            {view.company.addressLines.map((l, i) => (
+              <p key={i}>{l}</p>
+            ))}
+          </div>
+        )}
       </div>
     </Sheet>
   );
