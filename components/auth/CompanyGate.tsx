@@ -8,6 +8,7 @@ import { useAuthStore } from "@/store/useAuthStore";
 import { reloadIdentity } from "@/lib/session";
 import { useTr } from "@/lib/useTr";
 import { APP_NAME } from "@/lib/onboarding";
+import { getCookie } from "@/utils/cookies";
 import { logAuditLogin } from "@/services/auditLogService";
 
 /** Once per browser session — a page refresh, or moving between pages, must not log another
@@ -56,8 +57,11 @@ export default function CompanyGate({ children }: { children: ReactNode }) {
     loggedRef.current = true;
     try {
       sessionStorage.removeItem(AUTO_RELOAD_KEY);
-      if (sessionStorage.getItem(LOGIN_LOGGED_KEY) === activeCompanyId) return;
-      sessionStorage.setItem(LOGIN_LOGGED_KEY, activeCompanyId ?? "");
+      // Keyed to the sign-in itself (its token), not only the company: signing out and back in within
+      // the same tab must log a new "login", which the company id alone can't tell apart.
+      const sessionKey = `${activeCompanyId ?? ""}:${(getCookie("app_token") || getCookie("APP_TOKEN") || "").slice(-16)}`;
+      if (sessionStorage.getItem(LOGIN_LOGGED_KEY) === sessionKey) return;
+      sessionStorage.setItem(LOGIN_LOGGED_KEY, sessionKey);
     } catch {
       // sessionStorage unavailable (private mode, …) — log anyway rather than silently skip it.
     }

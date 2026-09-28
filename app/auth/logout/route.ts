@@ -41,20 +41,26 @@ export async function GET(request: NextRequest) {
 
   // Best-effort audit entry — must run BEFORE the token is revoked below, while it's still valid.
   const companyId = request.cookies.get("company_id")?.value || request.cookies.get("app_company_id")?.value;
-  if (token && companyId && INVOICE_API_URL) {
+  // Same base the /api/proxy route uses: from inside Docker the public gateway URL is often not
+  // reachable from the Next.js server, the internal one is.
+  const invoiceApi = (process.env.INVOICE_API_INTERNAL_URL || INVOICE_API_URL).replace(/\/$/, "");
+  if (token && companyId && invoiceApi) {
     try {
-      await fetch(`${INVOICE_API_URL}/audit-log/session`, {
+      const res = await fetch(`${invoiceApi}/audit-log/session`, {
         method: "POST",
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "application/json",
+          "X-Account-Type": ACCOUNT_TYPE,
           "x-callback-token": companyId,
         },
         body: JSON.stringify({ event: "logout" }),
         signal: AbortSignal.timeout(4000),
       });
-    } catch {
-      // ignore — logging out must never be blocked by this
+      if (!res.ok) console.error("[audit] logout entry was refused:", res.status);
+    } catch (err) {
+      // logging out must never be blocked by this — but say why the entry is missing
+      console.error("[audit] logout entry could not be sent:", err);
     }
   }
 

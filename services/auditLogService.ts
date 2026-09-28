@@ -56,6 +56,8 @@ export type AuditModule =
   | "purchase_receipt"
   | "goods_receipt"
   | "partner"
+  | "master_data"
+  | "accounting"
   | "settings"
   | "other";
 

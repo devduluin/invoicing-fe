@@ -25,7 +25,16 @@ const FIELD_LABEL: Record<string, { id: string; en: string }> = {
 function fieldLabel(field: string, tr: (id: string, en: string) => string): string {
   const known = FIELD_LABEL[field];
   if (known) return tr(known.id, known.en);
-  return field.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  // A nested setting reads as a path: templateStyles.template_4.appearance.color → "Template Styles › Template 4 › Appearance › Color"
+  return field.split(".").map(humanize).join(" › ");
+}
+
+/** "snake_case" / "camelCase" → "Snake Case" / "Camel Case". */
+function humanize(part: string): string {
+  return part
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
 }
 
 function fmtValue(v: unknown): string {
