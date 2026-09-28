@@ -66,11 +66,6 @@ export default function UserDetailClient({ id }: { id: string }) {
             <Button variant="ghost" leftIcon={<ArrowLeft className="size-4" />} onClick={() => router.push(USERS_LIST_PATH)}>
               {tr("Kembali", "Back")}
             </Button>
-            {canUpdate && (
-              <Button variant="outline" leftIcon={<ShieldCheck className="size-4" />} onClick={() => router.push(`${base}/edit#access`)}>
-                {tr("Kelola akses", "Manage Access")}
-              </Button>
-            )}
             {status === "pending" && canInvite && (
               <Button variant="outline" leftIcon={<Send className="size-4" />} onClick={() => actions.resend(member)}>
                 {tr("Kirim ulang undangan", "Resend Invitation")}

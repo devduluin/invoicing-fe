@@ -175,7 +175,6 @@ export default function UserManagementClient({ compact = false }: UserManagement
               onEdit={canUpdate ? () => router.push(`${USERS_PATH}/${m.id}/edit`) : undefined}
               onDelete={canDelete && !self ? () => actions.askDelete(m) : undefined}
               extra={[
-                { label: tr("Kelola akses", "Manage Access"), icon: <ShieldCheck aria-hidden />, hidden: !canUpdate, onClick: () => router.push(`${USERS_PATH}/${m.id}/edit#access`) },
                 { label: tr("Kirim ulang undangan", "Resend Invitation"), icon: <Send aria-hidden />, hidden: !(status === "pending" && canInvite), onClick: () => void actions.resend(m) },
                 status === "inactive"
                   ? { label: tr("Aktifkan", "Activate"), icon: <Power aria-hidden />, hidden: !canUpdate || self, onClick: () => actions.toggleActive(m, true) }
