@@ -86,6 +86,10 @@ export default function MitraFormModal({
   const [code, setCode] = useState("");
   const [lookup, setLookup] = useState<"idle" | "loading" | "found" | "notfound">("idle");
   const lookupSeq = useRef(0);
+  // Fields whose value came from the registered company: that data belongs to the company, so it
+  // is shown but not editable here (only fields the company actually has a value for are locked,
+  // so a missing PIC email/phone can still be typed in).
+  const [locked, setLocked] = useState<ReadonlySet<string>>(new Set());
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => {
     setForm((f) => ({ ...f, [k]: v }));
@@ -95,6 +99,7 @@ export default function MitraFormModal({
   useEffect(() => {
     if (editing) return;
     const q = code.trim();
+    setLocked(new Set());
     if (q.length < 4) {
       setLookup("idle");
       return;
@@ -110,12 +115,20 @@ export default function MitraFormModal({
           return;
         }
         setLookup("found");
+        const phone = localPhone(hit.phone || "");
+        setLocked(
+          new Set(
+            Object.entries({ name: hit.name, contact_name: hit.owner_name, email: hit.email, phone, npwp: hit.npwp, address: hit.address })
+              .filter(([, v]) => !!v)
+              .map(([k]) => k),
+          ),
+        );
         setForm((f) => ({
           ...f,
           name: hit.name || f.name,
           contact_name: hit.owner_name || f.contact_name,
           email: hit.email || f.email,
-          phone: localPhone(hit.phone || "") || f.phone,
+          phone: phone || f.phone,
           npwp: hit.npwp || f.npwp,
           address: hit.address || f.address,
         }));
@@ -257,7 +270,7 @@ export default function MitraFormModal({
                     optional
                     hint={
                       lookup === "found"
-                        ? "Partner data auto-filled from the registered company."
+                        ? "Partner data taken from the registered company and locked. Clear the Company ID to enter it manually."
                         : lookup === "notfound"
                           ? "Company ID not found — fill in the details manually below."
                           : "If the partner already uses Duluin Invoice, enter their ID to auto-fill."
@@ -291,6 +304,7 @@ export default function MitraFormModal({
                 <Input
                   placeholder="e.g. PT Sinar Jaya"
                   value={form.name}
+                  disabled={locked.has("name")}
                   autoFocus
                   error={!!errors.name}
                   onChange={(e) => set("name", e.target.value)}
@@ -301,6 +315,7 @@ export default function MitraFormModal({
                 <Input
                   placeholder="e.g. Budi Santoso"
                   value={form.contact_name}
+                  disabled={locked.has("contact_name")}
                   error={!!errors.contact_name}
                   onChange={(e) => set("contact_name", e.target.value)}
                 />
@@ -320,6 +335,7 @@ export default function MitraFormModal({
                     type="email"
                     placeholder="hello@partner.com"
                     value={form.email}
+                    disabled={locked.has("email")}
                     error={!!errors.email}
                     onChange={(e) => set("email", e.target.value)}
                   />
@@ -330,6 +346,7 @@ export default function MitraFormModal({
                     prefix="+62"
                     placeholder="812xxxxxxxx"
                     value={form.phone}
+                    disabled={locked.has("phone")}
                     error={!!errors.phone}
                     onChange={(e) => set("phone", localPhone(e.target.value))}
                   />
@@ -340,6 +357,7 @@ export default function MitraFormModal({
                 <Input
                   placeholder="00.000.000.0-000.000"
                   value={form.npwp}
+                  disabled={locked.has("npwp")}
                   onChange={(e) => set("npwp", e.target.value)}
                 />
               </FormField>
@@ -349,6 +367,7 @@ export default function MitraFormModal({
                   rows={2}
                   placeholder="Street, number, city…"
                   value={form.address}
+                  disabled={locked.has("address")}
                   onChange={(e) => set("address", e.target.value)}
                 />
               </FormField>
