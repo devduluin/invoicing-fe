@@ -2,7 +2,6 @@
 
 import type { ColumnDef } from "@tanstack/react-table";
 import type { ReactNode } from "react";
-import { CheckCircle2, CircleDashed } from "lucide-react";
 
 import { StatusBadge } from "@/components/ui/StatusBadge";
 
@@ -28,7 +27,7 @@ export interface ColumnSpec<T extends TableRow> {
 }
 
 function BoolPill({ on, labels }: { on: boolean; labels: [string, string] }) {
-  return <StatusBadge label={on ? labels[0] : labels[1]} tone={on ? "success" : "neutral"} icon={on ? CheckCircle2 : CircleDashed} />;
+  return <StatusBadge label={on ? labels[0] : labels[1]} tone={on ? "success" : "neutral"} />;
 }
 
 /** Build TanStack ColumnDefs from a compact spec list. */

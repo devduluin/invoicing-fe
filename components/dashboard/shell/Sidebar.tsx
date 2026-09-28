@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, FileText, PanelLeftClose, PanelLeftOpen, X } from "lucide-react";
+import { ChevronDown, FileText, Pin, PinOff, X } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTr } from "@/lib/useTr";
@@ -166,40 +166,43 @@ function NavBody({
   );
 }
 
-/** Desktop sidebar — flat white column; collapses to an icon rail. */
+/** Desktop sidebar — flat white column; collapses to an icon rail. Hovering a collapsed rail
+ *  temporarily opens it full-width (an overlay over the content, which keeps its collapsed-width
+ *  margin) so its labels are reachable without permanently expanding it — the same "peek" pattern
+ *  most collapsible admin sidebars use. Moving the mouse away (or navigating) closes it again. A
+ *  pin button (shown whenever the rail is visually open, pinned or just peeking) makes that open
+ *  state stick instead of needing a separate "expand" click. */
 export function Sidebar({ collapsed, onToggle }: { collapsed: boolean; onToggle: () => void }) {
   const tr = useTr();
+  const [hovering, setHovering] = useState(false);
+  const peeking = collapsed && hovering;
+  // What the rail actually LOOKS like right now — real collapsed state, unless peeking open.
+  const showCollapsed = collapsed && !peeking;
   return (
     <aside
+      onMouseEnter={() => setHovering(true)}
+      onMouseLeave={() => setHovering(false)}
       className={cn(
-        "fixed top-2 bottom-2 left-2 z-30 hidden flex-col overflow-hidden rounded-xl border border-border bg-[#fafbfd] shadow-[0_1px_2px_rgba(20,30,60,0.05),0_8px_24px_-12px_rgba(20,30,60,0.12)] transition-[width] duration-200 lg:flex",
-        collapsed ? "w-[60px]" : "w-56",
+        "fixed top-2 bottom-2 left-2 z-30 hidden flex-col overflow-hidden rounded-xl border border-border bg-[#fafbfd] transition-[width] duration-200 lg:flex",
+        showCollapsed ? "w-[60px] shadow-[0_1px_2px_rgba(20,30,60,0.05),0_8px_24px_-12px_rgba(20,30,60,0.12)]" : "w-56",
+        peeking && "shadow-[0_8px_24px_-8px_rgba(20,30,60,0.25)]",
       )}
     >
-      <div className={cn("flex h-14 shrink-0 items-center bg-[linear-gradient(180deg,rgba(72,99,230,0.09),transparent)]", collapsed ? "justify-center" : "justify-between px-4")}>
-        <Brand collapsed={collapsed} />
-        {!collapsed && (
+      <div className={cn("flex h-14 shrink-0 items-center bg-[linear-gradient(180deg,rgba(72,99,230,0.09),transparent)]", showCollapsed ? "justify-center" : "justify-between px-4")}>
+        <Brand collapsed={showCollapsed} />
+        {!showCollapsed && (
           <button
             type="button"
             onClick={onToggle}
-            aria-label={tr("Ciutkan sidebar", "Collapse sidebar")}
+            aria-label={collapsed ? tr("Sematkan sidebar", "Pin sidebar open") : tr("Lepas sematan sidebar", "Unpin sidebar")}
+            title={collapsed ? tr("Sematkan terbuka", "Pin open") : tr("Lepas sematan", "Unpin")}
             className="grid size-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
           >
-            <PanelLeftClose className="size-4" />
+            {collapsed ? <Pin className="size-4" /> : <PinOff className="size-4" />}
           </button>
         )}
       </div>
-      {collapsed && (
-        <button
-          type="button"
-          onClick={onToggle}
-          aria-label={tr("Perluas sidebar", "Expand sidebar")}
-          className="mx-auto mb-1 grid size-8 place-items-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-700"
-        >
-          <PanelLeftOpen className="size-4" />
-        </button>
-      )}
-      <NavBody collapsed={collapsed} onExpand={onToggle} />
+      <NavBody collapsed={showCollapsed} onExpand={onToggle} />
     </aside>
   );
 }
