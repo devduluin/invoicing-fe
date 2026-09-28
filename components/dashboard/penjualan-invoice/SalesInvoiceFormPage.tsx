@@ -783,37 +783,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         }
         metaFields={
           <>
-            {kind === "invoice" && !isEdit && (
-              <>
-                <FormField
-                  label={tr("Pesanan Penjualan", "Sales Order")}
-                  htmlFor="inv-order"
-                  optional
-                  hint={tr("Opsional: hubungkan invoice ini ke pesanan tanpa mengubah isinya.", "Optional: link this invoice to an order without changing its content.")}
-                >
-                  <SourceDocumentSelect
-                    id="inv-order"
-                    value={salesOrderId ? { type: "sales_order", id: salesOrderId } : null}
-                    companyId={activeCompanyId}
-                    mitraId={mitraId || undefined}
-                    types={["sales_order"]}
-                    orderStatus="confirmed"
-                    onChange={(ref) => {
-                      setSalesOrderId(ref?.id ?? null);
-                      if (!ref) setSourceDoc(null);
-                    }}
-                    onDocChange={setSourceDoc}
-                    onPick={(picked) => {
-                      if (picked.type !== "sales_order") return;
-                      // Link only: the partner follows the order, nothing the user typed is overwritten.
-                      // (Filling the invoice FROM an order is the "Create from Order" step of the add modal.)
-                      setMitraId(picked.doc.mitra_id);
-                      setErrors((prev) => ({ ...prev, mitraId: undefined }));
-                    }}
-                  />
-                </FormField>
-              </>
-            )}
             <FormField label={tr("Mitra", "Partner")} htmlFor="inv-mitra" required error={errors.mitraId}>
               <RemoteSelect
                 id="inv-mitra"
@@ -840,6 +809,35 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 addNewLabel={tr("Tambah mitra baru", "Add new partner")}
               />
             </FormField>
+            {kind === "invoice" && !isEdit && (
+              <FormField
+                label={tr("Pesanan Penjualan", "Sales Order")}
+                htmlFor="inv-order"
+                optional
+                hint={tr("Opsional: hubungkan invoice ini ke pesanan tanpa mengubah isinya.", "Optional: link this invoice to an order without changing its content.")}
+              >
+                <SourceDocumentSelect
+                  id="inv-order"
+                  value={salesOrderId ? { type: "sales_order", id: salesOrderId } : null}
+                  companyId={activeCompanyId}
+                  mitraId={mitraId || undefined}
+                  types={["sales_order"]}
+                  orderStatus="confirmed"
+                  onChange={(ref) => {
+                    setSalesOrderId(ref?.id ?? null);
+                    if (!ref) setSourceDoc(null);
+                  }}
+                  onDocChange={setSourceDoc}
+                  onPick={(picked) => {
+                    if (picked.type !== "sales_order") return;
+                    // Link only: the partner follows the order, nothing the user typed is overwritten.
+                    // (Filling the invoice FROM an order is the "Create from Order" step of the add modal.)
+                    setMitraId(picked.doc.mitra_id);
+                    setErrors((prev) => ({ ...prev, mitraId: undefined }));
+                  }}
+                />
+              </FormField>
+            )}
             <ContactPersonSelect
               mitraId={mitraId}
               value={contactPersonId}

@@ -19,6 +19,8 @@ import { listMitraPage, getMitra, type Mitra } from "@/services/mitraService";
 import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { listAllTaxes, type Tax } from "@/services/taxService";
 import { getPurchaseOrder } from "@/services/purchaseOrderService";
+import SourceDocumentSelect from "../shared/SourceDocumentSelect";
+import type { SourceDoc } from "@/services/sourceDocumentService";
 import {
   getPurchaseInvoice,
   previewPurchaseInvoiceNumber,
@@ -91,6 +93,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
   const [addMitraOpen, setAddMitraOpen] = useState(false);
 
   const [purchaseOrderId, setPurchaseOrderId] = useState<string | null>(null);
+  const [sourceDoc, setSourceDoc] = useState<SourceDoc | null>(null);
   const [mitraId, setMitraId] = useState("");
   const [contactPersonId, setContactPersonId] = useState("");
   // The contact's details as shown / saved with this document (its own copy; see ContactPersonSelect).
@@ -543,6 +546,10 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);
+                  if (sourceDoc && sourceDoc.doc.mitra_id !== v) {
+                    setPurchaseOrderId(null);
+                    setSourceDoc(null);
+                  }
                   setErrors((prev) => ({ ...prev, mitraId: undefined }));
                 }}
                 placeholder="Select a partner…"
@@ -552,6 +559,34 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 addNewLabel="Add new partner"
               />
             </FormField>
+            {!isEdit && (
+              <FormField
+                label="Purchase Order"
+                htmlFor="inv-order"
+                optional
+                hint="Optional: link this bill to an order without changing its content."
+              >
+                <SourceDocumentSelect
+                  id="inv-order"
+                  value={purchaseOrderId ? { type: "purchase_order", id: purchaseOrderId } : null}
+                  companyId={activeCompanyId}
+                  mitraId={mitraId || undefined}
+                  types={["purchase_order"]}
+                  orderStatus="confirmed"
+                  onChange={(ref) => {
+                    setPurchaseOrderId(ref?.id ?? null);
+                    if (!ref) setSourceDoc(null);
+                  }}
+                  onDocChange={setSourceDoc}
+                  onPick={(picked) => {
+                    if (picked.type !== "purchase_order") return;
+                    // Link only: the partner follows the order, nothing the user typed is overwritten.
+                    setMitraId(picked.doc.mitra_id);
+                    setErrors((prev) => ({ ...prev, mitraId: undefined }));
+                  }}
+                />
+              </FormField>
+            )}
             <ContactPersonSelect
               mitraId={mitraId}
               value={contactPersonId}

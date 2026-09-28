@@ -59,7 +59,9 @@ export default function SourceDocumentSelect({ value, onChange: onRefChange, com
         hint:
           s.type === "sales_invoice"
             ? `${tr("Invoice Penjualan", "Sales Invoice")} · ${money.format(s.doc.grand_total)} · ${tr("Sisa", "Outstanding")} ${money.format(s.doc.outstanding_amount)}`
-            : `${tr("Pesanan Penjualan", "Sales Order")} · ${money.format(s.doc.grand_total)}`,
+            : s.type === "sales_order"
+              ? `${tr("Pesanan Penjualan", "Sales Order")} · ${money.format(s.doc.grand_total)}`
+              : `${tr("Pesanan Pembelian", "Purchase Order")} · ${money.format(s.doc.grand_total)}`,
       })}
       onItemChange={(item) => {
         onDocChange?.(item);
@@ -73,7 +75,13 @@ export default function SourceDocumentSelect({ value, onChange: onRefChange, com
         picking.current = !!v && !!decodeSource(v);
         onRefChange(v ? decodeSource(v) : null);
       }}
-      placeholder={types?.length === 1 && types[0] === "sales_order" ? tr("Pilih pesanan penjualan", "Select Sales Order") : tr("Pilih invoice / pesanan penjualan", "Select Invoice / Sales Order")}
+      placeholder={
+        types?.length === 1 && types[0] === "sales_order"
+          ? tr("Pilih pesanan penjualan", "Select Sales Order")
+          : types?.length === 1 && types[0] === "purchase_order"
+            ? tr("Pilih pesanan pembelian", "Select Purchase Order")
+            : tr("Pilih invoice / pesanan penjualan", "Select Invoice / Sales Order")
+      }
       searchPlaceholder={tr("Cari nomor…", "Search number…")}
       disabled={disabled}
       error={error}
