@@ -56,6 +56,7 @@ export const AUDIT_MODULES: { value: AuditModule; label: Label }[] = [
   { value: "purchase_invoice", label: { id: "Invoice Pembelian", en: "Purchase Invoice" } },
   { value: "purchase_receipt", label: { id: "Kuitansi Pembelian", en: "Purchase Receipt" } },
   { value: "goods_receipt", label: { id: "Penerimaan Barang", en: "Goods Receipt" } },
+  { value: "partner", label: { id: "Partner", en: "Partner" } },
   { value: "settings", label: { id: "Pengaturan", en: "Settings" } },
   { value: "other", label: { id: "Lainnya", en: "Other" } },
 ];
