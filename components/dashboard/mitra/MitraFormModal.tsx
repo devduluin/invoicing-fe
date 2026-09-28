@@ -69,7 +69,7 @@ export default function MitraFormModal({
   const canEditContact = hasPermission(permissions, "invoice-mitra-contact-update");
   const canRemoveContact = hasPermission(permissions, "invoice-mitra-contact-delete");
   const [contacts, setContacts] = useState<ContactDraft[]>([]);
-  const [contactErrors, setContactErrors] = useState<Record<string, { name?: string; email?: string }>>({});
+  const [contactErrors, setContactErrors] = useState<Record<string, { name?: string; email?: string; phone?: string }>>({});
   const [contactsLoaded, setContactsLoaded] = useState(!editing);
   const [contactsFailed, setContactsFailed] = useState(false);
   useEffect(() => {

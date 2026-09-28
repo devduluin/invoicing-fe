@@ -28,14 +28,18 @@ export const draftFromContact = (c: ContactPerson): ContactDraft => ({
 
 const isBlank = (d: ContactDraft) => !d.name.trim() && !d.position.trim() && !d.phone.trim() && !d.email.trim();
 
-/** Validates the rows and turns them into what the backend saves. Untouched empty rows are dropped. */
-export function contactDraftsToPayload(drafts: ContactDraft[]): { payload: ContactSync[]; errors: Record<string, { name?: string; email?: string }> } {
-  const errors: Record<string, { name?: string; email?: string }> = {};
+/** Validates the rows and turns them into what the backend saves. Untouched empty rows are dropped.
+ *  Email and phone are required — a contact person exists to be reachable, same rule as the
+ *  partner's own PIC. */
+export function contactDraftsToPayload(drafts: ContactDraft[]): { payload: ContactSync[]; errors: Record<string, { name?: string; email?: string; phone?: string }> } {
+  const errors: Record<string, { name?: string; email?: string; phone?: string }> = {};
   const payload: ContactSync[] = [];
   for (const d of drafts) {
     if (isBlank(d)) continue;
     if (!d.name.trim()) errors[d.key] = { ...errors[d.key], name: "required" };
-    if (d.email.trim() && !EMAIL_RE.test(d.email.trim())) errors[d.key] = { ...errors[d.key], email: "invalid" };
+    if (!d.email.trim()) errors[d.key] = { ...errors[d.key], email: "required" };
+    else if (!EMAIL_RE.test(d.email.trim())) errors[d.key] = { ...errors[d.key], email: "invalid" };
+    if (!d.phone.trim()) errors[d.key] = { ...errors[d.key], phone: "required" };
     payload.push({ id: d.id, name: d.name.trim(), position: d.position.trim() || undefined, phone: toStoredPhone(d.phone), email: d.email.trim() || undefined });
   }
   return { payload, errors };
@@ -56,7 +60,7 @@ export default function ContactPersonsEditor({
 }: {
   drafts: ContactDraft[];
   onChange: (next: ContactDraft[]) => void;
-  errors: Record<string, { name?: string; email?: string }>;
+  errors: Record<string, { name?: string; email?: string; phone?: string }>;
   canAdd: boolean;
   canEdit: boolean;
   canRemove: boolean;
@@ -95,10 +99,20 @@ export default function ContactPersonsEditor({
               <FormField label={tr("Jabatan", "Position")} htmlFor={`cp-pos-${d.key}`}>
                 <Input id={`cp-pos-${d.key}`} value={d.position} disabled={!editable} onChange={(e) => patch(d.key, { position: e.target.value })} />
               </FormField>
-              <FormField label={tr("Nomor Telepon", "Phone Number")} htmlFor={`cp-phone-${d.key}`}>
-                <Input id={`cp-phone-${d.key}`} inputMode="numeric" prefix="+62" placeholder="812xxxxxxxx" value={d.phone} disabled={!editable} onChange={(e) => patch(d.key, { phone: localPhone(e.target.value) })} />
+              <FormField
+                label={tr("Nomor Telepon", "Phone Number")}
+                htmlFor={`cp-phone-${d.key}`}
+                required
+                error={err.phone ? tr("Nomor telepon wajib diisi.", "Phone number is required.") : undefined}
+              >
+                <Input id={`cp-phone-${d.key}`} inputMode="numeric" prefix="+62" placeholder="812xxxxxxxx" value={d.phone} disabled={!editable} error={!!err.phone} onChange={(e) => patch(d.key, { phone: localPhone(e.target.value) })} />
               </FormField>
-              <FormField label="Email" htmlFor={`cp-email-${d.key}`} error={err.email ? tr("Format email tidak valid.", "Invalid email format.") : undefined}>
+              <FormField
+                label="Email"
+                htmlFor={`cp-email-${d.key}`}
+                required
+                error={err.email ? (err.email === "required" ? tr("Email wajib diisi.", "Email is required.") : tr("Format email tidak valid.", "Invalid email format.")) : undefined}
+              >
                 <Input id={`cp-email-${d.key}`} type="email" value={d.email} disabled={!editable} error={!!err.email} onChange={(e) => patch(d.key, { email: e.target.value })} />
               </FormField>
             </div>
