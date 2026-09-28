@@ -55,8 +55,8 @@ export const NAV: NavGroup[] = [
         icon: Receipt,
         children: [
           { label: { id: "Pesanan Penjualan", en: "Sales Orders" }, href: "/dashboard/penjualan/order", permission: "invoice-sales-order-list" },
-          { label: { id: "Invoice Penjualan", en: "Sales Invoices" }, href: "/dashboard/penjualan/invoice", permission: "invoice-sales-invoice-list" },
           { label: { id: "Invoice Uang Muka", en: "Down Payments" }, href: "/dashboard/penjualan/uang-muka", permission: "invoice-sales-invoice-list" },
+          { label: { id: "Invoice Penjualan", en: "Sales Invoices" }, href: "/dashboard/penjualan/invoice", permission: "invoice-sales-invoice-list" },
           { label: { id: "Kuitansi Penjualan", en: "Sales Receipts" }, href: "/dashboard/penjualan/kuitansi", permission: "invoice-receipt-list" },
           { label: { id: "Surat Jalan", en: "Delivery Notes" }, href: "/dashboard/penjualan/surat-jalan", permission: "invoice-delivery-note-list" },
         ],
