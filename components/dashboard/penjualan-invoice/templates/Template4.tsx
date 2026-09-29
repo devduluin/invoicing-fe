@@ -21,12 +21,8 @@ import { textStyle, tint } from "@/lib/documentTheme";
 const RED = "#8b1a1a";
 // light → darker pink, one per metadata card
 const CARD_TINTS = ["#fdf5f4", "#faebea", "#f7dcdc", "#f4cfcf"];
-const CARD_RADIUS = [
-  "18px 0 0 18px",
-  "26px 0 0 0",
-  "0 0 0 18px",
-  "0 0 0 18px",
-];
+// every card rounded on the left, matching the first ("No. Invoice") row
+const CARD_RADIUS = "18px 0 0 18px";
 
 export default function Template4({ view }: TemplateProps) {
   const L = view.labels;
@@ -79,7 +75,7 @@ export default function Template4({ view }: TemplateProps) {
               <div
                 key={c.key}
                 className="px-[4.5mm] py-[2.4mm] text-right"
-                style={{ background: tints[i] ?? tints[3], borderRadius: CARD_RADIUS[i] ?? CARD_RADIUS[3] }}
+                style={{ background: tints[i] ?? tints[3], borderRadius: CARD_RADIUS }}
               >
                 <dt className="text-[12.5px] text-slate-600">{c.label}</dt>
                 <dd className="text-[14px] font-bold text-slate-900">{c.value}</dd>
