@@ -30,6 +30,9 @@ export interface SalesReceipt {
   payment_method: SalesReceiptPaymentMethod;
   bank_account_id?: string;
   notes?: string;
+  attachment_data?: string;
+  attachment_name?: string;
+  signature_data?: string;
   allocations: SalesReceiptAllocation[];
   created_at: string;
   updated_at: string;
@@ -42,6 +45,9 @@ export interface SalesReceiptInput {
   payment_method: SalesReceiptPaymentMethod;
   bank_account_id?: string | null;
   notes?: string;
+  attachment_data?: string;
+  attachment_name?: string;
+  signature_data?: string;
   // At least one allocation is required — a receipt always pays toward
   // one or more invoices.
   allocations: SalesReceiptAllocationInput[];

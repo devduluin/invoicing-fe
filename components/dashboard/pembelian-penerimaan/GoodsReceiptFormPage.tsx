@@ -17,7 +17,7 @@ import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listMitraPage, getMitra } from "@/services/mitraService";
 import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { getPurchaseOrder, listAllPurchaseOrders, type PurchaseOrder } from "@/services/purchaseOrderService";
-import { createGoodsReceipt, getGoodsReceipt, updateGoodsReceipt, type GoodsReceiptInput } from "@/services/goodsReceiptService";
+import { createGoodsReceipt, getGoodsReceipt, previewGoodsReceiptNumber, updateGoodsReceipt, type GoodsReceiptInput } from "@/services/goodsReceiptService";
 import { SimpleLineItemsEditor, emptySimpleLine, type EditableSimpleLine } from "../shared/SimpleLineItemsEditor";
 import { MoreInfoSection, emptyMoreInfo, type MoreInfoValue } from "../shared/MoreInfoSection";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
@@ -48,6 +48,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
         setNumber(n.number);
         setDate(n.date.slice(0, 10));
         setNotes(n.notes ?? "");
+        setReceivedIn(n.received_in ?? "");
         setLines(
           n.lines.length
             ? n.lines.map((l) => ({
@@ -83,7 +84,8 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   const [pending, setPending] = useState<Set<string>>(() => {
     const s = new Set<string>(["orders"]);
     if (isEdit) s.add("entity");
-    else if (searchParams.get("dari_order")) s.add("prefill");
+    else s.add("number");
+    if (!isEdit && searchParams.get("dari_order")) s.add("prefill");
     return s;
   });
   const done = (key: string) =>
@@ -105,6 +107,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
+  const [receivedIn, setReceivedIn] = useState("");
   const [lines, setLines] = useState<EditableSimpleLine[]>([emptySimpleLine()]);
   const [moreInfo, setMoreInfo] = useState<MoreInfoValue>(emptyMoreInfo());
   const [attachmentData, setAttachmentData] = useState("");
@@ -123,6 +126,8 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
 
   useEffect(() => {
     listAllPurchaseOrders().then(setPurchaseOrders).catch(() => setPurchaseOrders([])).finally(() => done("orders"));
+    if (!isEdit) previewGoodsReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ?dari_order=<id> → pre-fill mitra & lines from that confirmed order.
@@ -187,6 +192,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
       number: number.trim() || undefined,
       date,
       notes: notes.trim() || undefined,
+      received_in: receivedIn.trim() || undefined,
       shipping_method: moreInfo.shipping_method.trim() || undefined,
       tracking_no: moreInfo.tracking_no.trim() || undefined,
       vehicle_no: moreInfo.vehicle_no.trim() || undefined,
@@ -222,7 +228,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   };
 
   const { isDirty, markClean, reset } = useDirtyForm(
-    { purchaseOrderId, mitraId, number, date, notes, lines, moreInfo, attachmentData, attachmentName },
+    { purchaseOrderId, mitraId, number, date, notes, receivedIn, lines, moreInfo, attachmentData, attachmentName },
     !loading,
   );
   const applyReset = () => {
@@ -233,6 +239,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
     setNumber(snap.number);
     setDate(snap.date);
     setNotes(snap.notes);
+    setReceivedIn(snap.receivedIn);
     setLines(snap.lines);
     setMoreInfo(snap.moreInfo);
     setAttachmentData(snap.attachmentData);
@@ -282,7 +289,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
                 value={mitraId}
                 resource="mitra"
                 companyId={activeCompanyId}
-                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "supplier", isActive: true })}
                 resolveById={getMitra}
                 toOption={(m) => ({ value: m.id, label: m.name })}
                 onChange={(v) => {
@@ -294,6 +301,14 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
                 error={errors.mitraId}
                 onAddNew={() => setAddMitraOpen(true)}
                 addNewLabel="Add new partner"
+              />
+            </FormField>
+            <FormField label="Received In" htmlFor="gr-received-in" optional>
+              <Input
+                id="gr-received-in"
+                value={receivedIn}
+                onChange={(e) => setReceivedIn(e.target.value)}
+                placeholder="e.g. Main Warehouse"
               />
             </FormField>
             <FormField label="Receipt No." htmlFor="gr-number" optional>

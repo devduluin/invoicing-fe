@@ -13,7 +13,7 @@ import { useInvoiceStatusLabels } from "./statusBadges";
 import PageHeader from "@/components/layouts/page/PageHeader";
 import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, RemoteSelect, NumberSeparatorInput } from "@/components/form";
 import { Select } from "@/components/form/Select";
-import { PAYMENT_TERMS, dueDateFor, paymentTermDays } from "@/lib/paymentTerms";
+import { SELECTABLE_PAYMENT_TERMS, dueDateFor } from "@/lib/paymentTerms";
 import { extractApiError } from "@/lib/apiError";
 import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
@@ -811,7 +811,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 value={mitraId}
                 resource="mitra"
                 companyId={activeCompanyId}
-                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
                 resolveById={getMitra}
                 toOption={(m) => ({ value: m.id, label: m.name })}
                 onItemChange={setPreviewMitra}
@@ -897,31 +897,31 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 error={errors.date}
               />
             </FormField>
-            <FormField label={tr("Termin Pembayaran", "Terms of Payment")} htmlFor="inv-term" optional>
-              <Select
-                id="inv-term"
-                value={paymentTerm}
-                options={PAYMENT_TERMS.map((t) => ({ value: t.value, label: tr(t.id, t.en) }))}
-                onChange={(v) => {
-                  setPaymentTerm(v);
-                  const due = dueDateFor(v, date);
-                  if (due) {
-                    setDueDate(due);
-                    setErrors((prev) => ({ ...prev, dueDate: undefined }));
-                  }
-                }}
-                placeholder={tr("Pilih termin…", "Select terms…")}
-                clearable
-                disabled={readOnly}
-              />
-            </FormField>
+            {kind === "down_payment" && (
+              <FormField label={tr("Termin Pembayaran", "Terms of Payment")} htmlFor="inv-term" optional>
+                <Select
+                  id="inv-term"
+                  value={paymentTerm}
+                  options={SELECTABLE_PAYMENT_TERMS.map((t) => ({ value: t.value, label: tr(t.id, t.en) }))}
+                  onChange={(v) => {
+                    setPaymentTerm(v);
+                    const due = dueDateFor(v, date);
+                    if (due) {
+                      setDueDate(due);
+                      setErrors((prev) => ({ ...prev, dueDate: undefined }));
+                    }
+                  }}
+                  placeholder={tr("Pilih termin…", "Select terms…")}
+                  clearable
+                  disabled={readOnly}
+                />
+              </FormField>
+            )}
             <FormField label={tr("Jatuh Tempo", "Due Date")} htmlFor="inv-due" required error={errors.dueDate}>
               <DatePickerInput
                 value={dueDate}
                 onChange={(v) => {
                   setDueDate(v);
-                  // Picking the date by hand while a fixed term is chosen makes the term "custom".
-                  if (paymentTermDays(paymentTerm) !== undefined && v !== dueDateFor(paymentTerm, date)) setPaymentTerm("custom");
                   setErrors((prev) => ({ ...prev, dueDate: undefined }));
                 }}
                 id="inv-due"
@@ -936,15 +936,6 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 value={refNo}
                 onChange={(e) => setRefNo(e.target.value)}
                 placeholder={tr("Nomor referensi mitra", "Partner's reference number")}
-                disabled={readOnly}
-              />
-            </FormField>
-            <FormField label={tr("Dikirim Dari", "Ship From")} htmlFor="inv-ship-from" optional>
-              <Input
-                id="inv-ship-from"
-                value={shipFrom}
-                onChange={(e) => setShipFrom(e.target.value)}
-                placeholder={tr("mis. Gudang Utama", "e.g. Main Warehouse")}
                 disabled={readOnly}
               />
             </FormField>
@@ -1083,6 +1074,8 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
           </div>
         }
         totals={
+          // A down payment is one flat amount — no subtotal/discount/tax/shipping breakdown to show.
+          isDP ? undefined : (
           <LineItemsTotals
             lines={lines}
             taxes={taxes}
@@ -1095,6 +1088,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
             }}
             shippingCost={{ value: shippingCost, onChange: setShippingCost }}
           />
+          )
         }
         bottom={
           <div className="space-y-3">

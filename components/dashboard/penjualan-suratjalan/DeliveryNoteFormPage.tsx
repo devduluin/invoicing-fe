@@ -18,11 +18,12 @@ import { listMitraPage, getMitra } from "@/services/mitraService";
 import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
 import { getSalesOrder, listAllSalesOrders, type SalesOrder } from "@/services/salesOrderService";
 import { getSalesInvoice, listAllSalesInvoices, type SalesInvoice } from "@/services/salesInvoiceService";
-import { createDeliveryNote, getDeliveryNote, updateDeliveryNote, type DeliveryNoteInput } from "@/services/deliveryNoteService";
+import { createDeliveryNote, getDeliveryNote, previewDeliveryNoteNumber, updateDeliveryNote, type DeliveryNoteInput } from "@/services/deliveryNoteService";
 import { SimpleLineItemsEditor, emptySimpleLine, type EditableSimpleLine } from "../shared/SimpleLineItemsEditor";
 import { MoreInfoSection, emptyMoreInfo, type MoreInfoValue } from "../shared/MoreInfoSection";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
+import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
@@ -50,6 +51,8 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
         setNumber(n.number);
         setDate(n.date.slice(0, 10));
         setNotes(n.notes ?? "");
+        setShipFrom(n.ship_from ?? "");
+        setSignatureData(n.signature_data ?? "");
         setLines(
           n.lines.length
             ? n.lines.map((l) => ({
@@ -85,7 +88,8 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   const [pending, setPending] = useState<Set<string>>(() => {
     const s = new Set<string>(["orders", "invoices"]);
     if (isEdit) s.add("entity");
-    else if (searchParams.get("dari_order") || searchParams.get("dari_invoice") || searchParams.get("duplicate_from")) s.add("prefill");
+    else s.add("number");
+    if (!isEdit && (searchParams.get("dari_order") || searchParams.get("dari_invoice") || searchParams.get("duplicate_from"))) s.add("prefill");
     return s;
   });
   const done = (key: string) =>
@@ -109,10 +113,12 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   const [number, setNumber] = useState("");
   const [date, setDate] = useState(todayISO());
   const [notes, setNotes] = useState("");
+  const [shipFrom, setShipFrom] = useState("");
   const [lines, setLines] = useState<EditableSimpleLine[]>([emptySimpleLine()]);
   const [moreInfo, setMoreInfo] = useState<MoreInfoValue>(emptyMoreInfo());
   const [attachmentData, setAttachmentData] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
+  const [signatureData, setSignatureData] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
 
   // New documents start from the configured defaults (existing ones keep what they have).
@@ -128,6 +134,8 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   useEffect(() => {
     listAllSalesOrders().then(setSalesOrders).catch(() => setSalesOrders([])).finally(() => done("orders"));
     listAllSalesInvoices("invoice").then(setSalesInvoices).catch(() => setSalesInvoices([])).finally(() => done("invoices"));
+    if (!isEdit) previewDeliveryNoteNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // ?dari_order=<id> → pre-fill mitra & lines from that confirmed order.
@@ -254,6 +262,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
       number: number.trim() || undefined,
       date,
       notes: notes.trim() || undefined,
+      ship_from: shipFrom.trim() || undefined,
       shipping_method: moreInfo.shipping_method.trim() || undefined,
       tracking_no: moreInfo.tracking_no.trim() || undefined,
       vehicle_no: moreInfo.vehicle_no.trim() || undefined,
@@ -261,6 +270,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
       total_weight: moreInfo.total_weight ?? undefined,
       attachment_data: attachmentData || undefined,
       attachment_name: attachmentName || undefined,
+      signature_data: signatureData || undefined,
       lines: active.map((l) => ({
         product_name: l.product_name.trim(),
         description: l.description.trim() || undefined,
@@ -289,7 +299,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   };
 
   const { isDirty, markClean, reset } = useDirtyForm(
-    { salesOrderId, salesInvoiceId, mitraId, number, date, notes, lines, moreInfo, attachmentData, attachmentName },
+    { salesOrderId, salesInvoiceId, mitraId, number, date, notes, shipFrom, lines, moreInfo, attachmentData, attachmentName, signatureData },
     !loading,
   );
   const applyReset = () => {
@@ -301,10 +311,12 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
     setNumber(snap.number);
     setDate(snap.date);
     setNotes(snap.notes);
+    setShipFrom(snap.shipFrom);
     setLines(snap.lines);
     setMoreInfo(snap.moreInfo);
     setAttachmentData(snap.attachmentData);
     setAttachmentName(snap.attachmentName);
+    setSignatureData(snap.signatureData);
     setErrors({});
   };
 
@@ -350,7 +362,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
                 value={mitraId}
                 resource="mitra"
                 companyId={activeCompanyId}
-                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
                 resolveById={getMitra}
                 toOption={(m) => ({ value: m.id, label: m.name })}
                 onChange={(v) => {
@@ -363,6 +375,14 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
                 error={errors.mitraId}
                 onAddNew={() => setAddMitraOpen(true)}
                 addNewLabel="Add new partner"
+              />
+            </FormField>
+            <FormField label="Ship From" htmlFor="dn-ship-from" optional>
+              <Input
+                id="dn-ship-from"
+                value={shipFrom}
+                onChange={(e) => setShipFrom(e.target.value)}
+                placeholder="e.g. Main Warehouse"
               />
             </FormField>
             <FormField label="Delivery No." htmlFor="dn-number" optional>
@@ -427,6 +447,9 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
           <FormField label="Notes" htmlFor="dn-notes" optional>
             <RichTextEditor id="dn-notes" value={notes} onChange={setNotes} placeholder="Internal notes (optional)" />
           </FormField>
+        }
+        bottom={
+          <SignatureUpload signatureData={signatureData} onSignatureChange={setSignatureData} />
         }
       />
 

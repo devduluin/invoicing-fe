@@ -342,7 +342,7 @@ export function buildInvoiceView({
     ...(isOrder
       ? []
       : [
-          ...(appliedDp > 0 ? [{ key: "downPayment" as const, label: labels.downPayment, value: fmt.money(appliedDp) }] : []),
+          ...(appliedDp > 0 && cfg.visible("sum.downPayment") ? [{ key: "downPayment" as const, label: labels.downPayment, value: fmt.money(appliedDp) }] : []),
           ...(cfg.visible("sum.paid") ? [{ key: "paid" as const, label: labels.totalPaid, value: fmt.money(paid) }] : []),
           ...(cfg.visible("sum.outstanding") ? [{ key: "outstanding" as const, label: labels.outstanding, value: fmt.money(outstanding), emphasis: true }] : []),
           ...(cfg.visible("sum.paymentStatus") ? [{ key: "paymentStatus" as const, label: cfg.label("sum.paymentStatus"), value: statusText[paymentState][lang] }] : []),
@@ -367,7 +367,7 @@ export function buildInvoiceView({
           ...(cfg.visible("hdr.number") ? [{ key: "no", label: labels.invoiceNo, value: invoice.number }] : []),
           ...(cfg.visible("hdr.reference") && invoice.ref_no ? [{ key: "ref", label: labels.reference, value: invoice.ref_no }] : []),
           ...(cfg.visible("hdr.date") ? [{ key: "date", label: labels.date, value: fmt.date(invoice.date, lang) }] : []),
-          ...(!isOrder && invoice.payment_term ? [{ key: "term", label: lang === "id" ? "Termin" : "Terms", value: paymentTermLabel(invoice.payment_term, lang) }] : []),
+          ...(!isOrder && invoice.payment_term && cfg.visible("hdr.term") ? [{ key: "term", label: cfg.label("hdr.term"), value: paymentTermLabel(invoice.payment_term, lang) }] : []),
           ...(!isOrder && invoice.due_date && cfg.visible("hdr.dueDate") ? [{ key: "due", label: labels.dueDate, value: fmt.date(invoice.due_date, lang) }] : []),
         ],
     theme: { accent: cfg.accent, accentLine: cfg.header.accentLine, textStyles: cfg.textStyles, page: cfg.page },
@@ -406,7 +406,7 @@ export function buildInvoiceView({
       name: cfg.signature.name || company?.name || "—",
     },
     terbilang: amountInWords(invoice.grand_total ?? 0, lang),
-    downPayment: downPaymentRef
+    downPayment: downPaymentRef && cfg.visible("sum.downPaymentRef")
       ? { number: downPaymentRef.number, date: fmt.date(downPaymentRef.date, lang), amount: fmt.money(downPaymentRef.amount ?? 0) }
       : undefined,
   };

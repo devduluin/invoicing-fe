@@ -14,7 +14,6 @@ import { FormField, Input, RichTextEditor, DatePickerInput, SearchableSelect, Re
 import { useAuthStore } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
-import { formatDateStyle } from "@/utils/formatDate";
 import { usePageBreadcrumb } from "@/store/useBreadcrumbStore";
 import { listMitraPage, getMitra } from "@/services/mitraService";
 import { invalidateRemoteSelectOptions } from "@/hooks/useRemoteSelectOptions";
@@ -30,12 +29,14 @@ import {
   type SalesReceiptPaymentMethod,
 } from "@/services/salesReceiptService";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
+import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
+import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
-const GRID_COLS = "grid grid-cols-[minmax(180px,2fr)_140px_120px_120px_140px_40px] gap-2";
+const GRID_COLS = "grid grid-cols-[minmax(180px,2fr)_120px_120px_140px_40px] gap-2";
 
 interface AllocationRow {
   key: string;
@@ -91,6 +92,9 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   const [paymentMethod, setPaymentMethod] = useState<SalesReceiptPaymentMethod>("cash");
   const [bankAccountId, setBankAccountId] = useState("");
   const [notes, setNotes] = useState("");
+  const [attachmentData, setAttachmentData] = useState("");
+  const [attachmentName, setAttachmentName] = useState("");
+  const [signatureData, setSignatureData] = useState("");
   const [errors, setErrors] = useState<{ mitraId?: string; date?: string }>({});
   // What the saved receipt already allocated per invoice (edit only) — that amount is
   // free to re-use, because the server gives it back before applying the new rows.
@@ -107,7 +111,12 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   ]);
 
   useEffect(() => {
-    listAllSalesInvoices("invoice").then(setInvoices).catch(() => setInvoices([])).finally(() => done("invoices"));
+    // A down payment is stored as a SalesInvoice row too (kind: "down_payment") and can carry its
+    // own outstanding balance to settle — both kinds must be selectable/allocatable here.
+    Promise.all([listAllSalesInvoices("invoice"), listAllSalesInvoices("down_payment")])
+      .then(([invoices, downPayments]) => setInvoices([...invoices, ...downPayments]))
+      .catch(() => setInvoices([]))
+      .finally(() => done("invoices"));
     listAllBankAccounts().then(setBankAccounts).catch(() => setBankAccounts([])).finally(() => done("bank-accounts"));
     if (!isEdit) previewSalesReceiptNumber().then(setNumber).catch(() => {}).finally(() => done("number"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -124,6 +133,9 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
         setPaymentMethod(r.payment_method);
         setBankAccountId(r.bank_account_id ?? "");
         setNotes(r.notes ?? "");
+        setAttachmentData(r.attachment_data ?? "");
+        setAttachmentName(r.attachment_name ?? "");
+        setSignatureData(r.signature_data ?? "");
         setAllocations(
           (r.allocations ?? []).map((a) => ({ key: crypto.randomUUID(), salesInvoiceId: a.sales_invoice_id, amount: a.amount })),
         );
@@ -206,6 +218,9 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
       payment_method: paymentMethod,
       bank_account_id: paymentMethod === "transfer" ? bankAccountId || undefined : undefined,
       notes: notes.trim() || undefined,
+      attachment_data: attachmentData || undefined,
+      attachment_name: attachmentName || undefined,
+      signature_data: signatureData || undefined,
       allocations: allocationPayload,
     };
 
@@ -229,7 +244,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   };
 
   const { isDirty, markClean, reset } = useDirtyForm(
-    { mitraId, number, date, allocations, paymentMethod, bankAccountId, notes },
+    { mitraId, number, date, allocations, paymentMethod, bankAccountId, notes, attachmentData, attachmentName, signatureData },
     !loading,
   );
   const applyReset = () => {
@@ -242,6 +257,9 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
     setPaymentMethod(snap.paymentMethod);
     setBankAccountId(snap.bankAccountId);
     setNotes(snap.notes);
+    setAttachmentData(snap.attachmentData);
+    setAttachmentName(snap.attachmentName);
+    setSignatureData(snap.signatureData);
     setErrors({});
   };
 
@@ -275,6 +293,15 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
       />
 
       <DocumentFormLayout
+        headerLeft={
+          <AttachmentUpload
+            value={{ data: attachmentData, name: attachmentName }}
+            onChange={(v: AttachmentValue) => {
+              setAttachmentData(v.data);
+              setAttachmentName(v.name);
+            }}
+          />
+        }
         metaFields={
           <>
             <FormField label="Partner" htmlFor="kw-mitra" required error={errors.mitraId}>
@@ -283,7 +310,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
                 value={mitraId}
                 resource="mitra"
                 companyId={activeCompanyId}
-                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
                 resolveById={getMitra}
                 toOption={(m) => ({ value: m.id, label: m.name })}
                 onChange={(v) => {
@@ -325,17 +352,6 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
                 onChange={(v) => setPaymentMethod(v as SalesReceiptPaymentMethod)}
               />
             </FormField>
-            {paymentMethod === "transfer" && (
-              <FormField label="Bank Account" htmlFor="kw-bank" optional className="sm:col-span-2">
-                <SearchableSelect
-                  id="kw-bank"
-                  value={bankAccountId}
-                  options={bankOptions}
-                  onChange={setBankAccountId}
-                  placeholder="Select a receiving account…"
-                />
-              </FormField>
-            )}
           </>
         }
         lineItems={
@@ -344,7 +360,6 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
               className={`${GRID_COLS} border-b border-border bg-table-head px-4 py-3 text-[11px] font-bold tracking-wider text-slate-400 uppercase`}
             >
               <span>No. Invoice</span>
-              <span>Tanggal / Jth. Tempo</span>
               <span className="text-right">Total Tagihan</span>
               <span className="text-right">Sisa Tagihan</span>
               <span className="text-right">Jumlah Terbayar</span>
@@ -379,9 +394,6 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
                         }}
                         placeholder="Select invoice…"
                       />
-                      <span className="text-xs text-slate-500">
-                        {inv ? `${formatDateStyle(inv.date)} / ${inv.due_date ? formatDateStyle(inv.due_date) : "—"}` : "—"}
-                      </span>
                       <span className="text-right font-mono text-xs text-slate-600">
                         {inv ? money.format(inv.grand_total) : "—"}
                       </span>
@@ -427,6 +439,9 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
               <span>{money.format(totalAmount)}</span>
             </div>
           </div>
+        }
+        bottom={
+          <SignatureUpload signatureData={signatureData} onSignatureChange={setSignatureData} />
         }
       />
 

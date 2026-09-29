@@ -15,7 +15,8 @@ import FixedDocPreview from "../shared/FixedDocPreview";
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
-/** A purchase payment: what was paid to the vendor and the bill it settles (with what is still owed). */
+/** A purchase receipt: the payment made to a vendor and the bills it was applied to (with what
+ *  each still owes). Mirrors SalesReceiptDetailPage on the AP side. */
 export default function PurchaseReceiptDetailPage({ id }: { id: string }) {
   const tr = useTr();
   const permissions = useAuthStore((s) => s.permissions);
@@ -23,7 +24,7 @@ export default function PurchaseReceiptDetailPage({ id }: { id: string }) {
   const [receipt, setReceipt] = useState<PurchaseReceipt | null>(null);
   const [mitra, setMitra] = useState<Mitra | null>(null);
   const [company, setCompany] = useState<Company | null>(null);
-  const [invoice, setInvoice] = useState<PurchaseInvoice | null>(null);
+  const [invoices, setInvoices] = useState<Record<string, PurchaseInvoice>>({});
   const [loading, setLoading] = useState(true);
   const [failed, setFailed] = useState(false);
 
@@ -33,20 +34,21 @@ export default function PurchaseReceiptDetailPage({ id }: { id: string }) {
     getPurchaseReceipt(id)
       .then(async (r) => {
         setReceipt(r);
-        const [m, co, inv] = await Promise.all([
+        const [m, co, found] = await Promise.all([
           getMitra(r.mitra_id).catch(() => null),
           getMyCompany().catch(() => null),
-          r.purchase_invoice_id ? getPurchaseInvoice(r.purchase_invoice_id).catch(() => null) : Promise.resolve(null),
+          Promise.all((r.allocations ?? []).map((a) => getPurchaseInvoice(a.purchase_invoice_id).catch(() => null))),
         ]);
         setMitra(m);
         setCompany(co);
-        setInvoice(inv);
+        setInvoices(Object.fromEntries(found.filter((x): x is PurchaseInvoice => !!x).map((x) => [x.id, x])));
       })
       .catch(() => setFailed(true))
       .finally(() => setLoading(false));
   }, [id, activeCompanyId]);
   useEffect(load, [load]);
 
+  const allocations = receipt?.allocations ?? [];
   const docData: ReceiptDocData | null = receipt
     ? {
         kind: "purchase",
@@ -57,7 +59,7 @@ export default function PurchaseReceiptDetailPage({ id }: { id: string }) {
         notes: receipt.notes,
         partner: mitra,
         company,
-        invoices: invoice ? [{ number: invoice.number, amount: receipt.amount }] : [],
+        invoices: allocations.flatMap((a) => (invoices[a.purchase_invoice_id] ? [{ number: invoices[a.purchase_invoice_id].number, amount: a.amount }] : [])),
       }
     : null;
 
@@ -72,7 +74,7 @@ export default function PurchaseReceiptDetailPage({ id }: { id: string }) {
         { label: "Vendor", value: mitra?.name ?? "-" },
         { label: tr("Tanggal", "Date"), value: receipt ? formatDateStyle(receipt.date) : "-" },
         { label: tr("Metode", "Method"), value: receipt ? PAYMENT_METHOD_LABEL[receipt.payment_method] : "-" },
-        { label: tr("Invoice terkait", "Related invoice"), value: invoice?.number ?? tr("Tanpa invoice", "No invoice") },
+        { label: tr("Invoice", "Invoices"), value: String(allocations.length) },
       ]}
       highlight={{ label: tr("Jumlah dibayar", "Amount paid"), value: money.format(receipt?.amount ?? 0) }}
       canEdit={hasPermission(permissions, "invoice-purchase-receipt-update")}

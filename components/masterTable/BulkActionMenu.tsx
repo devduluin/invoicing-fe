@@ -27,27 +27,27 @@ const DANGER =
   "text-rose-600 focus:bg-rose-50 focus:text-rose-700 focus-visible:ring-rose-400/40 [&>svg:first-child]:bg-rose-500/10 [&>svg:first-child]:text-rose-600 focus:[&>svg:first-child]:bg-white focus:[&>svg:first-child]:text-rose-600";
 
 /**
- * "Choose Action" — the bulk-action entry point next to a list's Add button. The trigger itself is
- * disabled until at least one row is selected; once open, each action manages its OWN enabled state
- * (e.g. Sales Order's Create Invoice/Delivery Note need every selected row to share one partner) so
- * a disabled item stays visible with a reason, per spec, instead of disappearing.
+ * "Choose Action" — the bulk-action entry point next to a list's Add button. Not rendered at all
+ * until at least one row is selected (rather than shown disabled) — it has nothing to act on yet.
+ * Once open, each action manages its OWN enabled state (e.g. Sales Order's Create Invoice/Delivery
+ * Note need every selected row to share one partner) so a disabled item stays visible with a
+ * reason, per spec, instead of disappearing.
  */
 export default function BulkActionMenu({ selectedCount, actions }: { selectedCount: number; actions: BulkAction[] }) {
   const tr = useTr();
-  if (actions.length === 0) return null;
+  if (actions.length === 0 || selectedCount === 0) return null;
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          disabled={selectedCount === 0}
           className={cn(
             "inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-border-strong bg-white px-3 text-[13px] font-semibold text-slate-700 transition-colors",
-            "hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-white",
+            "hover:bg-slate-50",
             "data-[state=open]:bg-slate-50",
           )}
         >
-          {selectedCount > 0 ? tr(`Pilih Aksi (${selectedCount})`, `Choose Action (${selectedCount})`) : tr("Pilih Aksi", "Choose Action")}
+          {tr(`Pilih Aksi (${selectedCount})`, `Choose Action (${selectedCount})`)}
           <ChevronDown className="size-3.5 text-slate-400" aria-hidden />
         </button>
       </DropdownMenuTrigger>

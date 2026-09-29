@@ -150,6 +150,38 @@ describe("buildInvoiceView — configuration reaches the document", () => {
     expect(v.theme.accentLine).toBe(true);
     expect(v.theme.textStyles.heading).toEqual({ italic: true, color: undefined });
   });
+
+  it("the payment term row, applied-down-payment row and down-payment cross-reference box can each be hidden", () => {
+    const withDp = (stored: StoredDocConfig) =>
+      buildInvoiceView({
+        template: "template_1",
+        invoice: { ...invoice, payment_term: "net_30", applied_dp_amount: 200000 } as SalesInvoice,
+        mitra: { id: "m", name: "PT Cust", address: "Jl A" } as never,
+        company: { id: "c", name: "PT Co", alamat: "Jl B" } as never,
+        taxByID: new Map([[tax.id, tax]]),
+        config: resolveDocConfig("sales_invoice", stored),
+        downPaymentRef: { number: "DP/1", date: "2025-04-01", amount: 200000 },
+      });
+
+    const shown = withDp({});
+    expect(shown.meta.some((m) => m.key === "term")).toBe(true);
+    expect(shown.summary.some((s) => s.key === "downPayment")).toBe(true);
+    expect(shown.downPayment).toBeTruthy();
+
+    const termHidden = withDp({ hidden: ["hdr.term"] });
+    expect(termHidden.meta.some((m) => m.key === "term")).toBe(false);
+    // hiding the term doesn't take the DP row/box down with it
+    expect(termHidden.summary.some((s) => s.key === "downPayment")).toBe(true);
+    expect(termHidden.downPayment).toBeTruthy();
+
+    const dpRowHidden = withDp({ hidden: ["sum.downPayment"] });
+    expect(dpRowHidden.summary.some((s) => s.key === "downPayment")).toBe(false);
+    expect(dpRowHidden.downPayment).toBeTruthy();
+
+    const dpBoxHidden = withDp({ hidden: ["sum.downPaymentRef"] });
+    expect(dpBoxHidden.downPayment).toBeUndefined();
+    expect(dpBoxHidden.summary.some((s) => s.key === "downPayment")).toBe(true);
+  });
 });
 
 describe("every template obeys the configuration", () => {

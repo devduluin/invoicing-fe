@@ -19,6 +19,7 @@ export interface GoodsReceipt {
   number: string;
   date: string;
   notes?: string;
+  received_in?: string;
   shipping_method?: string;
   tracking_no?: string;
   vehicle_no?: string;
@@ -37,6 +38,7 @@ export interface GoodsReceiptInput {
   number?: string;
   date: string;
   notes?: string;
+  received_in?: string;
   shipping_method?: string;
   tracking_no?: string;
   vehicle_no?: string;
@@ -56,6 +58,13 @@ interface Envelope<T> {
 /** Paginated goods receipt list for the MasterTable. */
 export function listGoodsReceipts(params: GetAllPayload): Promise<ListResult<TableRow>> {
   return fetchList("/goods-receipts", params);
+}
+
+/** What the next auto-generated number would be right now — a preview for
+ *  the Add page, not a reservation. */
+export async function previewGoodsReceiptNumber(): Promise<string> {
+  const { data } = await api.get<Envelope<{ number: string }>>("/goods-receipts/next-number");
+  return data.data.number;
 }
 
 export async function getGoodsReceipt(id: string): Promise<GoodsReceipt> {

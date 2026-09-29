@@ -540,7 +540,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 value={mitraId}
                 resource="mitra"
                 companyId={activeCompanyId}
-                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "supplier", isActive: true })}
                 resolveById={getMitra}
                 toOption={(m) => ({ value: m.id, label: m.name })}
                 onItemChange={setPreviewMitra}
@@ -640,15 +640,6 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 value={refNo}
                 onChange={(e) => setRefNo(e.target.value)}
                 placeholder="Supplier's reference number"
-                disabled={readOnly}
-              />
-            </FormField>
-            <FormField label="Ship To" htmlFor="inv-ship-to" optional>
-              <Input
-                id="inv-ship-to"
-                value={shipTo}
-                onChange={(e) => setShipTo(e.target.value)}
-                placeholder="e.g. Main Warehouse"
                 disabled={readOnly}
               />
             </FormField>

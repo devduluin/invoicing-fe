@@ -20,6 +20,7 @@ export interface DeliveryNote {
   number: string;
   date: string;
   notes?: string;
+  ship_from?: string;
   shipping_method?: string;
   tracking_no?: string;
   vehicle_no?: string;
@@ -27,6 +28,7 @@ export interface DeliveryNote {
   total_weight?: number;
   attachment_data?: string;
   attachment_name?: string;
+  signature_data?: string;
   lines: DeliveryNoteLine[];
   created_at: string;
   updated_at: string;
@@ -39,6 +41,7 @@ export interface DeliveryNoteInput {
   number?: string;
   date: string;
   notes?: string;
+  ship_from?: string;
   shipping_method?: string;
   tracking_no?: string;
   vehicle_no?: string;
@@ -46,6 +49,7 @@ export interface DeliveryNoteInput {
   total_weight?: number | null;
   attachment_data?: string;
   attachment_name?: string;
+  signature_data?: string;
   lines: DeliveryNoteLine[];
 }
 
@@ -58,6 +62,13 @@ interface Envelope<T> {
 /** Paginated delivery note list for the MasterTable. */
 export function listDeliveryNotes(params: GetAllPayload): Promise<ListResult<TableRow>> {
   return fetchList("/delivery-notes", params);
+}
+
+/** What the next auto-generated number would be right now — a preview for
+ *  the Add page, not a reservation. */
+export async function previewDeliveryNoteNumber(): Promise<string> {
+  const { data } = await api.get<Envelope<{ number: string }>>("/delivery-notes/next-number");
+  return data.data.number;
 }
 
 export async function getDeliveryNote(id: string): Promise<DeliveryNote> {

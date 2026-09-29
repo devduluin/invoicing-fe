@@ -479,7 +479,7 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
                 value={mitraId}
                 resource="mitra"
                 companyId={activeCompanyId}
-                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+                fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "supplier", isActive: true })}
                 resolveById={getMitra}
                 toOption={(m) => ({ value: m.id, label: m.name })}
                 onItemChange={setPreviewMitra}
@@ -532,15 +532,6 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
                 value={refNo}
                 onChange={(e) => setRefNo(e.target.value)}
                 placeholder="Partner's reference number"
-                disabled={readOnly}
-              />
-            </FormField>
-            <FormField label="Ship To" htmlFor="po-ship-to" optional className="sm:col-span-2">
-              <Input
-                id="po-ship-to"
-                value={shipTo}
-                onChange={(e) => setShipTo(e.target.value)}
-                placeholder="e.g. Main Warehouse"
                 disabled={readOnly}
               />
             </FormField>

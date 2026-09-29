@@ -143,6 +143,8 @@ function billingFields(o: {
     field("hdr.reference", "header", L("Referensi", "Reference")),
     field("hdr.date", "header", L("Tanggal", "Date")),
     ...(o.due ? [field("hdr.dueDate", "header", L("Tgl. Jatuh Tempo", "Due Date"))] : []),
+    // The chosen Terms of Payment ("Net 30", "COD", …) — only invoices/down payments have one.
+    ...(o.due ? [field("hdr.term", "header", L("Termin", "Terms"))] : []),
     field("hdr.partner", "header", o.partner),
     field("hdr.companyInfo", "header", L("Info Perusahaan:", "Company Info:")),
     // The partner's contact person, printed under the partner block. Off until enabled.
@@ -166,9 +168,15 @@ function billingFields(o: {
     field("sum.total", "summary", L("Total", "Total"), { toggle: false }),
     ...(o.payment
       ? [
+          // The applied-down-payment row in the summary total (only prints when one is actually applied).
+          field("sum.downPayment", "payment", L("Uang Muka", "Down Payment")),
           field("sum.paid", "payment", o.paidLabel ?? L("Total Terbayar", "Paid Amount")),
           field("sum.outstanding", "payment", o.outstandingLabel ?? L("Sisa Tagihan", "Outstanding Amount")),
           field("sum.paymentStatus", "payment", L("Status Pembayaran", "Payment Status")),
+          // The linked-down-payment cross-reference box (Template 6/7's "DP/2026/0001 — Rp…").
+          // Only ever prints when this invoice actually has one — this toggle just lets it be
+          // turned off even then.
+          field("sum.downPaymentRef", "payment", L("Referensi Uang Muka", "Down Payment Reference")),
         ]
       : []),
   ];

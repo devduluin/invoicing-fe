@@ -81,7 +81,9 @@ export function DocumentFormLayout({ headerLeft, metaFields, belowMeta, lineItem
     </div>
   );
 
-  if (!totals && !aside) return <div className="max-w-6xl">{main}</div>;
+  // No summary/aside column to fill the right side (Delivery Note, Goods Receipt, Purchase Receipt):
+  // let the one surface use the full width instead of stranding it in a narrow, capped column.
+  if (!totals && !aside) return <div className="w-full">{main}</div>;
 
   return (
     <div className="grid items-start gap-3 xl:grid-cols-[minmax(0,1fr)_320px]">

@@ -18,6 +18,10 @@ export const PAYMENT_TERMS: PaymentTermOption[] = [
   { value: "custom", id: "Kustom (atur tanggal sendiri)", en: "Custom (pick the date)" },
 ];
 
+// "cod" and "custom" stay in PAYMENT_TERMS so an existing document that already has one keeps
+// resolving its label/due-date correctly — they're just not offered as a NEW choice.
+export const SELECTABLE_PAYMENT_TERMS: PaymentTermOption[] = PAYMENT_TERMS.filter((t) => t.value !== "cod" && t.value !== "custom");
+
 export const paymentTermDays = (key: string): number | undefined => PAYMENT_TERMS.find((t) => t.value === key)?.days;
 
 export const paymentTermLabel = (key: string | undefined, lang: "id" | "en"): string => {

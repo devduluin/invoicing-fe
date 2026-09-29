@@ -118,6 +118,10 @@ export default function PurchaseInvoiceDetailPage({ id }: { id: string }) {
 
   const outstanding = Math.max(0, invoice.grand_total - invoice.paid_amount);
   const effective = effectiveStatus(invoice);
+  // A receipt's own `amount` is its grand total across every invoice it allocates to (it can now
+  // span more than one) — what belongs to THIS invoice is only its own allocation row.
+  const amountOnThisInvoice = (r: PurchaseReceipt) =>
+    (r.allocations ?? []).filter((a) => a.purchase_invoice_id === invoice.id).reduce((sum, a) => sum + a.amount, 0);
   const changeTemplate = async (next: InvoiceTemplateId) => {
     const prev = invoice.template;
     setInvoice({ ...invoice, template: next });
@@ -232,7 +236,7 @@ export default function PurchaseInvoiceDetailPage({ id }: { id: string }) {
                       <td className="px-4 py-2 font-mono text-xs font-semibold text-slate-800">{p.number}</td>
                       <td className="px-2 py-2 text-slate-600">{formatDateStyle(p.date)}</td>
                       <td className="px-2 py-2 text-slate-600">{PAYMENT_METHOD_LABEL[p.payment_method]}</td>
-                      <td className="px-4 py-2 text-right font-semibold tabular-nums">{money.format(p.amount)}</td>
+                      <td className="px-4 py-2 text-right font-semibold tabular-nums">{money.format(amountOnThisInvoice(p))}</td>
                     </tr>
                   ))}
                 </tbody>

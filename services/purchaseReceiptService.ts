@@ -4,30 +4,50 @@ import type { GetAllPayload, ListResult, TableRow } from "@/app/types/apiRespons
 
 export type PurchaseReceiptPaymentMethod = "cash" | "transfer" | "other";
 
+/** One "Kepada Invoice" row — how much of the receipt goes to which purchase invoice. Each
+ *  allocation updates that invoice's paid_amount/payment_status server-side. */
+export interface PurchaseReceiptAllocation {
+  id: string;
+  purchase_invoice_id: string;
+  amount: number;
+}
+
+export interface PurchaseReceiptAllocationInput {
+  purchase_invoice_id: string;
+  amount: number;
+}
+
 export interface PurchaseReceipt {
   id: string;
   company_id: string;
   mitra_id: string;
-  purchase_invoice_id?: string;
   number: string;
   date: string;
+  // The total — server-computed as the sum of `allocations`, never entered directly.
   amount: number;
   payment_method: PurchaseReceiptPaymentMethod;
   bank_account_id?: string;
   notes?: string;
+  attachment_data?: string;
+  attachment_name?: string;
+  signature_data?: string;
+  allocations: PurchaseReceiptAllocation[];
   created_at: string;
   updated_at: string;
 }
 
 export interface PurchaseReceiptInput {
   mitra_id: string;
-  purchase_invoice_id?: string | null;
   number?: string;
   date: string;
-  amount: number;
   payment_method: PurchaseReceiptPaymentMethod;
   bank_account_id?: string | null;
   notes?: string;
+  attachment_data?: string;
+  attachment_name?: string;
+  signature_data?: string;
+  // At least one allocation is required — a receipt always pays toward one or more invoices.
+  allocations: PurchaseReceiptAllocationInput[];
 }
 
 interface Envelope<T> {
@@ -48,7 +68,8 @@ export async function previewPurchaseReceiptNumber(): Promise<string> {
   return data.data.number;
 }
 
-/** The payments applied to one purchase invoice (its payment history). */
+/** Receipts that allocate money to one purchase invoice (each carries its `allocations`, so the
+ *  amount applied to THIS invoice can be read off) — the detail page's payments tab. */
 export async function listAllPurchaseReceiptsForInvoice(purchaseInvoiceId: string): Promise<PurchaseReceipt[]> {
   const res = await fetchList<PurchaseReceipt>("/purchase-receipts", {
     page: 1,
@@ -70,13 +91,13 @@ export async function createPurchaseReceipt(input: PurchaseReceiptInput): Promis
   return data.data;
 }
 
-/** Full replace. */
+/** Full replace. The server reverses the old allocations on the invoices and applies the new ones. */
 export async function updatePurchaseReceipt(id: string, input: PurchaseReceiptInput): Promise<PurchaseReceipt> {
   const { data } = await api.put<Envelope<PurchaseReceipt>>(`/purchase-receipts/${encodeURIComponent(id)}`, input);
   return data.data;
 }
 
-/** Soft delete — the record disappears from lists but is kept in the database. */
+/** Soft delete — the receipt disappears from lists and its allocations are given back to the invoices. */
 export async function deletePurchaseReceipt(id: string): Promise<void> {
   await api.delete(`/purchase-receipts/${encodeURIComponent(id)}`);
 }

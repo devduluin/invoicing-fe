@@ -5,26 +5,25 @@ import { PenLine, Trash2, UploadCloud } from "lucide-react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
 import { useTr } from "@/lib/useTr";
-import { CheckboxField } from "@/components/form";
 
 const ALLOWED = ["image/png", "image/jpeg", "image/jpg"];
 const MAX_BYTES = 2 * 1024 * 1024;
 
-/** Signature image upload + "Include Stamp Duty (e-Meterai)" toggle, same
- *  `data:` URI drag/drop convention as `LogoUpload`. Captured on every
- *  document for layout consistency; only actually rendered on a print
- *  template where one exists (Sales Invoice today). */
+/** Signature image upload, same `data:` URI drag/drop convention as `LogoUpload`.
+ *
+ *  `stampDuty`/`onStampDutyChange` are still accepted (every caller still owns that state and
+ *  saves it — see stamp_duty on the document) but the "Include Stamp Duty (e-Meterai)" toggle
+ *  itself is hidden here for now; nothing currently reads it back except a signed+stamped PDF
+ *  variant that isn't exposed anywhere the checkbox's removal would orphan. */
 export function SignatureUpload({
   signatureData,
   onSignatureChange,
-  stampDuty,
-  onStampDutyChange,
   disabled,
 }: {
   signatureData: string;
   onSignatureChange: (data: string) => void;
-  stampDuty: boolean;
-  onStampDutyChange: (v: boolean) => void;
+  stampDuty?: boolean;
+  onStampDutyChange?: (v: boolean) => void;
   disabled?: boolean;
 }) {
   const tr = useTr();
@@ -115,12 +114,6 @@ export function SignatureUpload({
             {tr("Hapus", "Remove")}
           </button>
         )}
-        <CheckboxField
-          checked={stampDuty}
-          onChange={onStampDutyChange}
-          disabled={disabled}
-          label={tr("Sertakan meterai (e-Meterai)", "Include Stamp Duty (e-Meterai)")}
-        />
       </div>
     </div>
   );

@@ -13,6 +13,7 @@ import { docConfigTypeFor, parseStoredConfig, type DocConfigType, type StoredDoc
 import type { SalesReceipt } from "../../services/salesReceiptService";
 import type { PurchaseReceipt } from "../../services/purchaseReceiptService";
 import { asInvoiceShape, type PrintableDoc, type PrintableDocKind } from "../documentShape";
+import { inlineRemoteImage } from "./inlineImage";
 
 /** Just enough of a connected document to print a Down Payment cross-reference (Template 6/7) —
  *  mirrors services/connectedDocumentService.ts's ConnectedDocument shape. */
@@ -112,7 +113,20 @@ export async function loadInvoicePdfData(id: string, auth: Auth): Promise<Invoic
     loadDownPaymentRef(invoice, auth),
   ]);
   const config = await loadDocConfig(docConfigTypeFor({ kind: invoice.kind }), auth);
+  await inlinePrintableImages(company, invoice);
   return { invoice, mitra, company, taxes: taxes ?? [], config, downPaymentRef };
+}
+
+/** The headless PDF page can only load data:/blob:/same-origin images (see inlineImage.ts) —
+ *  fetch the company logo and this document's own captured signature here, once, and replace them
+ *  with data: URIs in place before the payload is handed to the renderer. */
+async function inlinePrintableImages(company: Company | null, doc: { signature_data?: string }): Promise<void> {
+  const [logo, signature] = await Promise.all([
+    company?.company_logo ? inlineRemoteImage(company.company_logo) : Promise.resolve(undefined),
+    doc.signature_data ? inlineRemoteImage(doc.signature_data) : Promise.resolve(undefined),
+  ]);
+  if (company) company.company_logo = logo;
+  doc.signature_data = signature;
 }
 
 const DOC_ENDPOINT: Record<PrintableDocKind, string> = {
@@ -132,7 +146,9 @@ export async function loadDocumentPdfData(kind: PrintableDocKind, id: string, au
     apiGet<Mitra>(`/mitra/${encodeURIComponent(doc.mitra_id)}`, auth).catch(() => null),
   ]);
   const config = await loadDocConfig(docConfigTypeFor({ doc: kind }), auth);
-  return { invoice: asInvoiceShape(doc), mitra, company, taxes: taxes ?? [], doc: kind, config };
+  const shaped = asInvoiceShape(doc);
+  await inlinePrintableImages(company, shaped);
+  return { invoice: shaped, mitra, company, taxes: taxes ?? [], doc: kind, config };
 }
 
 type FixedKind = "sales-receipt" | "purchase-receipt" | "delivery-note" | "goods-receipt";
@@ -155,6 +171,7 @@ async function numberOf(path: string, auth: Auth): Promise<string | null> {
 export async function loadFixedPdfData(kind: FixedKind, id: string, auth: Auth): Promise<{ payload: FixedDocPdfPayload; number: string }> {
   const docType = FIXED_TYPE[kind];
   const [company, config] = await Promise.all([apiGet<Company>("/companies/me", auth).catch(() => null), loadDocConfig(docType, auth)]);
+  if (company?.company_logo) company.company_logo = await inlineRemoteImage(company.company_logo);
 
   if (kind === "sales-receipt" || kind === "purchase-receipt") {
     const sales = kind === "sales-receipt";
@@ -162,15 +179,15 @@ export async function loadFixedPdfData(kind: FixedKind, id: string, auth: Auth):
       ? await apiGet<SalesReceipt>(`/sales-receipts/${encodeURIComponent(id)}`, auth)
       : await apiGet<PurchaseReceipt>(`/purchase-receipts/${encodeURIComponent(id)}`, auth);
     const partner = await apiGet<Mitra>(`/mitra/${encodeURIComponent(receipt.mitra_id)}`, auth).catch(() => null);
-    let invoices: ReceiptDocData["invoices"] = [];
-    if (sales) {
-      const allocations = (receipt as SalesReceipt).allocations ?? [];
-      const found = await Promise.all(allocations.map((a) => numberOf(`/sales-invoices/${encodeURIComponent(a.sales_invoice_id)}`, auth).then((n) => (n ? { number: n, amount: a.amount } : null))));
-      invoices = found.filter((x): x is { number: string; amount: number } => !!x);
-    } else if ((receipt as PurchaseReceipt).purchase_invoice_id) {
-      const n = await numberOf(`/purchase-invoices/${encodeURIComponent((receipt as PurchaseReceipt).purchase_invoice_id as string)}`, auth);
-      if (n) invoices = [{ number: n, amount: receipt.amount }];
-    }
+    const allocations = sales ? (receipt as SalesReceipt).allocations ?? [] : (receipt as PurchaseReceipt).allocations ?? [];
+    const endpoint = sales ? "/sales-invoices" : "/purchase-invoices";
+    const found = await Promise.all(
+      allocations.map((a) => {
+        const invoiceId = sales ? (a as SalesReceipt["allocations"][number]).sales_invoice_id : (a as PurchaseReceipt["allocations"][number]).purchase_invoice_id;
+        return numberOf(`${endpoint}/${encodeURIComponent(invoiceId)}`, auth).then((n) => (n ? { number: n, amount: a.amount } : null));
+      }),
+    );
+    const invoices: ReceiptDocData["invoices"] = found.filter((x): x is { number: string; amount: number } => !!x);
     const data: ReceiptDocData = {
       kind: sales ? "sales" : "purchase", number: receipt.number, date: receipt.date, amount: receipt.amount,
       paymentMethod: receipt.payment_method, notes: receipt.notes, partner, company, invoices,

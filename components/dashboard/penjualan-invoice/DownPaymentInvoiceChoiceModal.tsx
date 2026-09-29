@@ -123,7 +123,7 @@ export default function DownPaymentInvoiceChoiceModal({ onClose, kind = "down_pa
             value={mitraId}
             resource="mitra"
             companyId={companyId}
-            fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize })}
+            fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
             resolveById={getMitra}
             toOption={(m) => ({ value: m.id, label: m.name })}
             onChange={(v) => {
