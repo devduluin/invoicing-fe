@@ -564,7 +564,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 label="Purchase Order"
                 htmlFor="inv-order"
                 optional
-                hint="Optional: link this bill to an order without changing its content."
+                hint={mitraId ? "Optional: link this bill to an order without changing its content." : "Select a partner first."}
               >
                 <SourceDocumentSelect
                   id="inv-order"
@@ -573,6 +573,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                   mitraId={mitraId || undefined}
                   types={["purchase_order"]}
                   orderStatus="confirmed"
+                  disabled={!mitraId}
                   onChange={(ref) => {
                     setPurchaseOrderId(ref?.id ?? null);
                     if (!ref) setSourceDoc(null);

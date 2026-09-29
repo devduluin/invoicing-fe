@@ -836,13 +836,14 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 label={tr("Pesanan Penjualan", "Sales Order")}
                 htmlFor="inv-order"
                 optional
-                hint={tr("Opsional: hubungkan invoice ini ke pesanan tanpa mengubah isinya.", "Optional: link this invoice to an order without changing its content.")}
+                hint={mitraId ? tr("Opsional: hubungkan invoice ini ke pesanan tanpa mengubah isinya.", "Optional: link this invoice to an order without changing its content.") : tr("Pilih mitra terlebih dahulu.", "Select a partner first.")}
               >
                 <SourceDocumentSelect
                   id="inv-order"
                   value={salesOrderId ? { type: "sales_order", id: salesOrderId } : null}
                   companyId={activeCompanyId}
                   mitraId={mitraId || undefined}
+                  disabled={!mitraId}
                   types={["sales_order"]}
                   orderStatus="confirmed"
                   onChange={(ref) => {
@@ -954,11 +955,13 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 htmlFor="inv-source"
                 optional
                 hint={
-                  sourceDoc
-                    ? sourceDoc.type === "sales_invoice"
-                      ? `${tr("Total", "Total")} ${money.format(sourceDoc.doc.grand_total)} · ${tr("Sisa tagihan", "Outstanding")} ${money.format(sourceDoc.doc.outstanding_amount)}`
-                      : `${tr("Total pesanan", "Order total")} ${money.format(sourceDoc.doc.grand_total)}`
-                    : tr("Boleh dikosongkan: uang muka tetap bisa dibuat tanpa sumber.", "Optional: a down payment can be created without a source.")
+                  !mitraId
+                    ? tr("Pilih mitra terlebih dahulu.", "Select a partner first.")
+                    : sourceDoc
+                      ? sourceDoc.type === "sales_invoice"
+                        ? `${tr("Total", "Total")} ${money.format(sourceDoc.doc.grand_total)} · ${tr("Sisa tagihan", "Outstanding")} ${money.format(sourceDoc.doc.outstanding_amount)}`
+                        : `${tr("Total pesanan", "Order total")} ${money.format(sourceDoc.doc.grand_total)}`
+                      : tr("Boleh dikosongkan: uang muka tetap bisa dibuat tanpa sumber.", "Optional: a down payment can be created without a source.")
                 }
               >
                 <SourceDocumentSelect
@@ -966,7 +969,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                   value={sourceRef}
                   companyId={activeCompanyId}
                   mitraId={mitraId || undefined}
-                  disabled={readOnly}
+                  disabled={readOnly || !mitraId}
                   onChange={(ref) => {
                     setLinkedInvoiceId(ref?.type === "sales_invoice" ? ref.id : null);
                     setSalesOrderId(ref?.type === "sales_order" ? ref.id : null);
