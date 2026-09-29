@@ -41,7 +41,7 @@ export default function Template3({ view }: TemplateProps) {
           className="absolute right-0 top-0 h-full w-[72%]"
           style={{
             background: shape,
-            borderBottomLeftRadius: "100% 72%",
+            borderBottomLeftRadius: "100% 100%",
           }}
         />
 
