@@ -47,6 +47,8 @@ export interface SalesOrder {
   additional_discount_amount?: number;
   ship_from?: string;
   salesperson?: string;
+  /** the salesperson master record; `salesperson` is its name as saved on the document */
+  salesperson_id?: string | null;
   attachment_data?: string;
   attachment_name?: string;
   signature_data?: string;
@@ -68,6 +70,8 @@ export interface SalesOrderInput {
   additional_discount_value?: number;
   ship_from?: string;
   salesperson?: string;
+  /** the salesperson master record; `salesperson` is its name as saved on the document */
+  salesperson_id?: string | null;
   attachment_data?: string;
   attachment_name?: string;
   signature_data?: string;

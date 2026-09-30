@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Plus, Ruler } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";

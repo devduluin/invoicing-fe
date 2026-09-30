@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FileText, Plus, Copy } from "lucide-react";
-import toast from "react-hot-toast";
+import { FileText, Plus, Copy, Upload } from "lucide-react";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import DownPaymentInvoiceChoiceModal from "../penjualan-invoice/DownPaymentInvoiceChoiceModal";
@@ -17,6 +17,9 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
+import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
+import InvoiceImportModal from "../shared/InvoiceImportModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { InvoiceStatusBadge, isOverdue, daysOverdue } from "../penjualan-invoice/statusBadges";
 import { formatDateStyle } from "@/utils/formatDate";
@@ -65,11 +68,25 @@ export default function PurchaseInvoiceClient() {
 
   const [confirm, setConfirm] = useState<PurchaseInvoice | null>(null);
   const [choiceOpen, setChoiceOpen] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [mitras, setMitras] = useState<Mitra[]>([]);
 
   // ?view=outstanding|overdue|draft|paid — lets the dashboard link straight to a filtered list.
   const initialView = useSearchParams().get("view");
   const list = useMasterList(listPurchaseInvoices, initialView && initialView in VIEW_PARAMS ? VIEW_PARAMS[initialView as View] : {});
+  // Rows ticked in the table, for the "Choose Action" bulk menu.
+  const [selectedRows, setSelectedRows] = useState<{ id: string; number?: string; status?: string }[]>([]);
+  const bulk = useBulkDocumentActions({
+    resource: "purchase-invoices",
+    rows: selectedRows,
+    noun: { id: "invoice", en: "invoices" },
+    canUpdate,
+    canDelete,
+    onDone: () => {
+      setSelectedRows([]);
+      list.refresh();
+    },
+  });
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([]));
@@ -156,15 +173,23 @@ export default function PurchaseInvoiceClient() {
             title="Purchase Invoices"
             description="Bill from a supplier for products/services purchased — created directly or from a purchase order."
             actions={
-              canCreate && (
-                <Button
-                  variant="primary"
-                  leftIcon={<Plus className="size-4" />}
-                  onClick={() => setChoiceOpen(true)}
-                >
-                  Add Invoice
-                </Button>
-              )
+              <div className="flex items-center gap-2">
+                <BulkActionMenu selectedCount={selectedRows.length} actions={bulk.actions} />
+                {canCreate && (
+                  <>
+                    <Button variant="outline" leftIcon={<Upload className="size-4" />} onClick={() => setImporting(true)}>
+                      Import
+                    </Button>
+                    <Button
+                      variant="primary"
+                      leftIcon={<Plus className="size-4" />}
+                      onClick={() => setChoiceOpen(true)}
+                    >
+                      Add Invoice
+                    </Button>
+                  </>
+                )}
+              </div>
             }
           />
         }
@@ -204,6 +229,8 @@ export default function PurchaseInvoiceClient() {
         defaultSort={{ column: "date", order: "desc" }}
         emptyTitle="No invoices yet"
         emptyDescription="Add an invoice to record a bill from a supplier."
+        forceShowCheckbox
+        onSelectionChange={(rows) => setSelectedRows(rows as unknown as { id: string; number?: string; status?: string }[])}
         onRowClick={(row) => goTo(String(row.id))}
         renderRowActions={(row) => {
           const invoice = row as unknown as PurchaseInvoice;
@@ -229,6 +256,16 @@ export default function PurchaseInvoiceClient() {
       />
 
       {choiceOpen && <DownPaymentInvoiceChoiceModal kind="purchase_invoice" onClose={() => setChoiceOpen(false)} />}
+      {importing && (
+        <InvoiceImportModal
+          side="purchase"
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setImporting(false);
+            list.refresh();
+          }}
+        />
+      )}
       <DeleteDocumentModal
         open={!!confirm}
         title="Delete invoice?"
@@ -236,6 +273,7 @@ export default function PurchaseInvoiceClient() {
         onConfirm={remove}
         onClose={() => setConfirm(null)}
       />
+      {bulk.modals}
     </>
   );
 }

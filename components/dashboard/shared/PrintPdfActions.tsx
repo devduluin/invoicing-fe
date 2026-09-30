@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Download, Printer } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui/Button";
 import { extractApiError } from "@/lib/apiError";

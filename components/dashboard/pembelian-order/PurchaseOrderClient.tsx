@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ShoppingCart, Plus, Copy, FileText, PackageCheck } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import { useTr } from "@/lib/useTr";
@@ -15,6 +15,8 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
+import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
@@ -45,6 +47,32 @@ export default function PurchaseOrderClient() {
   const [mitras, setMitras] = useState<Mitra[]>([]);
 
   const list = useMasterList(listPurchaseOrders, {});
+
+  // Rows ticked in the table, for the "Choose Action" bulk menu.
+
+  const [selectedRows, setSelectedRows] = useState<{ id: string; number?: string; status?: string }[]>([]);
+
+  const bulk = useBulkDocumentActions({
+
+    resource: "purchase-orders",
+
+    rows: selectedRows,
+
+    noun: { id: "pesanan", en: "orders" },
+
+    canUpdate,
+
+    canDelete,
+
+    onDone: () => {
+
+      setSelectedRows([]);
+
+      list.refresh();
+
+    },
+
+  });
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([]));
@@ -109,15 +137,18 @@ export default function PurchaseOrderClient() {
             title="Purchase Orders"
             description="Record a purchase agreement with a supplier before billing — product lines are free text."
             actions={
-              canCreate && (
-                <Button
-                  variant="primary"
-                  leftIcon={<Plus className="size-4" />}
-                  onClick={() => router.push("/dashboard/pembelian/order/add")}
-                >
-                  Add Purchase Order
-                </Button>
-              )
+              <div className="flex items-center gap-2">
+                <BulkActionMenu selectedCount={selectedRows.length} actions={bulk.actions} />
+                {canCreate && (
+                  <Button
+                    variant="primary"
+                    leftIcon={<Plus className="size-4" />}
+                    onClick={() => router.push("/dashboard/pembelian/order/add")}
+                  >
+                    Add Purchase Order
+                  </Button>
+                )}
+              </div>
             }
           />
         }
@@ -135,6 +166,8 @@ export default function PurchaseOrderClient() {
         defaultSort={{ column: "date", order: "desc" }}
         emptyTitle="No purchase orders yet"
         emptyDescription="Add a purchase order to record an agreement with a supplier before it's billed."
+        forceShowCheckbox
+        onSelectionChange={(rows) => setSelectedRows(rows as unknown as { id: string; number?: string; status?: string }[])}
         onRowClick={(row) => goTo(String(row.id))}
         renderRowActions={(row) => {
           const order = row as unknown as PurchaseOrder;
@@ -190,6 +223,7 @@ export default function PurchaseOrderClient() {
         onConfirm={remove}
         onClose={() => setConfirm(null)}
       />
+      {bulk.modals}
     </>
   );
 }

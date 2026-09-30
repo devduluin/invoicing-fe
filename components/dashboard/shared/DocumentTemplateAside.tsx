@@ -6,7 +6,7 @@ import { hasPermission, useAuthStore } from "@/store/useAuthStore";
 import { extractApiError } from "@/lib/apiError";
 import { asInvoiceShape, type PrintableDoc, type PrintableDocKind } from "@/lib/documentShape";
 import { useTr } from "@/lib/useTr";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 import { getMyCompany, type Company } from "@/services/companyService";
 import { listDocumentTemplates } from "@/services/documentTemplateService";
 import type { Mitra } from "@/services/mitraService";

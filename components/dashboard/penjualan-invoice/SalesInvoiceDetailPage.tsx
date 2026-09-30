@@ -3,7 +3,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, FilePlus2, Trash2, Package, Pencil, Truck, Wallet } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Card } from "@/components/ui";
 import { Tabs } from "@/components/ui/Tabs";
@@ -266,7 +266,7 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
             // structure isn't reflowed by the screen width.
             <div className="rounded-xl border border-border bg-[var(--surface-2)] p-3 sm:p-5">
               <div className="mx-auto max-w-[900px] overflow-hidden rounded-[3px] bg-white shadow-[0_1px_2px_rgba(20,30,60,0.08),0_10px_30px_-12px_rgba(20,30,60,0.25)] ring-1 ring-slate-900/5">
-                <ScaledSheet>
+                <ScaledSheet fill>
                   <InvoiceDocument invoice={invoice} mitra={mitra} company={company} taxByID={taxByID} variant="original" />
                 </ScaledSheet>
               </div>

@@ -7,6 +7,11 @@ export type MitraType = "customer" | "supplier" | "both";
 export interface Mitra {
   id: string;
   company_id: string;
+  /** unique within the company (MTR-0001…); names may repeat */
+  code: string;
+  /** the partner's own Duluin Invoice company, when linked (its shareable company code) */
+  linked_company_id?: string;
+  linked_company_code?: string;
   type: MitraType;
   name: string;
   contact_name?: string;
@@ -20,6 +25,10 @@ export interface Mitra {
 }
 
 export interface MitraInput {
+  /** blank on create = the next MTR-NNNN; blank on update = unchanged */
+  code?: string;
+  /** the partner's Duluin Company Code. Update: omit = unchanged, "" = unlink */
+  linked_company_code?: string;
   type: MitraType;
   name: string;
   contact_name?: string;
@@ -95,6 +104,25 @@ export async function listMitraPage(params: { page: number; search: string; page
   return { items: res.items, hasNextPage: res.meta.hasNextPage };
 }
 
+/** The code a new partner would get now (a preview for the form, not reserved). */
+export async function getNextMitraCode(): Promise<string> {
+  const { data } = await api.get<Envelope<{ code: string }>>("/mitra/next-code");
+  return data.data.code;
+}
+
+/** Active-or-not partners whose name equals `name` (case/space-insensitive), except `exceptId`. */
+export async function findMitraByName(name: string, exceptId?: string): Promise<Mitra[]> {
+  const key = name.trim().replace(/\s+/g, " ").toLowerCase();
+  if (!key) return [];
+  const res = await fetchList<Mitra>("/mitra", { page: 1, limit: 50, search: name.trim() });
+  return res.items.filter((m) => m.id !== exceptId && m.name.trim().replace(/\s+/g, " ").toLowerCase() === key);
+}
+
+/** "MTR-0003 · CV Bintang Jaya" — how a partner is shown wherever two may share a name. */
+export function mitraLabel(m: Pick<Mitra, "code" | "name">): string {
+  return m.code ? `${m.code} · ${m.name}` : m.name;
+}
+
 export async function getMitra(id: string): Promise<Mitra> {
   const { data } = await api.get<Envelope<Mitra>>(`/mitra/${encodeURIComponent(id)}`);
   return data.data;
@@ -102,6 +130,13 @@ export async function getMitra(id: string): Promise<Mitra> {
 
 export async function createMitra(input: MitraInput): Promise<Mitra> {
   const { data } = await api.post<Envelope<Mitra>>("/mitra", input);
+  return data.data;
+}
+
+/** Imports partners from the Excel template, all or nothing. `row` = the partner's spreadsheet row
+ *  (the service prefixes its validation messages with it). */
+export async function importMitra(partners: (MitraInput & { row: number })[]): Promise<{ created: number }> {
+  const { data } = await api.post<Envelope<{ created: number }>>("/mitra/import", { partners });
   return data.data;
 }
 

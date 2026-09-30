@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Landmark, Plus } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import PermissionGate from "@/components/auth/PermissionGate";
 import { Button } from "@/components/ui";

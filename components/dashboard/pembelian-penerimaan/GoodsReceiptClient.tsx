@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { PackageCheck, Plus } from "lucide-react";
 
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -16,6 +16,8 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
+import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { listGoodsReceipts, deleteGoodsReceipt } from "@/services/goodsReceiptService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -33,6 +35,21 @@ export default function GoodsReceiptClient() {
   const [mitras, setMitras] = useState<Mitra[]>([]);
   const [confirm, setConfirm] = useState<{ id: string; number: string } | null>(null);
   const list = useMasterList(listGoodsReceipts, {});
+  // Rows ticked in the table, for the "Choose Action" bulk menu.
+  const [selectedRows, setSelectedRows] = useState<{ id: string; number?: string; status?: string }[]>([]);
+  const bulk = useBulkDocumentActions({
+    resource: "goods-receipts",
+    rows: selectedRows,
+    noun: { id: "penerimaan barang", en: "goods receipts" },
+    canUpdate,
+    canDelete,
+    // no draft/confirmed lifecycle: delete only
+    statuses: false,
+    onDone: () => {
+      setSelectedRows([]);
+      list.refresh();
+    },
+  });
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([]));
@@ -83,15 +100,18 @@ export default function GoodsReceiptClient() {
           title="Goods Receipts"
           description="Record of goods physically received from a supplier."
           actions={
-            canCreate && (
-              <Button
-                variant="primary"
-                leftIcon={<Plus className="size-4" />}
-                onClick={() => router.push("/dashboard/pembelian/penerimaan/add")}
-              >
-                Add Goods Receipt
-              </Button>
-            )
+            <div className="flex items-center gap-2">
+              <BulkActionMenu selectedCount={selectedRows.length} actions={bulk.actions} />
+              {canCreate && (
+                <Button
+                  variant="primary"
+                  leftIcon={<Plus className="size-4" />}
+                  onClick={() => router.push("/dashboard/pembelian/penerimaan/add")}
+                >
+                  Add Goods Receipt
+                </Button>
+              )}
+            </div>
           }
         />
       }
@@ -108,6 +128,8 @@ export default function GoodsReceiptClient() {
       error={list.error}
       defaultSort={{ column: "date", order: "desc" }}
       emptyTitle="No goods receipts yet"
+      forceShowCheckbox
+      onSelectionChange={(rows) => setSelectedRows(rows as unknown as { id: string; number?: string; status?: string }[])}
       onRowClick={(row) => goTo(String(row.id))}
       renderRowActions={(row) => {
         const doc = row as unknown as { id: string; number: string };
@@ -129,6 +151,7 @@ export default function GoodsReceiptClient() {
       onConfirm={remove}
       onClose={() => setConfirm(null)}
     />
+      {bulk.modals}
     </>
   );
 }

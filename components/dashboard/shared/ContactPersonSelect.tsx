@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import toast from "react-hot-toast";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import { FormField, Input, SearchableSelect } from "@/components/form";
@@ -20,6 +20,20 @@ export interface ContactSnapshot {
 }
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// A partner's contacts as last loaded — so a form that preloads them (while it still shows its
+// loading skeleton) opens with the contact already picked, instead of empty and filling in a moment later.
+const contactCache = new Map<string, ContactPerson[]>();
+
+/** Load a partner's contacts ahead of the form mounting (see contactCache). Never throws. */
+export async function preloadContactPersons(mitraId: string): Promise<void> {
+  if (!mitraId || contactCache.has(mitraId)) return;
+  try {
+    contactCache.set(mitraId, await listContactPersons(mitraId));
+  } catch {
+    // the select loads them itself
+  }
+}
 
 /**
  * "Contact Person" field of a document, under the Partner field.
@@ -51,7 +65,7 @@ export default function ContactPersonSelect({
 }) {
   const tr = useTr();
   const canCreate = hasPermission(useAuthStore((s) => s.permissions), "invoice-mitra-contact-create");
-  const [contacts, setContacts] = useState<ContactPerson[]>([]);
+  const [contacts, setContacts] = useState<ContactPerson[]>(() => contactCache.get(mitraId) ?? []);
   const [adding, setAdding] = useState(false);
   const [draft, setDraft] = useState({ name: "", position: "", phone: "", email: "" });
   const [errors, setErrors] = useState<{ name?: boolean; email?: boolean }>({});
@@ -70,9 +84,16 @@ export default function ContactPersonSelect({
         return;
       }
       let alive = true;
+      // already loaded: use them right away (no empty field while the refresh below runs)
+      const cached = contactCache.get(mitraId);
+      if (cached) {
+        setContacts(cached);
+        pick?.(cached);
+      }
       listContactPersons(mitraId)
         .then((rows) => {
           if (!alive) return;
+          contactCache.set(mitraId, rows);
           setContacts(rows);
           pick?.(rows);
         })
@@ -84,7 +105,8 @@ export default function ContactPersonSelect({
     [mitraId],
   );
 
-  useEffect(() => {
+  // A layout effect: with preloaded contacts the automatic pick lands before the first paint.
+  useLayoutEffect(() => {
     const previous = prevMitra.current;
     prevMitra.current = mitraId;
     setAdding(false);

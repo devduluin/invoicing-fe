@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Truck, Plus, Copy } from "lucide-react";
 
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -16,6 +16,8 @@ import { useMasterList } from "@/hooks/table/useMasterList";
 import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
+import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { listDeliveryNotes, deleteDeliveryNote } from "@/services/deliveryNoteService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -33,6 +35,21 @@ export default function DeliveryNoteClient() {
   const [mitras, setMitras] = useState<Mitra[]>([]);
   const [confirm, setConfirm] = useState<{ id: string; number: string } | null>(null);
   const list = useMasterList(listDeliveryNotes, {});
+  // Rows ticked in the table, for the "Choose Action" bulk menu.
+  const [selectedRows, setSelectedRows] = useState<{ id: string; number?: string; status?: string }[]>([]);
+  const bulk = useBulkDocumentActions({
+    resource: "delivery-notes",
+    rows: selectedRows,
+    noun: { id: "surat jalan", en: "delivery notes" },
+    canUpdate,
+    canDelete,
+    // no draft/confirmed lifecycle: delete only
+    statuses: false,
+    onDone: () => {
+      setSelectedRows([]);
+      list.refresh();
+    },
+  });
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([]));
@@ -83,15 +100,18 @@ export default function DeliveryNoteClient() {
           title="Delivery Notes"
           description="Record of goods physically shipped to a partner."
           actions={
-            canCreate && (
-              <Button
-                variant="primary"
-                leftIcon={<Plus className="size-4" />}
-                onClick={() => router.push("/dashboard/penjualan/surat-jalan/add")}
-              >
-                Add Delivery Note
-              </Button>
-            )
+            <div className="flex items-center gap-2">
+              <BulkActionMenu selectedCount={selectedRows.length} actions={bulk.actions} />
+              {canCreate && (
+                <Button
+                  variant="primary"
+                  leftIcon={<Plus className="size-4" />}
+                  onClick={() => router.push("/dashboard/penjualan/surat-jalan/add")}
+                >
+                  Add Delivery Note
+                </Button>
+              )}
+            </div>
           }
         />
       }
@@ -108,6 +128,8 @@ export default function DeliveryNoteClient() {
       error={list.error}
       defaultSort={{ column: "date", order: "desc" }}
       emptyTitle="No delivery notes yet"
+      forceShowCheckbox
+      onSelectionChange={(rows) => setSelectedRows(rows as unknown as { id: string; number?: string; status?: string }[])}
       onRowClick={(row) => goTo(String(row.id))}
       renderRowActions={(row) => {
         const doc = row as unknown as { id: string; number: string };
@@ -134,6 +156,7 @@ export default function DeliveryNoteClient() {
       onConfirm={remove}
       onClose={() => setConfirm(null)}
     />
+      {bulk.modals}
     </>
   );
 }

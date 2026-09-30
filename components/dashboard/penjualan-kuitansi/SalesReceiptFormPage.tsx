@@ -5,7 +5,7 @@ import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import { useDirtyForm } from "@/hooks/useDirtyForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Plus, Wallet, X } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -32,6 +32,7 @@ import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
+import { withDocumentRefs } from "../shared/documentRefs";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
@@ -126,6 +127,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
   useEffect(() => {
     if (!isEdit || !id) return;
     getSalesReceipt(id)
+      .then(withDocumentRefs(activeCompanyId))
       .then((r) => {
         setMitraId(r.mitra_id);
         setNumber(r.number);
@@ -155,6 +157,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
     const invoiceId = searchParams.get("dari_invoice");
     if (isEdit || !invoiceId) return;
     getSalesInvoice(invoiceId)
+      .then(withDocumentRefs(activeCompanyId))
       .then((invoice) => {
         setMitraId(invoice.mitra_id);
         const remaining = invoice.outstanding_amount;
@@ -312,7 +315,7 @@ export default function SalesReceiptFormPage({ mode = "create", id }: { mode?: "
                 companyId={activeCompanyId}
                 fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
                 resolveById={getMitra}
-                toOption={(m) => ({ value: m.id, label: m.name })}
+                toOption={(m) => ({ value: m.id, label: m.name, hint: m.code || undefined })}
                 onChange={(v) => {
                   setMitraId(v);
                   setAllocations([]);

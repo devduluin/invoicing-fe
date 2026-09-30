@@ -5,7 +5,7 @@ import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import ContactPersonSelect, { type ContactSnapshot } from "../shared/ContactPersonSelect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -42,6 +42,7 @@ import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
 import { useDirtyForm } from "@/hooks/useDirtyForm";
+import { withDocumentRefs } from "../shared/documentRefs";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const BASE_PATH = "/dashboard/pembelian/invoice";
@@ -257,13 +258,14 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
     const orderId = searchParams.get("dari_order");
     if (!orderId) return;
     getPurchaseOrder(orderId)
+      .then(withDocumentRefs(activeCompanyId))
       .then((order) => {
         setPurchaseOrderId(order.id);
         setMitraId(order.mitra_id);
         if (order.lines.length) {
           setLines(
             order.lines.map((l) => ({
-              key: crypto.randomUUID(),
+              key: l.id ?? crypto.randomUUID(),
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
@@ -289,6 +291,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
     const dupID = searchParams.get("duplicate_from");
     if (!dupID) return;
     getPurchaseInvoice(dupID)
+      .then(withDocumentRefs(activeCompanyId))
       .then((source) => {
         setMitraId(source.mitra_id);
         setNotes(source.notes ?? "");
@@ -300,7 +303,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
         setLines(
           source.lines.length
             ? source.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -321,6 +324,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
   useEffect(() => {
     if (!isEdit || !id) return;
     getPurchaseInvoice(id)
+      .then(withDocumentRefs(activeCompanyId))
       .then((invoice) => {
         setPurchaseOrderId(invoice.purchase_order_id ?? null);
         setMitraId(invoice.mitra_id);
@@ -344,7 +348,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
         setLines(
           invoice.lines.length
             ? invoice.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -368,7 +372,8 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
     const fieldErrors: typeof errors = {};
     if (!mitraId) fieldErrors.mitraId = "Partner is required";
     if (!date) fieldErrors.date = "Date is required";
-    if (dueDate && date && dueDate < date) fieldErrors.dueDate = "Due date can't be before the invoice date";
+    if (!dueDate) fieldErrors.dueDate = "Due date is required";
+    else if (date && dueDate < date) fieldErrors.dueDate = "Due date can't be before the invoice date";
     setErrors(fieldErrors);
     if (fieldErrors.mitraId || fieldErrors.date || fieldErrors.dueDate) return null;
 
@@ -459,22 +464,29 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
 
     setBusy(true);
     let savedId = id;
+    let saved = false;
     try {
       if (isEdit && id) {
         await updatePurchaseInvoice(id, payload);
-        toast.success("Invoice updated");
       } else {
         savedId = (await createPurchaseInvoice(payload)).id;
-        toast.success("Invoice added");
       }
-      if (confirmAfter && savedId) {
-        await confirmPurchaseInvoice(savedId);
-        toast.success("Invoice confirmed");
-      }
+      saved = true;
+      if (confirmAfter && savedId) await confirmPurchaseInvoice(savedId);
+      // one action, one toast: "Save & Confirm" reports both steps together
+      toast.success(confirmAfter ? "Invoice saved and confirmed" : isEdit ? "Invoice updated" : "Invoice added");
       markClean();
       router.push(isEdit ? `${BASE_PATH}/${savedId}` : `${BASE_PATH}/${savedId}${confirmAfter ? "" : "/edit"}`);
     } catch (err) {
-      toast.error(extractApiError(err, "Failed to save invoice"));
+      if (saved && savedId) {
+        // Saved, but the confirm was refused: say both in one toast, and leave the "new" page so a
+        // second click can't create the document again.
+        toast.error(`Invoice saved as draft, but couldn't be confirmed: ${extractApiError(err, "unknown error")}`, { duration: 8000 });
+        markClean();
+        if (!isEdit) router.push(`${BASE_PATH}/${savedId}/edit`);
+      } else {
+        toast.error(extractApiError(err, "Failed to save invoice"));
+      }
     } finally {
       setBusy(false);
     }
@@ -542,7 +554,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 companyId={activeCompanyId}
                 fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "supplier", isActive: true })}
                 resolveById={getMitra}
-                toOption={(m) => ({ value: m.id, label: m.name })}
+                toOption={(m) => ({ value: m.id, label: m.name, hint: m.code || undefined })}
                 onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);
@@ -622,7 +634,7 @@ export default function PurchaseInvoiceFormPage({ mode, id }: Props) {
                 error={errors.date}
               />
             </FormField>
-            <FormField label="Due Date" htmlFor="inv-due" optional error={errors.dueDate}>
+            <FormField label="Due Date" htmlFor="inv-due" required error={errors.dueDate}>
               <DatePickerInput
                 value={dueDate}
                 onChange={(v) => {

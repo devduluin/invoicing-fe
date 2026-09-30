@@ -5,7 +5,7 @@ import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import { useDirtyForm } from "@/hooks/useDirtyForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import { PackageCheck } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import PageHeader from "@/components/layouts/page/PageHeader";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
@@ -23,6 +23,7 @@ import { MoreInfoSection, emptyMoreInfo, type MoreInfoValue } from "../shared/Mo
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
+import { withDocumentRefs } from "../shared/documentRefs";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -42,6 +43,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
   useEffect(() => {
     if (!isEdit || !id) return;
     getGoodsReceipt(id)
+      .then(withDocumentRefs(activeCompanyId))
       .then((n) => {
       setPurchaseOrderId(n.purchase_order_id ?? null);
         setMitraId(n.mitra_id);
@@ -52,7 +54,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
         setLines(
           n.lines.length
             ? n.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -135,13 +137,14 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
     const orderId = searchParams.get("dari_order");
     if (!orderId) return;
     getPurchaseOrder(orderId)
+      .then(withDocumentRefs(activeCompanyId))
       .then((order) => {
         setPurchaseOrderId(order.id);
         setMitraId(order.mitra_id);
         if (order.lines.length) {
           setLines(
             order.lines.map((l) => ({
-              key: crypto.randomUUID(),
+              key: l.id ?? crypto.randomUUID(),
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
@@ -291,7 +294,7 @@ export default function GoodsReceiptFormPage({ mode = "create", id }: { mode?: "
                 companyId={activeCompanyId}
                 fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "supplier", isActive: true })}
                 resolveById={getMitra}
-                toOption={(m) => ({ value: m.id, label: m.name })}
+                toOption={(m) => ({ value: m.id, label: m.name, hint: m.code || undefined })}
                 onChange={(v) => {
                   setMitraId(v);
                   setPurchaseOrderId(null);

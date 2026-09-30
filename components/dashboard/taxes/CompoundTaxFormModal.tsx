@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { FormModal } from "@/components/modal/FormModal";
 import { CheckboxField, FormField, Input, Select } from "@/components/form";

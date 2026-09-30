@@ -2,6 +2,7 @@ import {
   LayoutDashboard,
   Receipt,
   Ruler,
+  UserCheck,
   UserCog,
   Settings,
   ShoppingCart,
@@ -43,6 +44,7 @@ export const NAV: NavGroup[] = [
     label: { id: "Data Master", en: "Master Data" },
     items: [
       { label: { id: "Mitra", en: "Partners" }, icon: Users, href: "/dashboard/mitra", permission: "invoice-mitra-list" },
+      { label: { id: "Salesperson", en: "Salespersons" }, icon: UserCheck, href: "/dashboard/salespersons", permission: "invoice-salesperson-list" },
       // { label: { id: "Satuan", en: "Units" }, icon: Ruler, href: "/dashboard/units", permission: "invoice-unit-list" },
       // { label: { id: "Pengguna", en: "Users" }, icon: UserCog, href: "/dashboard/users", permission: "invoice-user-list" },
     ],
@@ -132,6 +134,7 @@ const CRUMB_ID: Record<string, string> = {
   "Goods Receipts": "Penerimaan Barang",
   "Partners": "Mitra",
   "Units": "Satuan",
+  "Salespersons": "Salesperson",
   "Settings": "Pengaturan",
   "Receipt": "Kuitansi",
   "Sales Invoice": "Invoice Penjualan",

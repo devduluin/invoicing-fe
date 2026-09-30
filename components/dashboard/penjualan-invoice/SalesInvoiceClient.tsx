@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FileText, Plus, Copy, Download, Trash2 } from "lucide-react";
-import toast from "react-hot-toast";
+import { FileText, Plus, Copy, Download, Upload } from "lucide-react";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -18,12 +18,14 @@ import BulkActionMenu, { type BulkAction } from "@/components/masterTable/BulkAc
 import BulkProgressModal from "@/components/masterTable/BulkProgressModal";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { listSalesInvoices, deleteSalesInvoice, type SalesInvoice, type SalesInvoiceKind } from "@/services/salesInvoiceService";
 import { downloadDocumentPdf, downloadInvoicesZip } from "@/services/pdfService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
-import { bulkDelete as bulkDeleteRequest } from "@/services/bulk";
+import { listAllSalespersons, type Salesperson } from "@/services/salespersonService";
 import DownPaymentInvoiceChoiceModal from "./DownPaymentInvoiceChoiceModal";
+import InvoiceImportModal from "../shared/InvoiceImportModal";
 import { InvoiceStatusBadge, daysOverdue, isOverdue } from "./statusBadges";
 import { formatDateStyle } from "@/utils/formatDate";
 
@@ -68,9 +70,9 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
 
   const [confirm, setConfirm] = useState<SalesInvoice | null>(null);
   const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
   const [choiceOpen, setChoiceOpen] = useState(false);
   const [selectedRows, setSelectedRows] = useState<SalesInvoice[]>([]);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [downloadProgress, setDownloadProgress] = useState<{ done: number; total: number } | null>(null);
 
@@ -83,6 +85,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([]));
+    listAllSalespersons().then(setSalespersons).catch(() => setSalespersons([]));
   }, []);
 
   const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
@@ -97,6 +100,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
   const goTo = (id: string) => router.push(`${basePath}/${id}`);
   const goToEdit = (id: string) => router.push(`${basePath}/${id}/edit`);
   const create = () => setChoiceOpen(true);
+  const [importing, setImporting] = useState(false);
 
   const view = currentView(list.params);
   const setView = (v: View) => list.updateParams({ ...CLEARED, ...VIEW_PARAMS[v], page: 1 });
@@ -190,26 +194,19 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
     setBulkBusy(false);
   };
 
-  const bulkDelete = async () => {
-    setBulkBusy(true);
-    const byID = new Map(selectedRows.map((i) => [i.id, i]));
-    try {
-      const results = await bulkDeleteRequest("sales-invoices", selectedRows.map((i) => i.id));
-      const ok = results.filter((r) => r.success).length;
-      const failed = results.filter((r) => !r.success).map((r) => `${byID.get(r.id)?.number ?? r.id}: ${r.message ?? tr("gagal", "failed")}`);
-      if (failed.length === 0) {
-        toast.success(tr(`${ok} invoice dihapus`, `${ok} invoice(s) deleted`));
-      } else {
-        toast.error(tr(`${ok} terhapus, ${failed.length} gagal: ${failed.join("; ")}`, `${ok} deleted, ${failed.length} failed: ${failed.join("; ")}`), { duration: 8000 });
-      }
-    } catch (err) {
-      toast.error(extractApiError(err, tr("Gagal menghapus invoice", "Failed to delete invoices")));
-    }
-    setBulkBusy(false);
-    setBulkDeleteOpen(false);
-    setSelectedRows([]);
-    list.refresh();
-  };
+  const bulk = useBulkDocumentActions({
+    resource: "sales-invoices",
+    rows: selectedRows,
+    noun: { id: "invoice", en: "invoices" },
+    canUpdate,
+    canDelete,
+    // down payments: no bulk confirm / back to draft
+    statuses: !isDP,
+    onDone: () => {
+      setSelectedRows([]);
+      list.refresh();
+    },
+  });
 
   const bulkActions: BulkAction[] = [
     {
@@ -219,18 +216,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
       disabled: bulkBusy,
       onSelect: bulkDownload,
     },
-    ...(canDelete
-      ? [
-          {
-            key: "delete",
-            label: tr("Hapus", "Delete"),
-            icon: <Trash2 className="size-4" aria-hidden />,
-            disabled: bulkBusy,
-            destructive: true,
-            onSelect: () => setBulkDeleteOpen(true),
-          },
-        ]
-      : []),
+    ...bulk.actions,
   ];
 
   return (
@@ -244,6 +230,11 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
             actions={
               <div className="flex items-center gap-2">
                 <BulkActionMenu selectedCount={selectedRows.length} actions={bulkActions} />
+                {canCreate && !isDP && (
+                  <Button variant="outline" leftIcon={<Upload className="size-4" />} onClick={() => setImporting(true)}>
+                    Import
+                  </Button>
+                )}
                 {canCreate && (
                   <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={create}>
                     {createLabel}
@@ -284,9 +275,15 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
             value: list.params.mitra_id ?? "",
             options: mitras.map((m) => ({ value: m.id, label: m.name })),
           },
+          {
+            key: "salesperson_id",
+            label: tr("Sales", "Salesperson"),
+            value: list.params.salesperson_id ?? "",
+            options: salespersons.map((s) => ({ value: s.id, label: s.code ? `${s.code} · ${s.name}` : s.name })),
+          },
         ]}
         onFilterChange={(k, v) => (k === "view" ? setView((v || "all") as View) : list.updateParams({ [k]: v || undefined, page: 1 }))}
-        onFilterReset={() => list.updateParams({ ...CLEARED, mitra_id: undefined, page: 1 })}
+        onFilterReset={() => list.updateParams({ ...CLEARED, mitra_id: undefined, salesperson_id: undefined, page: 1 })}
         defaultSort={{ column: "date", order: "desc" }}
         emptyIcon={FileText}
         emptyTitle={isDP ? tr("Belum ada invoice uang muka", "No down payment invoices yet") : tr("Belum ada invoice", "No invoices yet")}
@@ -332,14 +329,19 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         onClose={() => setConfirm(null)}
       />
 
-      <DeleteDocumentModal
-        open={bulkDeleteOpen}
-        title={tr(`Hapus ${selectedRows.length} invoice?`, `Delete ${selectedRows.length} invoices?`)}
-        onConfirm={bulkDelete}
-        onClose={() => setBulkDeleteOpen(false)}
-      />
+      {bulk.modals}
 
       {choiceOpen && <DownPaymentInvoiceChoiceModal kind={kind} onClose={() => setChoiceOpen(false)} />}
+      {importing && (
+        <InvoiceImportModal
+          side="sales"
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setImporting(false);
+            list.refresh();
+          }}
+        />
+      )}
 
       <BulkProgressModal
         open={!!downloadProgress}

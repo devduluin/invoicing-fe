@@ -5,7 +5,7 @@ import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import { useDirtyForm } from "@/hooks/useDirtyForm";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Truck } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import PageHeader from "@/components/layouts/page/PageHeader";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
@@ -25,6 +25,7 @@ import { DocumentFormLayout } from "../shared/DocumentFormLayout";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
+import { withDocumentRefs } from "../shared/documentRefs";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -44,6 +45,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
   useEffect(() => {
     if (!isEdit || !id) return;
     getDeliveryNote(id)
+      .then(withDocumentRefs(activeCompanyId))
       .then((n) => {
       setSalesOrderId(n.sales_order_id ?? null);
       setSalesInvoiceId(n.sales_invoice_id ?? null);
@@ -56,7 +58,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
         setLines(
           n.lines.length
             ? n.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -147,12 +149,13 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
     const orderIds = (searchParams.get("dari_order") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
     if (orderIds.length === 0) return;
     Promise.all(orderIds.map(getSalesOrder))
+      .then(async (orders) => (orders[0] ? [await withDocumentRefs(activeCompanyId)(orders[0]), ...orders.slice(1)] : orders))
       .then((orders) => {
         setSalesOrderId(orders[0].id);
         setMitraId(orders[0].mitra_id);
         const mergedLines = orders.flatMap((order) =>
           order.lines.map((l) => ({
-            key: crypto.randomUUID(),
+            key: l.id ?? crypto.randomUUID(),
             product_name: l.product_name,
             description: l.description ?? "",
             quantity: l.quantity,
@@ -177,13 +180,14 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
     const dupID = searchParams.get("duplicate_from");
     if (!dupID) return;
     getDeliveryNote(dupID)
+      .then(withDocumentRefs(activeCompanyId))
       .then((source) => {
         setMitraId(source.mitra_id);
         setNotes(source.notes ?? "");
         if (source.lines.length) {
           setLines(
             source.lines.map((l) => ({
-              key: crypto.randomUUID(),
+              key: l.id ?? crypto.randomUUID(),
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
@@ -204,13 +208,14 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
     const invoiceId = searchParams.get("dari_invoice");
     if (!invoiceId) return;
     getSalesInvoice(invoiceId)
+      .then(withDocumentRefs(activeCompanyId))
       .then((invoice) => {
         setSalesInvoiceId(invoice.id);
         setMitraId(invoice.mitra_id);
         if (invoice.lines.length) {
           setLines(
             invoice.lines.map((l) => ({
-              key: crypto.randomUUID(),
+              key: l.id ?? crypto.randomUUID(),
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
@@ -364,7 +369,7 @@ export default function DeliveryNoteFormPage({ mode = "create", id }: { mode?: "
                 companyId={activeCompanyId}
                 fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
                 resolveById={getMitra}
-                toOption={(m) => ({ value: m.id, label: m.name })}
+                toOption={(m) => ({ value: m.id, label: m.name, hint: m.code || undefined })}
                 onChange={(v) => {
                   setMitraId(v);
                   setSalesOrderId(null);

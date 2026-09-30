@@ -5,7 +5,7 @@ import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import ContactPersonSelect, { type ContactSnapshot } from "../shared/ContactPersonSelect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { ShoppingCart } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -39,6 +39,7 @@ import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
 import { useDirtyForm } from "@/hooks/useDirtyForm";
+import { withDocumentRefs } from "../shared/documentRefs";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -241,6 +242,7 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
     const dupID = searchParams.get("duplicate_from");
     if (!dupID) return;
     getPurchaseOrder(dupID)
+      .then(withDocumentRefs(activeCompanyId))
       .then((source) => {
         setMitraId(source.mitra_id);
         setNotes(source.notes ?? "");
@@ -251,7 +253,7 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
         setLines(
           source.lines.length
             ? source.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -272,6 +274,7 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
   useEffect(() => {
     if (!isEdit || !id) return;
     getPurchaseOrder(id)
+      .then(withDocumentRefs(activeCompanyId))
       .then((order) => {
         setMitraId(order.mitra_id);
         setContactPersonId(order.contact_person_id ?? "");
@@ -292,7 +295,7 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
         setLines(
           order.lines.length
             ? order.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -399,22 +402,29 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
 
     setBusy(true);
     let savedId = id;
+    let saved = false;
     try {
       if (isEdit && id) {
         await updatePurchaseOrder(id, payload);
-        toast.success("Purchase order updated");
       } else {
         savedId = (await createPurchaseOrder(payload)).id;
-        toast.success("Purchase order added");
       }
-      if (confirmAfter && savedId) {
-        await confirmPurchaseOrder(savedId);
-        toast.success("Purchase order confirmed");
-      }
+      saved = true;
+      if (confirmAfter && savedId) await confirmPurchaseOrder(savedId);
+      // one action, one toast: "Save & Confirm" reports both steps together
+      toast.success(confirmAfter ? "Purchase order saved and confirmed" : isEdit ? "Purchase order updated" : "Purchase order added");
       markClean();
       router.push(isEdit ? `${"/dashboard/pembelian/order"}/${savedId}` : `${"/dashboard/pembelian/order"}/${savedId}${confirmAfter ? "" : "/edit"}`);
     } catch (err) {
-      toast.error(extractApiError(err, "Failed to save purchase order"));
+      if (saved && savedId) {
+        // Saved, but the confirm was refused: say both in one toast, and leave the "new" page so a
+        // second click can't create the document again.
+        toast.error(`Purchase order saved as draft, but couldn't be confirmed: ${extractApiError(err, "unknown error")}`, { duration: 8000 });
+        markClean();
+        if (!isEdit) router.push(`${"/dashboard/pembelian/order"}/${savedId}/edit`);
+      } else {
+        toast.error(extractApiError(err, "Failed to save purchase order"));
+      }
     } finally {
       setBusy(false);
     }
@@ -481,7 +491,7 @@ export default function PurchaseOrderFormPage({ mode, id }: Props) {
                 companyId={activeCompanyId}
                 fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "supplier", isActive: true })}
                 resolveById={getMitra}
-                toOption={(m) => ({ value: m.id, label: m.name })}
+                toOption={(m) => ({ value: m.id, label: m.name, hint: m.code || undefined })}
                 onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);

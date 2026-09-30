@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, Pencil, Trash2, Wallet, Package, FilePlus2 } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Tabs } from "@/components/ui/Tabs";
 import { ErrorState } from "@/components/ui/ErrorState";
@@ -206,7 +206,7 @@ export default function PurchaseInvoiceDetailPage({ id }: { id: string }) {
             // Same renderer + template as the PDF.
             <div className="rounded-xl border border-border bg-[var(--surface-2)] p-3 sm:p-5">
               <div className="mx-auto max-w-[900px] overflow-hidden rounded-[3px] bg-white shadow-[0_1px_2px_rgba(20,30,60,0.08),0_10px_30px_-12px_rgba(20,30,60,0.25)] ring-1 ring-slate-900/5">
-                <ScaledSheet>
+                <ScaledSheet fill>
                   {printable && <InvoiceDocument invoice={printable} mitra={mitra} company={company} taxByID={taxByID} variant="original" doc="purchase_invoice" />}
                 </ScaledSheet>
               </div>

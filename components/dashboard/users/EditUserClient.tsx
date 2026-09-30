@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Save, UserCog } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Button, ErrorState, Skeleton } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";

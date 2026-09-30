@@ -5,7 +5,7 @@ import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import ContactPersonSelect, { type ContactSnapshot } from "../shared/ContactPersonSelect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { FileText } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Status } from "@/components/ui/StatusBadge";
 import { useTr } from "@/lib/useTr";
@@ -52,11 +52,13 @@ import { hasPermission, useAuthStore } from "@/store/useAuthStore";
 import { listDocumentTemplates } from "@/services/documentTemplateService";
 import { DEFAULT_INVOICE_TEMPLATE, resolveInvoiceTemplate, type InvoiceTemplateId } from "./templates/types";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
+import SalespersonSelect, { useMySalesperson } from "../shared/SalespersonSelect";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
 import { useDirtyForm } from "@/hooks/useDirtyForm";
+import { withDocumentRefs } from "../shared/documentRefs";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const noop = () => {};
@@ -155,6 +157,14 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   const [shippingCost, setShippingCost] = useState<number | null>(null);
   const [shipFrom, setShipFrom] = useState("");
   const [salesperson, setSalesperson] = useState("");
+  const [salespersonId, setSalespersonId] = useState<string | null>(null);
+  // A new document (not copied from another one) starts with the signed-in user's own salesperson.
+  const mySalesperson = useMySalesperson(!isEdit && !searchParams.get("dari_order") && !searchParams.get("duplicate_from") && !searchParams.get("linked_invoice") && !searchParams.get("dari_down_payment"));
+  useEffect(() => {
+    if (!mySalesperson) return;
+    setSalespersonId((cur) => cur ?? mySalesperson.id);
+    setSalesperson((cur) => cur || mySalesperson.name);
+  }, [mySalesperson]);
   const [attachmentData, setAttachmentData] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
   const [signatureData, setSignatureData] = useState("");
@@ -195,6 +205,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       shippingCost,
       shipFrom,
       salesperson,
+      salespersonId,
       attachmentData,
       attachmentName,
       signatureData,
@@ -224,6 +235,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     setShippingCost(snap.shippingCost);
     setShipFrom(snap.shipFrom);
     setSalesperson(snap.salesperson);
+    setSalespersonId(snap.salespersonId);
     setAttachmentData(snap.attachmentData);
     setAttachmentName(snap.attachmentName);
     setSignatureData(snap.signatureData);
@@ -376,6 +388,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     const invoiceId = searchParams.get("linked_invoice");
     if (!invoiceId) return;
     getSalesInvoice(invoiceId)
+      .then(withDocumentRefs(activeCompanyId))
       .then((source) => {
         // The selector resolves its label from this same record: hand it over so it isn't fetched twice.
         primeRemoteSelectItem(SOURCE_RESOURCE, activeCompanyId, encodeSource({ type: "sales_invoice", id: source.id }), { type: "sales_invoice", doc: source } satisfies SourceDoc);
@@ -419,10 +432,11 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     setAdditionalDiscountValue(order.additional_discount_value || null);
     setShipFrom(order.ship_from ?? "");
     setSalesperson(order.salesperson ?? "");
+    setSalespersonId(order.salesperson_id ?? null);
     if (order.lines.length) {
       setLines(
         order.lines.map((l) => ({
-          key: crypto.randomUUID(),
+          key: l.id ?? crypto.randomUUID(),
           product_name: l.product_name,
           description: l.description ?? "",
           quantity: l.quantity,
@@ -444,12 +458,13 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     const orderIds = (searchParams.get("dari_order") ?? "").split(",").map((s) => s.trim()).filter(Boolean);
     if (orderIds.length === 0) return;
     Promise.all(orderIds.map(getSalesOrder))
+      .then(async (orders) => (orders[0] ? [await withDocumentRefs(activeCompanyId)(orders[0]), ...orders.slice(1)] : orders))
       .then((orders) => {
         applyOrder(orders[0]);
         if (orders.length > 1 && kind !== "down_payment") {
           const extraLines = orders.slice(1).flatMap((order) =>
             order.lines.map((l) => ({
-              key: crypto.randomUUID(),
+              key: l.id ?? crypto.randomUUID(),
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
@@ -483,13 +498,14 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     const dpID = searchParams.get("dari_down_payment");
     if (!dpID) return;
     getSalesInvoice(dpID)
+      .then(withDocumentRefs(activeCompanyId))
       .then((dp) => {
         setLinkedInvoiceId(dp.id);
         setMitraId(dp.mitra_id);
         if (dp.lines.length) {
           setLines(
             dp.lines.map((l) => ({
-              key: crypto.randomUUID(),
+              key: l.id ?? crypto.randomUUID(),
               product_name: l.product_name,
               description: l.description ?? "",
               quantity: l.quantity,
@@ -515,6 +531,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
     const dupID = searchParams.get("duplicate_from");
     if (!dupID) return;
     getSalesInvoice(dupID)
+      .then(withDocumentRefs(activeCompanyId))
       .then((source) => {
         setMitraId(source.mitra_id);
         setNotes(source.notes ?? "");
@@ -524,10 +541,11 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         setShippingCost(source.shipping_cost || null);
         setShipFrom(source.ship_from ?? "");
         setSalesperson(source.salesperson ?? "");
+        setSalespersonId(source.salesperson_id ?? null);
         setLines(
           source.lines.length
             ? source.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -550,6 +568,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
   useEffect(() => {
     if (!isEdit || !id) return;
     getSalesInvoice(id)
+      .then(withDocumentRefs(activeCompanyId))
       .then((invoice) => {
         setSalesOrderId(invoice.sales_order_id ?? null);
         setLinkedInvoiceId(invoice.linked_invoice_id ?? null);
@@ -569,6 +588,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         setShippingCost(invoice.shipping_cost || null);
         setShipFrom(invoice.ship_from ?? "");
         setSalesperson(invoice.salesperson ?? "");
+        setSalespersonId(invoice.salesperson_id ?? null);
         setAttachmentData(invoice.attachment_data ?? "");
         setAttachmentName(invoice.attachment_name ?? "");
         setSignatureData(invoice.signature_data ?? "");
@@ -579,7 +599,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         setLines(
           invoice.lines.length
             ? invoice.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -705,6 +725,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       shipping_cost: shippingCost ?? 0,
       ship_from: shipFrom.trim() || undefined,
       salesperson: salesperson.trim() || undefined,
+      salesperson_id: salespersonId,
       attachment_data: attachmentData || undefined,
       attachment_name: attachmentName || undefined,
       signature_data: signatureData || undefined,
@@ -722,22 +743,29 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
 
     setBusy(true);
     let savedId = id;
+    let saved = false;
     try {
       if (isEdit && id) {
         await updateSalesInvoice(id, payload);
-        toast.success("Invoice updated");
       } else {
         savedId = (await createSalesInvoice(payload)).id;
-        toast.success("Invoice added");
       }
-      if (confirmAfter && savedId) {
-        await confirmSalesInvoice(savedId);
-        toast.success("Invoice confirmed");
-      }
+      saved = true;
+      if (confirmAfter && savedId) await confirmSalesInvoice(savedId);
+      // one action, one toast: "Save & Confirm" reports both steps together
+      toast.success(confirmAfter ? "Invoice saved and confirmed" : isEdit ? "Invoice updated" : "Invoice added");
       markClean();
       router.push(isEdit ? `${label.basePath}/${savedId}` : `${label.basePath}/${savedId}${confirmAfter ? "" : "/edit"}`);
     } catch (err) {
-      toast.error(extractApiError(err, "Failed to save invoice"));
+      if (saved && savedId) {
+        // Saved, but the confirm was refused: say both in one toast, and leave the "new" page so a
+        // second click can't create the document again.
+        toast.error(`Invoice saved as draft, but couldn't be confirmed: ${extractApiError(err, "unknown error")}`, { duration: 8000 });
+        markClean();
+        if (!isEdit) router.push(`${label.basePath}/${savedId}/edit`);
+      } else {
+        toast.error(extractApiError(err, "Failed to save invoice"));
+      }
     } finally {
       setBusy(false);
     }
@@ -813,7 +841,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
                 companyId={activeCompanyId}
                 fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
                 resolveById={getMitra}
-                toOption={(m) => ({ value: m.id, label: m.name })}
+                toOption={(m) => ({ value: m.id, label: m.name, hint: m.code || undefined })}
                 onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);
@@ -941,11 +969,14 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
               />
             </FormField>
             <FormField label={tr("Sales", "Salesperson")} htmlFor="inv-salesperson" optional>
-              <Input
+              <SalespersonSelect
                 id="inv-salesperson"
-                value={salesperson}
-                onChange={(e) => setSalesperson(e.target.value)}
-                placeholder={tr("Siapa yang menjual", "Who made this sale")}
+                value={salespersonId}
+                legacyName={salesperson}
+                onChange={(sp) => {
+                  setSalespersonId(sp?.id ?? null);
+                  setSalesperson(sp?.name ?? "");
+                }}
                 disabled={readOnly}
               />
             </FormField>

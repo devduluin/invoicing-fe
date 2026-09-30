@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import PermissionGate from "@/components/auth/PermissionGate";
 import { Button } from "@/components/ui";

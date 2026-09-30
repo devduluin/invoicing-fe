@@ -1,8 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Plus, Users } from "lucide-react";
-import toast from "react-hot-toast";
+import { Plus, Upload, Users } from "lucide-react";
+import toast from "@/lib/toast";
 
 import PermissionGate from "@/components/auth/PermissionGate";
 import { Button } from "@/components/ui";
@@ -17,6 +17,9 @@ import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import MitraTypeBadge from "./MitraTypeBadge";
 import MitraFormModal from "./MitraFormModal";
+import MitraImportModal from "./MitraImportModal";
+import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
+import { useBulkMasterActions } from "@/components/dashboard/shared/useBulkMasterActions";
 import {
   listMitra,
   deleteMitra,
@@ -28,9 +31,10 @@ import {
 } from "@/services/mitraService";
 
 const TABLE_KEY = "mitra";
-const DEFAULT_VISIBLE = ["name", "contact_name", "type", "email", "phone", "is_active"];
+const DEFAULT_VISIBLE = ["code", "name", "contact_name", "type", "email", "phone", "is_active"];
 
 const SPECS: ColumnSpec<TableRow>[] = [
+  { id: "code", header: "Code", kind: "mono" },
   {
     id: "name",
     header: "Name",
@@ -40,6 +44,7 @@ const SPECS: ColumnSpec<TableRow>[] = [
   { id: "email", header: "Email" },
   { id: "phone", header: "Phone" },
   { id: "npwp", header: "NPWP", kind: "mono" },
+  { id: "linked_company_code", header: "Duluin Company Code", kind: "mono" },
   { id: "address", header: "Address" },
   { id: "is_active", header: "Status", kind: "bool" },
   { id: "created_at", header: "Created At", kind: "datetime" },
@@ -52,12 +57,27 @@ export default function MitraClient() {
   const canCreate = hasPermission(permissions, "invoice-mitra-create");
   const canUpdate = hasPermission(permissions, "invoice-mitra-update");
   const canDelete = hasPermission(permissions, "invoice-mitra-delete");
+  const canAddContact = hasPermission(permissions, "invoice-mitra-contact-create");
 
   const [typeFilter, setTypeFilter] = useState("");
   const [modal, setModal] = useState<{ open: boolean; row: Mitra | null }>({ open: false, row: null });
   const [confirm, setConfirm] = useState<Mitra | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const list = useMasterList(listMitra, {});
+  // Rows ticked in the table, for the "Choose Action" bulk menu.
+  const [selectedRows, setSelectedRows] = useState<Mitra[]>([]);
+  const bulk = useBulkMasterActions({
+    resource: "mitra",
+    rows: selectedRows,
+    noun: { id: "mitra", en: "partners" },
+    canUpdate,
+    canDelete,
+    onDone: () => {
+      setSelectedRows([]);
+      list.refresh();
+    },
+  });
   const [summaries, setSummaries] = useState<Record<string, ContactSummary>>({});
   useEffect(() => {
     listContactSummaries()
@@ -70,6 +90,7 @@ export default function MitraClient() {
     () =>
       buildColumns([
         SPECS[0],
+        SPECS[1],
         {
           id: "contact_name",
           header: "Contact (PIC)",
@@ -83,7 +104,7 @@ export default function MitraClient() {
             );
           },
         },
-        ...SPECS.slice(1),
+        ...SPECS.slice(2),
       ]),
     [summaries],
   );
@@ -115,11 +136,19 @@ export default function MitraClient() {
             title="Partners"
             description="Customers and suppliers who transact with your company."
             actions={
-              canCreate && (
-                <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={() => setModal({ open: true, row: null })}>
-                  Add Partner
-                </Button>
-              )
+              <div className="flex items-center gap-2">
+                <BulkActionMenu selectedCount={selectedRows.length} actions={bulk.actions} />
+                {canCreate && (
+                  <>
+                    <Button variant="outline" leftIcon={<Upload className="size-4" />} onClick={() => setImporting(true)}>
+                      Import
+                    </Button>
+                    <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={() => setModal({ open: true, row: null })}>
+                      Add Partner
+                    </Button>
+                  </>
+                )}
+              </div>
             }
           />
         }
@@ -137,6 +166,8 @@ export default function MitraClient() {
         defaultSort={{ column: "created_at", order: "desc" }}
         emptyTitle="No partners yet"
         emptyDescription="Add a customer or supplier to start creating invoices."
+        forceShowCheckbox
+        onSelectionChange={(rows) => setSelectedRows(rows as unknown as Mitra[])}
         onRowClick={canUpdate ? (row) => setModal({ open: true, row: row as unknown as Mitra }) : undefined}
         filters={[
           {
@@ -173,6 +204,19 @@ export default function MitraClient() {
           }}
         />
       )}
+
+      {importing && (
+        <MitraImportModal
+          canAddContact={canAddContact}
+          onClose={() => setImporting(false)}
+          onImported={() => {
+            setImporting(false);
+            list.refresh();
+          }}
+        />
+      )}
+
+      {bulk.modals}
 
       <ConfirmDeleteModal
         open={!!confirm}

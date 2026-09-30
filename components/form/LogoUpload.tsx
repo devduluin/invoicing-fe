@@ -2,7 +2,7 @@
 
 import { useRef, useState, type DragEvent } from "react";
 import { Building2, Trash2, UploadCloud } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
 const ALLOWED = ["image/png", "image/jpeg", "image/jpg"];

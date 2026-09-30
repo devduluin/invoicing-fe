@@ -43,6 +43,10 @@ interface CacheEntry<T> {
 const cache = new Map<string, CacheEntry<unknown>>();
 const inflight = new Map<string, Promise<unknown>>();
 const resolveCache = new Map<string, Promise<unknown>>();
+// Resolved records, readable synchronously: a select whose value was resolved (or preloaded) before it
+// mounted shows its label on the very first render instead of the placeholder for a moment.
+const settled = new Map<string, unknown>();
+const resolveKey = (resource: string, companyId: string | null | undefined, value: string) => `${resource}::${companyId ?? ""}::${value}`;
 
 function depKey(dependency?: Record<string, string | undefined>): string {
   if (!dependency) return "";
@@ -142,24 +146,26 @@ export function useRemoteSelectOptions<T>({
 
   // Selected-value resolution: if `value` isn't in any loaded page, fetch it by id — never page
   // through the whole list looking for it.
-  const [resolved, setResolved] = useState<T | null>(null);
+  const rKey = value ? resolveKey(resource, companyId, value) : "";
+  const resolved = (rKey && (settled.get(rKey) as T | undefined)) || null;
   useEffect(() => {
-    setResolved(null);
-    if (!value || !resolveById) return;
+    if (!value || !resolveById || settled.has(rKey)) return;
     if (items.some((it) => toOption(it).value === value)) return;
-    const rKey = `${resource}::${companyId ?? ""}::${value}`;
     let p = resolveCache.get(rKey) as Promise<T | null> | undefined;
     if (!p) {
       p = resolveById(value).catch(() => null);
       resolveCache.set(rKey, p);
     }
     let alive = true;
-    p.then((r) => alive && setResolved(r));
+    p.then((r) => {
+      if (r) settled.set(rKey, r);
+      if (alive) setTick((t) => t + 1);
+    });
     return () => {
       alive = false;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [value, resource, companyId, items]);
+  }, [rKey, items]);
 
   const resolvedOption = resolved ? toOption(resolved) : undefined;
   const finalOptions = useMemo(() => {
@@ -203,7 +209,24 @@ export function useRemoteSelectOptions<T>({
 /** Hand the select a record the parent already fetched, so resolving `value` to its label doesn't
  *  issue a second GET for the same thing (e.g. a form that prefills from ?linked_invoice=<id>). */
 export function primeRemoteSelectItem<T>(resource: string, companyId: string | null | undefined, value: string, item: T) {
-  resolveCache.set(`${resource}::${companyId ?? ""}::${value}`, Promise.resolve(item));
+  const k = resolveKey(resource, companyId, value);
+  resolveCache.set(k, Promise.resolve(item));
+  settled.set(k, item);
+}
+
+/** Fetch the record behind a value BEFORE the select mounts (a form still showing its loading
+ *  skeleton), so the select opens with its label instead of flashing the placeholder. Never throws. */
+export async function preloadRemoteSelectItem<T>(resource: string, companyId: string | null | undefined, value: string, fetch: (id: string) => Promise<T | null>): Promise<void> {
+  if (!value) return;
+  const k = resolveKey(resource, companyId, value);
+  if (settled.has(k)) return;
+  let p = resolveCache.get(k) as Promise<T | null> | undefined;
+  if (!p) {
+    p = fetch(value).catch(() => null);
+    resolveCache.set(k, p);
+  }
+  const r = await p;
+  if (r) settled.set(k, r);
 }
 
 /** Drop every cached page for a resource (e.g. after creating a new partner inline, so the next

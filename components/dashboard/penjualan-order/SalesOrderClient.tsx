@@ -2,8 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Receipt, Plus, Copy, FileText, Truck, Wallet, Trash2 } from "lucide-react";
-import toast from "react-hot-toast";
+import { Receipt, Plus, Copy, FileText, Truck, Wallet } from "lucide-react";
+import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import { useTr } from "@/lib/useTr";
@@ -16,6 +16,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import BulkActionMenu, { type BulkAction } from "@/components/masterTable/BulkActionMenu";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
+import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
@@ -26,7 +27,7 @@ import {
   type SalesOrderStatus,
 } from "@/services/salesOrderService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
-import { bulkDelete as bulkDeleteRequest } from "@/services/bulk";
+import { listAllSalespersons, type Salesperson } from "@/services/salespersonService";
 
 const TABLE_KEY = "sales-orders";
 const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "status", "grand_total"];
@@ -45,14 +46,14 @@ export default function SalesOrderClient() {
 
   const [confirm, setConfirm] = useState<SalesOrder | null>(null);
   const [mitras, setMitras] = useState<Mitra[]>([]);
+  const [salespersons, setSalespersons] = useState<Salesperson[]>([]);
   const [selectedRows, setSelectedRows] = useState<SalesOrder[]>([]);
-  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
-  const [bulkBusy, setBulkBusy] = useState(false);
 
   const list = useMasterList(listSalesOrders, {});
 
   useEffect(() => {
     listAllMitra().then(setMitras).catch(() => setMitras([]));
+    listAllSalespersons().then(setSalespersons).catch(() => setSalespersons([]));
   }, []);
 
   const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
@@ -128,26 +129,17 @@ export default function SalesOrderClient() {
     router.push(`${path}?dari_order=${ids}`);
   };
 
-  const bulkDelete = async () => {
-    setBulkBusy(true);
-    const byID = new Map(selectedRows.map((o) => [o.id, o]));
-    try {
-      const results = await bulkDeleteRequest("sales-orders", selectedRows.map((o) => o.id));
-      const ok = results.filter((r) => r.success).length;
-      const failed = results.filter((r) => !r.success).map((r) => `${byID.get(r.id)?.number ?? r.id}: ${r.message ?? tr("gagal", "failed")}`);
-      if (failed.length === 0) {
-        toast.success(tr(`${ok} pesanan dihapus`, `${ok} order(s) deleted`));
-      } else {
-        toast.error(tr(`${ok} terhapus, ${failed.length} gagal: ${failed.join("; ")}`, `${ok} deleted, ${failed.length} failed: ${failed.join("; ")}`), { duration: 8000 });
-      }
-    } catch (err) {
-      toast.error(extractApiError(err, tr("Gagal menghapus pesanan", "Failed to delete orders")));
-    }
-    setBulkBusy(false);
-    setBulkDeleteOpen(false);
-    setSelectedRows([]);
-    list.refresh();
-  };
+  const bulk = useBulkDocumentActions({
+    resource: "sales-orders",
+    rows: selectedRows,
+    noun: { id: "pesanan", en: "orders" },
+    canUpdate,
+    canDelete,
+    onDone: () => {
+      setSelectedRows([]);
+      list.refresh();
+    },
+  });
 
   const bulkActions: BulkAction[] = [
     ...(canCreateInvoice
@@ -174,18 +166,7 @@ export default function SalesOrderClient() {
           },
         ]
       : []),
-    ...(canDelete
-      ? [
-          {
-            key: "delete",
-            label: tr("Hapus", "Delete"),
-            icon: <Trash2 className="size-4" aria-hidden />,
-            disabled: bulkBusy,
-            destructive: true,
-            onSelect: () => setBulkDeleteOpen(true),
-          },
-        ]
-      : []),
+    ...bulk.actions,
   ];
 
   return (
@@ -230,6 +211,22 @@ export default function SalesOrderClient() {
         forceShowCheckbox
         onSelectionChange={(rows) => setSelectedRows(rows as unknown as SalesOrder[])}
         onRowClick={(row) => goTo(String(row.id))}
+        filters={[
+          {
+            key: "mitra_id",
+            label: tr("Mitra", "Partner"),
+            value: String(list.params.mitra_id ?? ""),
+            options: mitras.map((m) => ({ value: m.id, label: m.name })),
+          },
+          {
+            key: "salesperson_id",
+            label: tr("Sales", "Salesperson"),
+            value: String(list.params.salesperson_id ?? ""),
+            options: salespersons.map((s) => ({ value: s.id, label: s.code ? `${s.code} · ${s.name}` : s.name })),
+          },
+        ]}
+        onFilterChange={(k, v) => list.updateParams({ [k]: v || undefined, page: 1 })}
+        onFilterReset={() => list.updateParams({ mitra_id: undefined, salesperson_id: undefined, page: 1 })}
         renderRowActions={(row) => {
           const order = row as unknown as SalesOrder;
           return (
@@ -291,12 +288,7 @@ export default function SalesOrderClient() {
         onClose={() => setConfirm(null)}
       />
 
-      <DeleteDocumentModal
-        open={bulkDeleteOpen}
-        title={tr(`Hapus ${selectedRows.length} pesanan penjualan?`, `Delete ${selectedRows.length} sales orders?`)}
-        onConfirm={bulkDelete}
-        onClose={() => setBulkDeleteOpen(false)}
-      />
+      {bulk.modals}
     </>
   );
 }

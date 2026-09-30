@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { BookOpenText } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Card } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";

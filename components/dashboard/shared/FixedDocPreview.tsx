@@ -31,7 +31,7 @@ export default function FixedDocPreview({
       {!config && !loaded.ready ? (
         <div className="min-h-[50vh]" aria-busy="true" />
       ) : (
-        <ScaledSheet>
+        <ScaledSheet fill>
           {receipt && <ReceiptDocument data={receipt} config={cfg} />}
           {operational && <OperationalDocument data={operational} config={cfg} />}
         </ScaledSheet>

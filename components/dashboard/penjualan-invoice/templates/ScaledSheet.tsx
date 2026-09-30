@@ -11,16 +11,19 @@ const A4_WIDTH_PX = 793.7;
  * Shows an A4 page at whatever width is available, WITHOUT reflowing it: the page is
  * laid out at its real 210mm width and then uniformly scaled, so the preview keeps the
  * exact structure of the printed/PDF layout (nothing wraps differently on a narrow
- * screen). Never scales above `maxScale`.
+ * screen). Never scales above `maxScale` — unless `fill`: then the page is also scaled UP to the
+ * full available width, so a preview box wider than the page shows no white band beside it.
  */
 export function ScaledSheet({
   children,
   className,
   maxScale = 1,
+  fill = false,
 }: {
   children: ReactNode;
   className?: string;
   maxScale?: number;
+  fill?: boolean;
 }) {
   const outerRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -33,7 +36,7 @@ export function ScaledSheet({
     const measure = () => {
       // The sheet sets its own width (paper size / orientation come from the document config).
       const pageWidth = inner.offsetWidth || A4_WIDTH_PX;
-      const scale = Math.min(maxScale, outer.clientWidth / pageWidth);
+      const scale = fill ? outer.clientWidth / pageWidth : Math.min(maxScale, outer.clientWidth / pageWidth);
       setBox({
         scale,
         height: inner.offsetHeight * scale,
@@ -46,7 +49,7 @@ export function ScaledSheet({
     ro.observe(inner);
     measure();
     return () => ro.disconnect();
-  }, [maxScale]);
+  }, [maxScale, fill]);
 
   return (
     <div ref={outerRef} className={cn("relative w-full overflow-hidden", className)} style={{ height: box.height }}>

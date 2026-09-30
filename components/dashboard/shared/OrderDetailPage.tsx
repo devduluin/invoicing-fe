@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Copy, FileText, Package, Pencil, Trash2, Truck, Wallet } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { ErrorState } from "@/components/ui/ErrorState";
 import { Skeleton } from "@/components/ui/Skeleton";
@@ -200,7 +200,7 @@ export default function OrderDetailPage({ kind, id }: { kind: OrderKind; id: str
         {/* Same renderer as the PDF (the saved template), as a scaled A4 page. */}
         <div className="min-w-0 rounded-xl border border-border bg-[var(--surface-2)] p-3 sm:p-5">
           <div className="mx-auto max-w-[900px] overflow-hidden rounded-[3px] bg-white shadow-[0_1px_2px_rgba(20,30,60,0.08),0_10px_30px_-12px_rgba(20,30,60,0.25)] ring-1 ring-slate-900/5">
-            <ScaledSheet>
+            <ScaledSheet fill>
               <InvoiceDocument invoice={doc} mitra={mitra} company={company} taxByID={taxByID} variant="original" doc={kind} />
             </ScaledSheet>
           </div>

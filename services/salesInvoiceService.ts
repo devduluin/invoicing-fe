@@ -59,6 +59,8 @@ export interface SalesInvoice {
   shipping_cost?: number;
   ship_from?: string;
   salesperson?: string;
+  /** the salesperson master record; `salesperson` is its name as saved on the document */
+  salesperson_id?: string | null;
   attachment_data?: string;
   attachment_name?: string;
   signature_data?: string;
@@ -94,6 +96,8 @@ export interface SalesInvoiceInput {
   shipping_cost?: number;
   ship_from?: string;
   salesperson?: string;
+  /** the salesperson master record; `salesperson` is its name as saved on the document */
+  salesperson_id?: string | null;
   attachment_data?: string;
   attachment_name?: string;
   signature_data?: string;
@@ -134,6 +138,13 @@ export async function getSalesInvoice(id: string): Promise<SalesInvoice> {
 
 export async function createSalesInvoice(input: SalesInvoiceInput): Promise<SalesInvoice> {
   const { data } = await api.post<Envelope<SalesInvoice>>("/sales-invoices", input);
+  return data.data;
+}
+
+/** Imports regular invoices (saved as drafts) from the Excel template, all or nothing. `row` = the
+ *  invoice's first spreadsheet row (the service prefixes its validation messages with it). */
+export async function importSalesInvoices(invoices: (SalesInvoiceInput & { row: number })[]): Promise<{ created: number }> {
+  const { data } = await api.post<Envelope<{ created: number }>>("/sales-invoices/import", { invoices });
   return data.data;
 }
 

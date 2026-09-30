@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { extractApiError } from "@/lib/apiError";

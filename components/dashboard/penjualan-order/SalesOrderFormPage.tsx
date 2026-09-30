@@ -5,7 +5,7 @@ import { useNewDocumentDefaults } from "@/hooks/useDocConfig";
 import ContactPersonSelect, { type ContactSnapshot } from "../shared/ContactPersonSelect";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Receipt } from "lucide-react";
-import toast from "react-hot-toast";
+import toast from "@/lib/toast";
 
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import PageHeader from "@/components/layouts/page/PageHeader";
@@ -34,11 +34,13 @@ import { DocumentTemplateAside, useDocumentTemplate } from "../shared/DocumentTe
 import type { PrintableDoc } from "@/lib/documentShape";
 import { setSalesOrderTemplate } from "@/services/salesOrderService";
 import { DocumentFormLayout } from "../shared/DocumentFormLayout";
+import SalespersonSelect, { useMySalesperson } from "../shared/SalespersonSelect";
 import { AttachmentUpload, type AttachmentValue } from "../shared/AttachmentUpload";
 import { SignatureUpload } from "../shared/SignatureUpload";
 import MitraFormModal from "../mitra/MitraFormModal";
 import DocumentHeaderActions from "../shared/DocumentHeaderActions";
 import { useDirtyForm } from "@/hooks/useDirtyForm";
+import { withDocumentRefs } from "../shared/documentRefs";
 
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
@@ -99,6 +101,14 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
   const [additionalDiscountValue, setAdditionalDiscountValue] = useState<number | null>(null);
   const [shipFrom, setShipFrom] = useState("");
   const [salesperson, setSalesperson] = useState("");
+  const [salespersonId, setSalespersonId] = useState<string | null>(null);
+  // A new document (not copied from another one) starts with the signed-in user's own salesperson.
+  const mySalesperson = useMySalesperson(!isEdit && !searchParams.get("duplicate_from"));
+  useEffect(() => {
+    if (!mySalesperson) return;
+    setSalespersonId((cur) => cur ?? mySalesperson.id);
+    setSalesperson((cur) => cur || mySalesperson.name);
+  }, [mySalesperson]);
   const [attachmentData, setAttachmentData] = useState("");
   const [attachmentName, setAttachmentName] = useState("");
   const [signatureData, setSignatureData] = useState("");
@@ -134,6 +144,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
       additionalDiscountValue,
       shipFrom,
       salesperson,
+      salespersonId,
       attachmentData,
       attachmentName,
       signatureData,
@@ -157,6 +168,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
     setAdditionalDiscountValue(snap.additionalDiscountValue);
     setShipFrom(snap.shipFrom);
     setSalesperson(snap.salesperson);
+    setSalespersonId(snap.salespersonId);
     setAttachmentData(snap.attachmentData);
     setAttachmentName(snap.attachmentName);
     setSignatureData(snap.signatureData);
@@ -244,6 +256,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
     const dupID = searchParams.get("duplicate_from");
     if (!dupID) return;
     getSalesOrder(dupID)
+      .then(withDocumentRefs(activeCompanyId))
       .then((source) => {
         setMitraId(source.mitra_id);
         setNotes(source.notes ?? "");
@@ -252,10 +265,11 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
         setAdditionalDiscountValue(source.additional_discount_value || null);
         setShipFrom(source.ship_from ?? "");
         setSalesperson(source.salesperson ?? "");
+        setSalespersonId(source.salesperson_id ?? null);
         setLines(
           source.lines.length
             ? source.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -276,6 +290,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
   useEffect(() => {
     if (!isEdit || !id) return;
     getSalesOrder(id)
+      .then(withDocumentRefs(activeCompanyId))
       .then((order) => {
         setMitraId(order.mitra_id);
         setContactPersonId(order.contact_person_id ?? "");
@@ -290,6 +305,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
         setAdditionalDiscountValue(order.additional_discount_value || null);
         setShipFrom(order.ship_from ?? "");
         setSalesperson(order.salesperson ?? "");
+        setSalespersonId(order.salesperson_id ?? null);
         setAttachmentData(order.attachment_data ?? "");
         setAttachmentName(order.attachment_name ?? "");
         setSignatureData(order.signature_data ?? "");
@@ -297,7 +313,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
         setLines(
           order.lines.length
             ? order.lines.map((l) => ({
-                key: crypto.randomUUID(),
+                key: l.id ?? crypto.randomUUID(),
                 product_name: l.product_name,
                 description: l.description ?? "",
                 quantity: l.quantity,
@@ -388,6 +404,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
       additional_discount_value: additionalDiscountValue ?? 0,
       ship_from: shipFrom.trim() || undefined,
       salesperson: salesperson.trim() || undefined,
+      salesperson_id: salespersonId,
       attachment_data: attachmentData || undefined,
       attachment_name: attachmentName || undefined,
       signature_data: signatureData || undefined,
@@ -405,22 +422,29 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
 
     setBusy(true);
     let savedId = id;
+    let saved = false;
     try {
       if (isEdit && id) {
         await updateSalesOrder(id, payload);
-        toast.success("Sales order updated");
       } else {
         savedId = (await createSalesOrder(payload)).id;
-        toast.success("Sales order added");
       }
-      if (confirmAfter && savedId) {
-        await confirmSalesOrder(savedId);
-        toast.success("Sales order confirmed");
-      }
+      saved = true;
+      if (confirmAfter && savedId) await confirmSalesOrder(savedId);
+      // one action, one toast: "Save & Confirm" reports both steps together
+      toast.success(confirmAfter ? "Sales order saved and confirmed" : isEdit ? "Sales order updated" : "Sales order added");
       markClean();
       router.push(isEdit ? `${"/dashboard/penjualan/order"}/${savedId}` : `${"/dashboard/penjualan/order"}/${savedId}${confirmAfter ? "" : "/edit"}`);
     } catch (err) {
-      toast.error(extractApiError(err, "Failed to save sales order"));
+      if (saved && savedId) {
+        // Saved, but the confirm was refused: say both in one toast, and leave the "new" page so a
+        // second click can't create the document again.
+        toast.error(`Sales order saved as draft, but couldn't be confirmed: ${extractApiError(err, "unknown error")}`, { duration: 8000 });
+        markClean();
+        if (!isEdit) router.push(`${"/dashboard/penjualan/order"}/${savedId}/edit`);
+      } else {
+        toast.error(extractApiError(err, "Failed to save sales order"));
+      }
     } finally {
       setBusy(false);
     }
@@ -487,7 +511,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
                 companyId={activeCompanyId}
                 fetchPage={({ page, search, pageSize }) => listMitraPage({ page, search, pageSize, type: "customer", isActive: true })}
                 resolveById={getMitra}
-                toOption={(m) => ({ value: m.id, label: m.name })}
+                toOption={(m) => ({ value: m.id, label: m.name, hint: m.code || undefined })}
                 onItemChange={setPreviewMitra}
                 onChange={(v) => {
                   setMitraId(v);
@@ -541,12 +565,15 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
                 disabled={readOnly}
               />
             </FormField>
-            <FormField label="Salesperson" htmlFor="so-salesperson" optional>
-              <Input
+            <FormField label={"Salesperson"} htmlFor="so-salesperson" optional>
+              <SalespersonSelect
                 id="so-salesperson"
-                value={salesperson}
-                onChange={(e) => setSalesperson(e.target.value)}
-                placeholder="Who made this sale"
+                value={salespersonId}
+                legacyName={salesperson}
+                onChange={(sp) => {
+                  setSalespersonId(sp?.id ?? null);
+                  setSalesperson(sp?.name ?? "");
+                }}
                 disabled={readOnly}
               />
             </FormField>

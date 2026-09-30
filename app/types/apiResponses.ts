@@ -56,6 +56,7 @@ export type GetAllPayload = {
   is_active?: "true" | "false" | "";
   is_compound?: "true" | "false" | "";
   mitra_id?: string;
+  salesperson_id?: string;
   sales_order_id?: string;
   sales_invoice_id?: string;
   purchase_invoice_id?: string;
