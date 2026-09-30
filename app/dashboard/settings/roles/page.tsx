@@ -7,7 +7,6 @@ import toast from "@/lib/toast";
 import PermissionGate from "@/components/auth/PermissionGate";
 import { Button } from "@/components/ui";
 import PageHeader from "@/components/layouts/page/PageHeader";
-import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { extractApiError } from "@/lib/apiError";
 import { roleLabel } from "@/lib/onboarding";
 import { useTr } from "@/lib/useTr";
@@ -18,7 +17,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
 import RoleFormModal from "@/components/dashboard/settings/RoleFormModal";
-import { deleteRole, getRole, listRolesTable, type Role } from "@/services/roleService";
+import { getRole, listRolesTable, type Role } from "@/services/roleService";
 
 const DEFAULT_VISIBLE = ["name", "type", "permission_count"];
 
@@ -38,13 +37,11 @@ function RolesManager() {
   const tr = useTr();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-create-role");
-  const canDelete = hasPermission(permissions, "invoice-delete-role");
 
   const list = useMasterList(listRolesTable, {});
   const [allPermissions, setAllPermissions] = useState<string[]>([]);
   const [editing, setEditing] = useState<Role | "new" | null>(null);
   const [editingDetail, setEditingDetail] = useState<Role | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<Role | null>(null);
 
   const specs: ColumnSpec<TableRow>[] = useMemo(
     () => [
@@ -95,19 +92,6 @@ function RolesManager() {
     setEditingDetail(null);
   };
 
-  const doDelete = async () => {
-    if (!confirmDelete) return;
-    try {
-      await deleteRole(confirmDelete.id);
-      toast.success(tr("Peran dihapus", "Role deleted"));
-      setConfirmDelete(null);
-      list.refresh();
-    } catch (err) {
-      toast.error(extractApiError(err, tr("Gagal menghapus peran", "Failed to delete role")));
-      setConfirmDelete(null);
-    }
-  };
-
   return (
     <div className="px-5 py-5">
       <MasterTable
@@ -141,36 +125,13 @@ function RolesManager() {
         emptyTitle={tr("Belum ada peran", "No roles yet")}
         emptyDescription={tr("Tambahkan peran untuk mengatur izin akses tim Anda.", "Add a role to control what your team can access.")}
         onRowClick={(row) => void openEdit(row as unknown as Role)}
-        renderRowActions={(row) => {
-          const role = row as unknown as Role;
-          const isCustom = role.is_custom;
-          return (
-            <RowActionDropdown
-              onEdit={() => void openEdit(role)}
-              onDelete={isCustom && canDelete ? () => setConfirmDelete(role) : undefined}
-            />
-          );
-        }}
+        // no Delete: roles can't be deleted (SSO has no delete for them) — edit only
+        renderRowActions={(row) => <RowActionDropdown onEdit={() => void openEdit(row as unknown as Role)} />}
       />
 
       {editing && (
         <RoleFormModal role={editing === "new" ? null : editingDetail} allPermissions={allPermissions} onClose={closeModal} onSaved={() => { closeModal(); list.refresh(); }} />
       )}
-
-      <ConfirmDeleteModal
-        open={!!confirmDelete}
-        title={tr("Hapus peran ini?", "Delete this role?")}
-        description={
-          confirmDelete
-            ? tr(
-                `"${roleLabel(confirmDelete.name)}" akan dihapus. Anggota dengan peran ini akan kehilangan peran tersebut.`,
-                `"${roleLabel(confirmDelete.name)}" will be deleted. Members with this role will lose it.`,
-              )
-            : undefined
-        }
-        onConfirm={doDelete}
-        onClose={() => setConfirmDelete(null)}
-      />
     </div>
   );
 }

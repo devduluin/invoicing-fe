@@ -14,6 +14,8 @@ interface Props<TData> {
   availableColumns: string[];
   attribute: string[];
   columnLabel: (id: string) => string;
+  /** the page always shows the checkbox column (it drives a bulk-action menu) */
+  forceShowCheckbox?: boolean;
   search: string;
   onSearch: (value: string) => void;
   onRefresh: () => void;
@@ -32,6 +34,7 @@ export default function TableActionBar<TData>({
   availableColumns,
   attribute,
   columnLabel,
+  forceShowCheckbox,
   search,
   onSearch,
   onRefresh,
@@ -110,7 +113,7 @@ export default function TableActionBar<TData>({
                 <SlidersHorizontal className="size-4" />
               </button>
             </DropdownMenuTrigger>
-            <ColumnVisibilityMenu table={table} tableKey={tableKey} availableColumns={availableColumns} attribute={attribute} columnLabel={columnLabel} />
+            <ColumnVisibilityMenu table={table} tableKey={tableKey} availableColumns={availableColumns} attribute={attribute} columnLabel={columnLabel} forceShowCheckbox={forceShowCheckbox} />
           </DropdownMenu>
         )}
       </div>

@@ -17,9 +17,12 @@ const TOGGLES: Toggle[] = [
 export function ControlsTab({
   settings,
   onChange,
+  locked,
 }: {
   settings: { showCheckbox: boolean; showAutoNumber: boolean; showActions: boolean };
   onChange: (key: Toggle["key"], value: boolean) => void;
+  /** toggles the page decides itself: shown as they are, not switchable, with the reason as the hint */
+  locked?: Partial<Record<Toggle["key"], string>>;
 }) {
   return (
     <div className="space-y-1 px-1">
@@ -28,8 +31,9 @@ export function ControlsTab({
           key={t.key}
           checked={settings[t.key]}
           onChange={(v) => onChange(t.key, v)}
+          disabled={!!locked?.[t.key]}
           label={t.label}
-          hint={t.hint}
+          hint={locked?.[t.key] ?? t.hint}
           className="rounded-lg px-1.5 py-2 hover:bg-muted"
         />
       ))}

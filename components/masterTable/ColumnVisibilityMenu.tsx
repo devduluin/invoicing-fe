@@ -18,6 +18,8 @@ interface Props<TData> {
   /** default-visible column ids */
   attribute: string[];
   columnLabel: (id: string) => string;
+  /** the page always shows the checkbox column: its toggle shows on and can't be switched off */
+  forceShowCheckbox?: boolean;
 }
 
 export default function ColumnVisibilityMenu<TData>({
@@ -26,6 +28,7 @@ export default function ColumnVisibilityMenu<TData>({
   availableColumns,
   attribute,
   columnLabel,
+  forceShowCheckbox = false,
 }: Props<TData>) {
   const [tab, setTab] = useState<"columns" | "controls">("columns");
 
@@ -60,7 +63,7 @@ export default function ColumnVisibilityMenu<TData>({
   };
 
   const tableSettings = {
-    showCheckbox: settings?.showCheckbox ?? false,
+    showCheckbox: forceShowCheckbox || (settings?.showCheckbox ?? false),
     showAutoNumber: settings?.showAutoNumber ?? false,
     showActions: settings?.showActions ?? true,
   };
@@ -118,7 +121,7 @@ export default function ColumnVisibilityMenu<TData>({
             onToggle={toggle}
           />
         ) : (
-          <ControlsTab settings={tableSettings} onChange={onControlChange} />
+          <ControlsTab settings={tableSettings} onChange={onControlChange} locked={forceShowCheckbox ? { showCheckbox: "Always on here — used by the bulk actions" } : undefined} />
         )}
       </div>
 

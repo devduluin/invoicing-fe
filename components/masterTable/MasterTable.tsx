@@ -257,6 +257,7 @@ export default function MasterTable<T extends TableRow>({
             availableColumns={allColumnIds}
             attribute={attribute}
             columnLabel={labelFor}
+            forceShowCheckbox={forceShowCheckbox}
             search={params.search ?? ""}
             onSearch={(v) => updateParams({ search: v || undefined, page: 1 })}
             onRefresh={onRefresh}
@@ -325,7 +326,7 @@ export default function MasterTable<T extends TableRow>({
                   // reachable without scrolling the table sideways.
                   <th
                     scope="col"
-                    className="sticky right-0 z-[1] w-16 bg-table-head px-4 py-2 text-right text-xs font-semibold tracking-wide whitespace-nowrap text-slate-500 uppercase shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
+                    className="sticky right-0 z-[1] w-16 bg-table-head px-4 py-2 text-right text-xs font-semibold tracking-wide whitespace-nowrap text-slate-500 shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
                   >
                     {tr("Aksi", "Action")}
                   </th>
