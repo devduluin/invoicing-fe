@@ -18,6 +18,7 @@ import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
   listSalesOrders,
@@ -56,8 +57,6 @@ export default function SalesOrderClient() {
     listAllSalespersons().then(setSalespersons).catch(() => setSalespersons([]));
   }, []);
 
-  const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
-
   const goTo = (id: string) => router.push(`/dashboard/penjualan/order/${id}`);
 
   const SPECS: ColumnSpec<TableRow>[] = useMemo(
@@ -68,7 +67,7 @@ export default function SalesOrderClient() {
         id: "mitra_id",
         header: "Partner",
         noSort: true,
-        render: (v) => mitraNameByID.get(String(v ?? "")) ?? "—",
+        render: (_v, row) => partnerName(row),
       },
       {
         id: "status",
@@ -86,9 +85,12 @@ export default function SalesOrderClient() {
         align: "right",
         render: (v) => <span className="font-mono">{money.format(Number(v ?? 0))}</span>,
       },
+      relColumn("salesperson_id", "Salesperson"),
+      { id: "contact_name", header: "Contact" },
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
-    [mitraNameByID],
+    [],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
@@ -197,7 +199,7 @@ export default function SalesOrderClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

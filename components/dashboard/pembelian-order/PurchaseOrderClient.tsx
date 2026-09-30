@@ -18,6 +18,7 @@ import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, partnerName } from "@/components/masterTable/cells";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
   listPurchaseOrders,
@@ -26,7 +27,6 @@ import {
   type PurchaseOrder,
   type PurchaseOrderStatus,
 } from "@/services/purchaseOrderService";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
 
 const TABLE_KEY = "purchase-orders";
 const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "status", "grand_total"];
@@ -44,7 +44,6 @@ export default function PurchaseOrderClient() {
   const canCreateGoodsReceipt = hasPermission(permissions, "invoice-goods-receipt-create");
 
   const [confirm, setConfirm] = useState<PurchaseOrder | null>(null);
-  const [mitras, setMitras] = useState<Mitra[]>([]);
 
   const list = useMasterList(listPurchaseOrders, {});
 
@@ -74,12 +73,6 @@ export default function PurchaseOrderClient() {
 
   });
 
-  useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([]));
-  }, []);
-
-  const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
-
   const goTo = (id: string) => router.push(`/dashboard/pembelian/order/${id}`);
 
   const SPECS: ColumnSpec<TableRow>[] = useMemo(
@@ -90,7 +83,7 @@ export default function PurchaseOrderClient() {
         id: "mitra_id",
         header: "Partner",
         noSort: true,
-        render: (v) => mitraNameByID.get(String(v ?? "")) ?? "—",
+        render: (_v, row) => partnerName(row),
       },
       {
         id: "status",
@@ -108,9 +101,11 @@ export default function PurchaseOrderClient() {
         align: "right",
         render: (v) => <span className="font-mono">{money.format(Number(v ?? 0))}</span>,
       },
+      { id: "contact_name", header: "Contact" },
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
-    [mitraNameByID],
+    [],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
@@ -155,7 +150,7 @@ export default function PurchaseOrderClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

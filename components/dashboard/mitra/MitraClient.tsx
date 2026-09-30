@@ -15,6 +15,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, relColumn } from "@/components/masterTable/cells";
 import MitraTypeBadge from "./MitraTypeBadge";
 import MitraFormModal from "./MitraFormModal";
 import MitraImportModal from "./MitraImportModal";
@@ -31,7 +32,7 @@ import {
 } from "@/services/mitraService";
 
 const TABLE_KEY = "mitra";
-const DEFAULT_VISIBLE = ["code", "name", "contact_name", "type", "email", "phone", "is_active"];
+const DEFAULT_VISIBLE = ["code", "name", "contact_name", "type", "is_active"];
 
 const SPECS: ColumnSpec<TableRow>[] = [
   { id: "code", header: "Code", kind: "mono" },
@@ -47,6 +48,8 @@ const SPECS: ColumnSpec<TableRow>[] = [
   { id: "linked_company_code", header: "Duluin Company Code", kind: "mono" },
   { id: "address", header: "Address" },
   { id: "is_active", header: "Status", kind: "bool" },
+  relColumn("linked_company_id", "Duluin Company"),
+  ...auditColumns(),
   { id: "created_at", header: "Created At", kind: "datetime" },
   { id: "updated_at", header: "Updated At", kind: "datetime" },
 ];
@@ -96,11 +99,12 @@ export default function MitraClient() {
           header: "Contact (PIC)",
           render: (v, row) => {
             const n = summaries[String(row.id)]?.count ?? 0;
+            // one line: the PIC, with the number of contact persons after it (details on hover)
             return (
-              <div className="leading-tight">
+              <span title={n ? `${n} ${n === 1 ? "contact person" : "contact persons"}` : "No contact person"}>
                 <span className={v ? "text-slate-700" : "text-slate-400"}>{v ? String(v) : "—"}</span>
-                <span className="block text-xs text-slate-500">{n ? `${n} ${n === 1 ? "contact person" : "contact persons"}` : "No contact person"}</span>
-              </div>
+                {n > 1 && <span className="ml-1.5 text-xs text-slate-500">+{n - 1}</span>}
+              </span>
             );
           },
         },
@@ -155,7 +159,7 @@ export default function MitraClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

@@ -6,7 +6,7 @@ import { Columns3, RotateCcw, Settings2 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { DropdownMenuContent } from "@/components/ui/dropdown-menu";
-import { useTableColumnStore } from "@/store/useTableColumnStore";
+import { useTableColumnStore, visibilityKey } from "@/store/useTableColumnStore";
 import { ColumnsTab } from "./settings/ColumnsTab";
 import { ControlsTab } from "./settings/ControlsTab";
 
@@ -29,7 +29,8 @@ export default function ColumnVisibilityMenu<TData>({
 }: Props<TData>) {
   const [tab, setTab] = useState<"columns" | "controls">("columns");
 
-  const visibility = useTableColumnStore((s) => s.visibility[tableKey]);
+  const visKey = visibilityKey(tableKey, attribute);
+  const visibility = useTableColumnStore((s) => s.visibility[visKey]);
   const settings = useTableColumnStore((s) => s.settings[tableKey]);
   const setVisibility = useTableColumnStore((s) => s.setVisibility);
   const setSettings = useTableColumnStore((s) => s.setSettings);
@@ -47,14 +48,14 @@ export default function ColumnVisibilityMenu<TData>({
     const next: Record<string, boolean> = {};
     for (const c of sortedColumns) next[c] = c === id ? checked : isChecked(c);
     next.actions = visibility?.actions ?? true;
-    setVisibility(tableKey, next);
+    setVisibility(visKey, next);
     table.getColumn(id)?.toggleVisibility(checked);
   };
 
   const selectAll = () => {
     const next: Record<string, boolean> = { actions: true };
     for (const c of sortedColumns) next[c] = true;
-    setVisibility(tableKey, next);
+    setVisibility(visKey, next);
     table.getAllColumns().forEach((c) => c.toggleVisibility(true));
   };
 
@@ -67,7 +68,7 @@ export default function ColumnVisibilityMenu<TData>({
   const onControlChange = (key: "showCheckbox" | "showAutoNumber" | "showActions", value: boolean) => {
     setSettings(tableKey, { [key]: value });
     if (key === "showActions") {
-      setVisibility(tableKey, { ...(visibility ?? {}), actions: value });
+      setVisibility(visKey, { ...(visibility ?? {}), actions: value });
     }
   };
 

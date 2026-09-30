@@ -14,6 +14,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns } from "@/components/masterTable/cells";
 import UnitFormModal from "./UnitFormModal";
 import { listUnits, deleteUnit, type Unit } from "@/services/unitService";
 
@@ -25,6 +26,7 @@ const SPECS: ColumnSpec<TableRow>[] = [
   { id: "symbol", header: "Symbol", kind: "mono" },
   { id: "is_system", header: "Type", kind: "bool", boolLabels: ["Built-in", "Custom"] },
   { id: "is_active", header: "Status", kind: "bool" },
+  ...auditColumns(),
   { id: "created_at", header: "Created At", kind: "datetime" },
 ];
 const LABELS = Object.fromEntries(SPECS.map((s) => [s.id, s.header]));
@@ -80,7 +82,7 @@ export default function UnitClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

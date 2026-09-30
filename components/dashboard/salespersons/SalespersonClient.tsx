@@ -15,6 +15,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, rel, relLabel } from "@/components/masterTable/cells";
 import SalespersonFormModal from "./SalespersonFormModal";
 import AddFromTeamModal from "./AddFromTeamModal";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
@@ -22,7 +23,7 @@ import { useBulkMasterActions } from "@/components/dashboard/shared/useBulkMaste
 import { deleteSalesperson, listSalespersons, type Salesperson } from "@/services/salespersonService";
 
 const TABLE_KEY = "salespersons";
-const DEFAULT_VISIBLE = ["code", "name", "email", "phone", "user_id", "is_active"];
+const DEFAULT_VISIBLE = ["code", "name", "email", "is_active"];
 
 export default function SalespersonClient() {
   const tr = useTr();
@@ -55,8 +56,9 @@ export default function SalespersonClient() {
       { id: "name", header: tr("Nama", "Name"), render: (_v, row) => <span className="font-semibold text-slate-700">{String(row.name ?? "—")}</span> },
       { id: "email", header: "Email" },
       { id: "phone", header: tr("Telepon", "Phone") },
-      { id: "user_id", header: tr("Anggota Tim", "Team Member"), render: (v) => (v ? tr("Tertaut", "Linked") : "—") },
+      { id: "user_id", header: tr("Anggota Tim", "Team Member"), noSort: true, render: (_v, row) => relLabel(rel(row, "user_id")) },
       { id: "is_active", header: "Status", kind: "bool" },
+      ...auditColumns(tr),
       { id: "created_at", header: tr("Dibuat", "Created At"), kind: "datetime" },
     ],
     [tr],
@@ -110,7 +112,7 @@ export default function SalespersonClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => labels[id] ?? id}
         meta={list.meta}
         params={list.params}

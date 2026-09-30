@@ -14,6 +14,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, relColumn } from "@/components/masterTable/cells";
 import TaxFormModal from "./TaxFormModal";
 import CompoundTaxFormModal from "./CompoundTaxFormModal";
 import {
@@ -108,6 +109,11 @@ export default function TaxClient() {
       },
       { id: "is_compound", header: "Compound", kind: "bool", boolLabels: ["Yes", "No"] },
       { id: "is_active", header: "Status", kind: "bool" },
+      relColumn("sales_account_id", "Sales Account"),
+      relColumn("purchase_account_id", "Purchase Account"),
+      relColumn("component1_id", "Component 1"),
+      relColumn("component2_id", "Component 2"),
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
     [nameByID],
@@ -161,7 +167,7 @@ export default function TaxClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

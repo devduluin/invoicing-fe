@@ -19,11 +19,11 @@ import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { listDeliveryNotes, deleteDeliveryNote } from "@/services/deliveryNoteService";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
 
 const TABLE_KEY = "delivery-notes";
-const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "notes"];
+const DEFAULT_VISIBLE = ["number", "date", "mitra_id"];
 
 export default function DeliveryNoteClient() {
   const router = useRouter();
@@ -31,8 +31,6 @@ export default function DeliveryNoteClient() {
   const canCreate = hasPermission(permissions, "invoice-delivery-note-create");
   const canUpdate = hasPermission(permissions, "invoice-delivery-note-update");
   const canDelete = hasPermission(permissions, "invoice-delivery-note-delete");
-
-  const [mitras, setMitras] = useState<Mitra[]>([]);
   const [confirm, setConfirm] = useState<{ id: string; number: string } | null>(null);
   const list = useMasterList(listDeliveryNotes, {});
   // Rows ticked in the table, for the "Choose Action" bulk menu.
@@ -51,12 +49,6 @@ export default function DeliveryNoteClient() {
     },
   });
 
-  useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([]));
-  }, []);
-
-  const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
-
   const SPECS: ColumnSpec<TableRow>[] = useMemo(
     () => [
       { id: "number", header: "Delivery No.", kind: "mono" },
@@ -65,12 +57,15 @@ export default function DeliveryNoteClient() {
         id: "mitra_id",
         header: "Partner",
         noSort: true,
-        render: (v) => mitraNameByID.get(String(v ?? "")) ?? "—",
+        render: (_v, row) => partnerName(row),
       },
       { id: "notes", header: "Notes", noSort: true, render: (v) => htmlToPlainText(String(v ?? "")) || "—" },
+      relColumn("sales_order_id", "Sales Order"),
+      relColumn("sales_invoice_id", "Sales Invoice"),
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
-    [mitraNameByID],
+    [],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
@@ -118,7 +113,7 @@ export default function DeliveryNoteClient() {
       columns={columns}
       data={list.data}
       availableColumns={list.columns}
-      attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+      attribute={DEFAULT_VISIBLE}
       columnLabel={(id) => LABELS[id] ?? id}
       meta={list.meta}
       params={list.params}

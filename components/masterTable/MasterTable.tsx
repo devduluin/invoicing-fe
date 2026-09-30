@@ -22,8 +22,9 @@ import { Check } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { useTr } from "@/lib/useTr";
 import type { GetAllPayload, TableMeta, TableRow } from "@/app/types/apiResponses";
-import { useTableColumnStore } from "@/store/useTableColumnStore";
+import { useTableColumnStore, visibilityKey } from "@/store/useTableColumnStore";
 import { ActiveFilterChips, FilterPopover, type FilterConfig } from "@/components/layouts/page/FilterPanel";
 import TableActionBar from "./TableActionBar";
 import DraggableHeader from "./DraggableHeader";
@@ -109,8 +110,10 @@ export default function MasterTable<T extends TableRow>({
   forceShowCheckbox,
   onSelectionChange,
 }: MasterTableProps<T>) {
+  const tr = useTr();
   const activeFilterCount = filters?.filter((f) => f.value).length ?? 0;
-  const storedVis = useTableColumnStore((s) => s.visibility[tableKey] ?? EMPTY_VIS);
+  const visKey = visibilityKey(tableKey, attribute);
+  const storedVis = useTableColumnStore((s) => s.visibility[visKey] ?? EMPTY_VIS);
   const storedSettings = useTableColumnStore((s) => s.settings[tableKey]);
   const setSettings = useTableColumnStore((s) => s.setSettings);
 
@@ -118,7 +121,12 @@ export default function MasterTable<T extends TableRow>({
     () => columns.map((c) => (c.id ?? (c as { accessorKey?: string }).accessorKey) as string).filter(Boolean),
     [columns],
   );
-  const allColumnIds = availableColumns?.length ? availableColumns : dataColumnIds;
+  // The column settings offer each column once, and only columns this page can actually show: one the
+  // API knows but the page has no definition for would appear under its raw name and toggle nothing.
+  const allColumnIds = useMemo(() => {
+    const shown = new Set(dataColumnIds);
+    return Array.from(new Set(availableColumns?.length ? availableColumns : dataColumnIds)).filter((id) => shown.has(id));
+  }, [availableColumns, dataColumnIds]);
 
   const labelFor = useMemo(
     () => columnLabel ?? ((id: string) => humanize(id)),
@@ -313,8 +321,13 @@ export default function MasterTable<T extends TableRow>({
                   ))}
                 </SortableContext>
                 {showActions && (
-                  <th scope="col" className="w-16 px-4 py-2.5 text-right text-xs font-semibold text-slate-600">
-                    <span className="sr-only">Actions</span>
+                  // Header action: always labelled, and pinned to the right edge so a row's actions are
+                  // reachable without scrolling the table sideways.
+                  <th
+                    scope="col"
+                    className="sticky right-0 z-[1] w-16 bg-table-head px-4 py-2 text-right text-xs font-semibold tracking-wide whitespace-nowrap text-slate-500 uppercase shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)]"
+                  >
+                    {tr("Aksi", "Action")}
                   </th>
                 )}
               </tr>
@@ -388,16 +401,23 @@ export default function MasterTable<T extends TableRow>({
                           <td
                             key={cell.id}
                             className={cn(
-                              "px-3.5 py-2 align-middle text-[13px]",
+                              "px-3.5 py-2 align-middle text-[13px] whitespace-nowrap",
                               m?.align === "right" && "text-right",
                             )}
                           >
-                            {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                            {/* one line per row: long values are cut with an ellipsis, never wrapped */}
+                            <div className="max-w-[20rem] truncate">{flexRender(cell.column.columnDef.cell, cell.getContext())}</div>
                           </td>
                         );
                       })}
                       {showActions && (
-                        <td className="px-3.5 py-1.5" onClick={(e) => e.stopPropagation()}>
+                        <td
+                          className={cn(
+                            "sticky right-0 px-3.5 py-1.5 whitespace-nowrap shadow-[-8px_0_8px_-8px_rgba(15,23,42,0.12)] transition-colors",
+                            selected[row.id] ? "bg-secondary" : "bg-card group-hover/row:bg-slate-50",
+                          )}
+                          onClick={(e) => e.stopPropagation()}
+                        >
                           <div className="flex justify-end">{renderRowActions!(row.original)}</div>
                         </td>
                       )}

@@ -53,7 +53,12 @@ export function buildColumns<T extends TableRow>(specs: ColumnSpec<T>[]): Column
           case "bool":
             return <BoolPill on={Boolean(value)} labels={spec.boolLabels ?? ["Aktif", "Nonaktif"]} />;
           default:
-            return <span className="text-slate-700">{fmtText(value)}</span>;
+            // the cell is one line (cut with an ellipsis); the full text is on hover
+            return (
+              <span className="text-slate-700" title={fmtText(value)}>
+                {fmtText(value)}
+              </span>
+            );
         }
       },
     };

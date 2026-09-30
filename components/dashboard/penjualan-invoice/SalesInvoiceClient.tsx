@@ -20,6 +20,7 @@ import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { listSalesInvoices, deleteSalesInvoice, type SalesInvoice, type SalesInvoiceKind } from "@/services/salesInvoiceService";
 import { downloadDocumentPdf, downloadInvoicesZip } from "@/services/pdfService";
 import { listAllMitra, type Mitra } from "@/services/mitraService";
@@ -56,7 +57,7 @@ function currentView(p: GetAllPayload): View {
 const TABLE_KEY: Record<SalesInvoiceKind, string> = { invoice: "sales-invoices", down_payment: "sales-invoices-dp" };
 const BASE_PATH: Record<SalesInvoiceKind, string> = { invoice: "/dashboard/penjualan/invoice", down_payment: "/dashboard/penjualan/uang-muka" };
 
-const DEFAULT_VISIBLE = ["number", "mitra_id", "date", "due_date", "status", "grand_total", "outstanding"];
+const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "due_date", "status", "grand_total", "outstanding"];
 
 export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind }) {
   const tr = useTr();
@@ -88,8 +89,6 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
     listAllSalespersons().then(setSalespersons).catch(() => setSalespersons([]));
   }, []);
 
-  const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
-
   const isDP = kind === "down_payment";
   const title = isDP ? tr("Invoice Uang Muka", "Down Payment Invoices") : tr("Invoice Penjualan", "Sales Invoices");
   const description = isDP
@@ -108,7 +107,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
   const SPECS: ColumnSpec<TableRow>[] = useMemo(
     () => [
       { id: "number", header: tr("No. Invoice", "Invoice No."), kind: "mono" },
-      { id: "mitra_id", header: tr("Mitra", "Partner"), noSort: true, render: (v) => <span className="font-medium text-slate-800">{mitraNameByID.get(String(v ?? "")) ?? "—"}</span> },
+      { id: "mitra_id", header: tr("Mitra", "Partner"), noSort: true, render: (_v, row) => <span className="font-medium text-slate-800">{partnerName(row)}</span> },
       { id: "date", header: tr("Tanggal", "Date"), kind: "date" },
       {
         id: "due_date",
@@ -126,8 +125,8 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         },
       },
       { id: "status", header: "Status", render: (_v, row) => <InvoiceStatusBadge invoice={row as unknown as SalesInvoice} /> },
-      { id: "payment_status", header: tr("Status Bayar", "Payment Status"), render: (_v, row) => <InvoiceStatusBadge invoice={row as unknown as SalesInvoice} /> },
       { id: "grand_total", header: "Total", align: "right", render: (v) => <span className="font-medium tabular-nums text-slate-900">{money.format(Number(v ?? 0))}</span> },
+      { id: "paid_amount", header: tr("Dibayar", "Paid"), align: "right", render: (v) => <span className="tabular-nums text-slate-700">{money.format(Number(v ?? 0))}</span> },
       {
         id: "outstanding",
         header: tr("Sisa Tagihan", "Outstanding"),
@@ -140,11 +139,16 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
           return <span className={out > 0 ? "font-medium tabular-nums text-slate-900" : "tabular-nums text-slate-500"}>{money.format(out)}</span>;
         },
       },
+      relColumn("sales_order_id", tr("Pesanan Penjualan", "Sales Order")),
+      relColumn("linked_invoice_id", tr("Invoice Tertaut", "Linked Invoice")),
+      relColumn("salesperson_id", tr("Sales", "Salesperson")),
+      { id: "contact_name", header: tr("Kontak", "Contact") },
+      ...auditColumns(tr),
       { id: "created_at", header: tr("Dibuat", "Created At"), kind: "datetime" },
     ],
     // labels are re-derived when the language changes
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mitraNameByID, language],
+    [language],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);

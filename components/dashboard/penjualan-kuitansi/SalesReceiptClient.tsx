@@ -16,13 +16,13 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import {
   listSalesReceipts,
   deleteSalesReceipt,
   PAYMENT_METHOD_LABEL,
   type SalesReceiptPaymentMethod,
 } from "@/services/salesReceiptService";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
 
 const TABLE_KEY = "sales-receipts";
 const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "payment_method", "amount"];
@@ -35,16 +35,8 @@ export default function SalesReceiptClient() {
   const canCreate = hasPermission(permissions, "invoice-receipt-create");
   const canUpdate = hasPermission(permissions, "invoice-receipt-update");
   const canDelete = hasPermission(permissions, "invoice-receipt-delete");
-
-  const [mitras, setMitras] = useState<Mitra[]>([]);
   const [confirm, setConfirm] = useState<{ id: string; number: string } | null>(null);
   const list = useMasterList(listSalesReceipts, {});
-
-  useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([]));
-  }, []);
-
-  const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
 
   const SPECS: ColumnSpec<TableRow>[] = useMemo(
     () => [
@@ -54,7 +46,7 @@ export default function SalesReceiptClient() {
         id: "mitra_id",
         header: "Partner",
         noSort: true,
-        render: (v) => mitraNameByID.get(String(v ?? "")) ?? "—",
+        render: (_v, row) => partnerName(row),
       },
       {
         id: "payment_method",
@@ -67,9 +59,11 @@ export default function SalesReceiptClient() {
         align: "right",
         render: (v) => <span className="font-mono">{money.format(Number(v ?? 0))}</span>,
       },
+      relColumn("bank_account_id", "Bank Account"),
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
-    [mitraNameByID],
+    [],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
@@ -114,7 +108,7 @@ export default function SalesReceiptClient() {
       columns={columns}
       data={list.data}
       availableColumns={list.columns}
-      attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+      attribute={DEFAULT_VISIBLE}
       columnLabel={(id) => LABELS[id] ?? id}
       meta={list.meta}
       params={list.params}

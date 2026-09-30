@@ -21,6 +21,7 @@ import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import InvoiceImportModal from "../shared/InvoiceImportModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { InvoiceStatusBadge, isOverdue, daysOverdue } from "../penjualan-invoice/statusBadges";
 import { formatDateStyle } from "@/utils/formatDate";
 import type { GetAllPayload } from "@/app/types/apiResponses";
@@ -35,7 +36,7 @@ const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR
 
 const TABLE_KEY = "purchase-invoices";
 const BASE_PATH = "/dashboard/pembelian/invoice";
-const DEFAULT_VISIBLE = ["number", "mitra_id", "date", "due_date", "status", "grand_total", "outstanding"];
+const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "due_date", "status", "grand_total", "outstanding"];
 
 // The same status views as Sales, as presets of server-side params. One control (Filters) owns them.
 type View = "all" | "draft" | "outstanding" | "overdue" | "paid" | "cancelled";
@@ -92,8 +93,6 @@ export default function PurchaseInvoiceClient() {
     listAllMitra().then(setMitras).catch(() => setMitras([]));
   }, []);
 
-  const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
-
   const goTo = (id: string) => router.push(`${BASE_PATH}/${id}`);
   const goToEdit = (id: string) => router.push(`${BASE_PATH}/${id}/edit`);
   const view = currentView(list.params);
@@ -107,7 +106,7 @@ export default function PurchaseInvoiceClient() {
         id: "mitra_id",
         header: "Partner",
         noSort: true,
-        render: (v) => mitraNameByID.get(String(v ?? "")) ?? "—",
+        render: (_v, row) => partnerName(row),
       },
       {
         id: "due_date",
@@ -131,6 +130,7 @@ export default function PurchaseInvoiceClient() {
         align: "right",
         render: (v) => <span className="font-medium tabular-nums text-slate-900">{money.format(Number(v ?? 0))}</span>,
       },
+      { id: "paid_amount", header: tr("Dibayar", "Paid"), align: "right", render: (v) => <span className="tabular-nums text-slate-700">{money.format(Number(v ?? 0))}</span> },
       {
         id: "outstanding",
         header: tr("Sisa Hutang", "Outstanding"),
@@ -143,10 +143,13 @@ export default function PurchaseInvoiceClient() {
           return <span className={out > 0 ? "font-medium tabular-nums text-slate-900" : "tabular-nums text-slate-500"}>{money.format(out)}</span>;
         },
       },
+      relColumn("purchase_order_id", "Purchase Order"),
+      { id: "contact_name", header: "Contact" },
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [mitraNameByID, language],
+    [language],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);

@@ -19,7 +19,7 @@ import UserStatusBadge from "./UserStatusBadge";
 import { useUserActions } from "./useUserActions";
 import { USERS_PATH } from "./InviteUserClient";
 
-const DEFAULT_VISIBLE = ["name", "email", "phone", "role", "status", "companies", "created_at"];
+const DEFAULT_VISIBLE = ["name", "email", "role", "status"];
 
 interface UserManagementClientProps {
   /** Embedded inside the Settings workspace (Settings → Users & Access → Users): no stat tiles, and
@@ -150,7 +150,7 @@ export default function UserManagementClient({ compact = false }: UserManagement
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => labels[id] ?? id}
         meta={list.meta}
         params={list.params}

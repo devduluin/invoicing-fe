@@ -15,6 +15,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns } from "@/components/masterTable/cells";
 import BankAccountFormModal from "./BankAccountFormModal";
 import { listBankAccounts, deleteBankAccount, type BankAccount } from "@/services/bankAccountService";
 
@@ -45,6 +46,7 @@ const SPECS: ColumnSpec<TableRow>[] = [
   { id: "branch", header: "Branch" },
   { id: "is_primary", header: "Primary", kind: "bool", boolLabels: ["Yes", "No"] },
   { id: "is_active", header: "Status", kind: "bool" },
+  ...auditColumns(),
   { id: "created_at", header: "Created At", kind: "datetime" },
 ];
 const LABELS = Object.fromEntries(SPECS.map((s) => [s.id, s.header]));
@@ -94,7 +96,7 @@ export default function BankAccountClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

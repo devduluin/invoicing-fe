@@ -19,11 +19,11 @@ import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { listGoodsReceipts, deleteGoodsReceipt } from "@/services/goodsReceiptService";
-import { listAllMitra, type Mitra } from "@/services/mitraService";
 
 const TABLE_KEY = "goods-receipts";
-const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "notes"];
+const DEFAULT_VISIBLE = ["number", "date", "mitra_id"];
 
 export default function GoodsReceiptClient() {
   const router = useRouter();
@@ -31,8 +31,6 @@ export default function GoodsReceiptClient() {
   const canCreate = hasPermission(permissions, "invoice-goods-receipt-create");
   const canUpdate = hasPermission(permissions, "invoice-goods-receipt-update");
   const canDelete = hasPermission(permissions, "invoice-goods-receipt-delete");
-
-  const [mitras, setMitras] = useState<Mitra[]>([]);
   const [confirm, setConfirm] = useState<{ id: string; number: string } | null>(null);
   const list = useMasterList(listGoodsReceipts, {});
   // Rows ticked in the table, for the "Choose Action" bulk menu.
@@ -51,12 +49,6 @@ export default function GoodsReceiptClient() {
     },
   });
 
-  useEffect(() => {
-    listAllMitra().then(setMitras).catch(() => setMitras([]));
-  }, []);
-
-  const mitraNameByID = useMemo(() => new Map(mitras.map((m) => [m.id, m.name])), [mitras]);
-
   const SPECS: ColumnSpec<TableRow>[] = useMemo(
     () => [
       { id: "number", header: "Receipt No.", kind: "mono" },
@@ -65,12 +57,14 @@ export default function GoodsReceiptClient() {
         id: "mitra_id",
         header: "Partner",
         noSort: true,
-        render: (v) => mitraNameByID.get(String(v ?? "")) ?? "—",
+        render: (_v, row) => partnerName(row),
       },
       { id: "notes", header: "Notes", noSort: true, render: (v) => htmlToPlainText(String(v ?? "")) || "—" },
+      relColumn("purchase_order_id", "Purchase Order"),
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
-    [mitraNameByID],
+    [],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
@@ -118,7 +112,7 @@ export default function GoodsReceiptClient() {
       columns={columns}
       data={list.data}
       availableColumns={list.columns}
-      attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+      attribute={DEFAULT_VISIBLE}
       columnLabel={(id) => LABELS[id] ?? id}
       meta={list.meta}
       params={list.params}

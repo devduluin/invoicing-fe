@@ -129,7 +129,7 @@ function RolesManager() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => labels[id] ?? id}
         meta={list.meta}
         params={list.params}

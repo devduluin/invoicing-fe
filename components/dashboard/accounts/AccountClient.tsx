@@ -14,6 +14,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, rel, relLabel } from "@/components/masterTable/cells";
 import AccountFormModal from "./AccountFormModal";
 import {
   listAccounts,
@@ -49,7 +50,6 @@ export default function AccountClient() {
     loadAll();
   }, []);
 
-  const codeByID = useMemo(() => new Map(allAccounts.map((a) => [a.id, a.code])), [allAccounts]);
 
   const SPECS: ColumnSpec<TableRow>[] = useMemo(
     () => [
@@ -68,13 +68,14 @@ export default function AccountClient() {
         id: "parent_id",
         header: "Parent",
         noSort: true,
-        render: (v) => (v ? codeByID.get(String(v)) ?? "—" : "—"),
+        render: (_v, row) => relLabel(rel(row, "parent_id")),
       },
       { id: "is_system", header: "Built-in", kind: "bool", boolLabels: ["Yes", "No"] },
       { id: "is_active", header: "Status", kind: "bool" },
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
-    [codeByID],
+    [],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
@@ -124,7 +125,7 @@ export default function AccountClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

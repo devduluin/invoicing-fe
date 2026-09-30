@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BookText, Plus } from "lucide-react";
 import toast from "@/lib/toast";
@@ -15,6 +15,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, rel, relLabel } from "@/components/masterTable/cells";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
   listJournalEntries,
@@ -23,10 +24,9 @@ import {
   type JournalEntry,
   type JournalEntryStatus,
 } from "@/services/journalService";
-import { listAllJournalBooks, type JournalBook } from "@/services/journalBookService";
 
 const TABLE_KEY = "journal-entries";
-const DEFAULT_VISIBLE = ["number", "date", "description", "status", "total_debit", "total_credit"];
+const DEFAULT_VISIBLE = ["number", "date", "description", "status", "total_debit"];
 
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
@@ -38,15 +38,10 @@ export default function JournalClient() {
   const canDelete = hasPermission(permissions, "invoice-journal-delete");
 
   const [confirm, setConfirm] = useState<JournalEntry | null>(null);
-  const [books, setBooks] = useState<JournalBook[]>([]);
 
   const list = useMasterList(listJournalEntries, {});
 
-  useEffect(() => {
-    listAllJournalBooks().then(setBooks).catch(() => setBooks([]));
-  }, []);
 
-  const bookNameByID = useMemo(() => new Map(books.map((b) => [b.id, b.name])), [books]);
 
   const goTo = (id: string) => router.push(`/dashboard/jurnal/${id}`);
 
@@ -59,7 +54,7 @@ export default function JournalClient() {
         id: "journal_book_id",
         header: "Journal Book",
         noSort: true,
-        render: (v) => bookNameByID.get(String(v ?? "")) ?? "—",
+        render: (_v, row) => relLabel(rel(row, "journal_book_id")),
       },
       {
         id: "status",
@@ -81,9 +76,10 @@ export default function JournalClient() {
         align: "right",
         render: (v) => <span className="font-mono">{money.format(Number(v ?? 0))}</span>,
       },
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
-    [bookNameByID],
+    [],
   );
   const LABELS = useMemo(() => Object.fromEntries(SPECS.map((s) => [s.id, s.header])), [SPECS]);
   const columns = useMemo(() => buildColumns(SPECS), [SPECS]);
@@ -125,7 +121,7 @@ export default function JournalClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}

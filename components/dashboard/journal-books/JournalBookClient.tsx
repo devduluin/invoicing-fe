@@ -14,6 +14,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { auditColumns, relColumn } from "@/components/masterTable/cells";
 import JournalBookFormModal from "./JournalBookFormModal";
 import {
   listJournalBooks,
@@ -69,6 +70,10 @@ export default function JournalBookClient() {
       { id: "code", header: "Code", kind: "mono" },
       { id: "type", header: "Type", render: (v) => JOURNAL_BOOK_TYPE_LABEL[v as JournalBookType] ?? String(v) },
       { id: "is_active", header: "Status", kind: "bool" },
+      relColumn("default_account_id", "Default Account"),
+      relColumn("default_debit_account_id", "Default Debit Account"),
+      relColumn("default_credit_account_id", "Default Credit Account"),
+      ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
     ],
     [],
@@ -109,7 +114,7 @@ export default function JournalBookClient() {
         columns={columns}
         data={list.data}
         availableColumns={list.columns}
-        attribute={list.attributes.length ? list.attributes : DEFAULT_VISIBLE}
+        attribute={DEFAULT_VISIBLE}
         columnLabel={(id) => LABELS[id] ?? id}
         meta={list.meta}
         params={list.params}
