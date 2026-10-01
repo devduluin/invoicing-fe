@@ -18,7 +18,7 @@ const todayISO = () => new Date().toISOString().slice(0, 10);
 const M = (v: number) => <span className="font-mono">{money.format(v)}</span>;
 
 const ROW_COLUMNS: ReportColumn<BalanceSheetRow>[] = [
-  { key: "code", header: "Code", render: (r) => <span className="font-mono text-primary-ink">{r.code || "—"}</span> },
+  { key: "code", header: "Code", render: (r) => <span className="font-mono text-primary-ink">{r.code || "-"}</span> },
   { key: "name", header: "Account Name", render: (r) => r.name },
   { key: "balance", header: "Balance", align: "right", render: (r) => <b>{M(r.balance)}</b> },
 ];
@@ -50,7 +50,7 @@ export default function BalanceSheetClient() {
       <PageHeader
         icon={Landmark}
         title="Balance Sheet"
-        description="Position of assets, liabilities, and equity as of a given date — computed from posted journal entries."
+        description="Position of assets, liabilities, and equity as of a given date, computed from posted journal entries."
         actions={
           data && (
             <StatusBadge label={data.is_balanced ? "Balanced" : "Not Balanced"} tone={data.is_balanced ? "success" : "danger"} icon={data.is_balanced ? CheckCircle2 : AlertCircle} />

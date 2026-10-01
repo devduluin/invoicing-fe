@@ -18,6 +18,7 @@ import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { lineItemDetails } from "@/lib/exportDetails";
 import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
@@ -179,7 +180,7 @@ export default function SalesOrderClient() {
           <PageHeader
             icon={Receipt}
             title="Sales Orders"
-            description="Record a sales agreement with a partner before invoicing — product lines are free text."
+            description="Record a sales agreement with a partner before invoicing. Product lines are free text."
             actions={
               <div className="flex items-center gap-2">
                 <BulkActionMenu selectedCount={selectedRows.length} actions={bulkActions} />
@@ -205,6 +206,9 @@ export default function SalesOrderClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={() => list.fetchAll({ details: true })}
+        exportDetails={lineItemDetails(tr)}
+        exportTitle="Sales Orders"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "date", order: "desc" }}

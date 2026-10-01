@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import toast from "@/lib/toast";
 
 import { FormModal } from "@/components/modal/FormModal";
-import { CheckboxField, FormField, Input, SearchableSelect } from "@/components/form";
+import { CheckboxField, FormField, Input, SearchableSelect, ToggleSwitch } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { listBanks, type Bank } from "@/services/metaService";
 import {
@@ -137,7 +137,7 @@ export default function BankAccountFormModal({
         label="Set as primary account"
         hint="Shown first on invoices"
       />
-      <CheckboxField checked={form.is_active} onChange={(v) => set("is_active", v)} label="Account is active" />
+      <ToggleSwitch checked={form.is_active} onChange={(v) => set("is_active", v)} label="Account is active" />
     </FormModal>
   );
 }

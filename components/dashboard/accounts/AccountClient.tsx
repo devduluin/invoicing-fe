@@ -59,7 +59,7 @@ export default function AccountClient() {
         header: "Account Name",
         render: (_v, row) => (
           <span className={row.is_system ? "font-semibold text-slate-700" : "text-slate-700"}>
-            {String(row.name ?? "—")}
+            {String(row.name ?? "-")}
           </span>
         ),
       },
@@ -131,6 +131,8 @@ export default function AccountClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={list.fetchAll}
+        exportTitle="Chart of Accounts"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "code", order: "asc" }}

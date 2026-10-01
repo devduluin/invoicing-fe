@@ -133,12 +133,12 @@ function VerifyMessage({ verify }: { verify: VerifyState }) {
         <AlertCircle className="mt-0.5 size-4 shrink-0" aria-hidden />
         {r.has_pending_invite
           ? tr(
-              "Email ini sudah diundang ke perusahaan ini dan belum diterima. Tidak ada undangan ganda — buka pengguna dari daftar lalu pilih Kirim ulang undangan.",
-              "This email is already invited to this company and hasn't accepted yet. No duplicate is created — open the user in the list and use Resend Invitation.",
+              "Email ini sudah diundang ke perusahaan ini dan belum diterima. Tidak ada undangan ganda. Buka pengguna dari daftar lalu pilih Kirim ulang undangan.",
+              "This email is already invited to this company and hasn't accepted yet. No duplicate is created. Open the user in the list and use Resend Invitation.",
             )
           : tr(
-              "Email ini sudah memiliki akses ke perusahaan ini. Tidak ada akun ganda yang dibuat — buka pengguna dari daftar untuk mengubah aksesnya.",
-              "This email already has access to this company. No duplicate account is created — open the user in the list to change their access.",
+              "Email ini sudah memiliki akses ke perusahaan ini. Tidak ada akun ganda yang dibuat. Buka pengguna dari daftar untuk mengubah aksesnya.",
+              "This email already has access to this company. No duplicate account is created. Open the user in the list to change their access.",
             )}
       </p>
     );

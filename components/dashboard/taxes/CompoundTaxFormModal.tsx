@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import toast from "@/lib/toast";
 
 import { FormModal } from "@/components/modal/FormModal";
-import { CheckboxField, FormField, Input, Select } from "@/components/form";
+import { FormField, Input, Select, ToggleSwitch } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { createCompoundTax, updateTax, type Tax } from "@/services/taxService";
 
@@ -140,7 +140,7 @@ export default function CompoundTaxFormModal({
             </p>
           )}
 
-          <CheckboxField checked={form.is_active} onChange={(v) => set("is_active", v)} label="Active" />
+          <ToggleSwitch checked={form.is_active} onChange={(v) => set("is_active", v)} label="Active" />
         </>
       )}
     </FormModal>

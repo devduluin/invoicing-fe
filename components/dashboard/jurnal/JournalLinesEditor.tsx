@@ -59,7 +59,7 @@ export function JournalLinesEditor({
   disabled = false,
   onMitraAdded,
 }: Props) {
-  const accountOptions = accounts.map((a) => ({ value: a.id, label: `${a.code} — ${a.name}` }));
+  const accountOptions = accounts.map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }));
   const mitraOptions = mitras.map((m) => ({ value: m.id, label: m.name }));
 
   const [addMitraForLine, setAddMitraForLine] = useState<string | null>(null);
@@ -165,7 +165,7 @@ export function JournalLinesEditor({
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border bg-slate-50/60 px-4 py-3">
         {disabled ? (
-          <span className="text-[11px] font-medium text-slate-400">This journal entry is already posted — view only.</span>
+          <span className="text-[11px] font-medium text-slate-400">This journal entry is already posted, view only.</span>
         ) : (
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" leftIcon={<Plus className="size-3.5" />} onClick={addRow}>

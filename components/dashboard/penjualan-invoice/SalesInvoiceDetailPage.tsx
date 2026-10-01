@@ -212,8 +212,8 @@ export default function SalesInvoiceDetailPage({ kind, id }: { kind: SalesInvoic
       <PageHeader
         title={invoice.number}
         description={tr(
-          `${kind === "invoice" ? "Invoice" : "Invoice uang muka"} untuk ${mitra?.name ?? "—"}`,
-          `${cfg.title} for ${mitra?.name ?? "—"}`,
+          `${kind === "invoice" ? "Invoice" : "Invoice uang muka"} untuk ${mitra?.name ?? "-"}`,
+          `${cfg.title} for ${mitra?.name ?? "-"}`,
         )}
         meta={<Status status={effective} label={statusLabels[effective]} />}
         actions={<DocumentHeaderActions mode="detail" pdfKind="sales-invoice" documentId={id} actions={headerActions} />}

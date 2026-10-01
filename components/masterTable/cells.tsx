@@ -16,21 +16,21 @@ export function rel(row: TableRow, column: string): Rel | undefined {
 /** How a related record reads in one line: a document by its number, a bank account by bank + number,
  *  anything with a code as "CODE · Name", otherwise its name. */
 export function relLabel(r: Rel | undefined): string {
-  if (!r) return "—";
+  if (!r) return "-";
   if (r.number) return r.number;
   if (r.bank_name) return [r.bank_name, r.account_number].filter(Boolean).join(" · ");
   if (r.code && r.name) return `${r.code} · ${r.name}`;
-  return r.name || r.code || "—";
+  return r.name || r.code || "-";
 }
 
 /** The partner of a document row (its name only — the code has its own place in the partner list). */
 export function partnerName(row: TableRow): string {
-  return rel(row, "mitra_id")?.name || "—";
+  return rel(row, "mitra_id")?.name || "-";
 }
 
 /** Who created the row. */
 export function createdByName(row: TableRow): string {
-  return rel(row, "created_by")?.name || "—";
+  return rel(row, "created_by")?.name || "-";
 }
 
 /** A column showing a resolved reference — off by default, offered in the column settings. */

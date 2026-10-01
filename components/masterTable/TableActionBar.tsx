@@ -2,9 +2,9 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import type { Table } from "@tanstack/react-table";
-import { RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
+import { Download, FileDown, FileSpreadsheet, FileText, Loader2, RefreshCw, Search, SlidersHorizontal, X } from "lucide-react";
 
-import { DropdownMenu, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useTr } from "@/lib/useTr";
 import ColumnVisibilityMenu from "./ColumnVisibilityMenu";
 
@@ -25,6 +25,9 @@ interface Props<TData> {
   filterSlot?: ReactNode;
   selectedCount?: number;
   onClearSelection?: () => void;
+  /** Export the table (Excel / CSV / PDF); hidden when absent */
+  onExport?: (format: "xlsx" | "csv" | "pdf") => void;
+  exporting?: boolean;
 }
 
 /** The strip at the top of the table: search on the left, filters/refresh/columns on the right. */
@@ -43,6 +46,8 @@ export default function TableActionBar<TData>({
   filterSlot,
   selectedCount = 0,
   onClearSelection,
+  onExport,
+  exporting = false,
 }: Props<TData>) {
   const tr = useTr();
   const [value, setValue] = useState(search);
@@ -90,6 +95,35 @@ export default function TableActionBar<TData>({
       )}
 
       <div className="ml-auto flex items-center gap-1.5">
+        {onExport && (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button
+                type="button"
+                disabled={exporting}
+                title={tr("Ekspor", "Export")}
+                className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg px-2.5 text-[13px] font-semibold text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-800 disabled:opacity-60 data-[state=open]:bg-slate-100"
+              >
+                {exporting ? <Loader2 className="size-4 animate-spin" /> : <Download className="size-4" />}
+                {/* {tr("Ekspor", "Export")} */}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48">
+              <DropdownMenuItem onSelect={() => onExport("xlsx")}>
+                <FileSpreadsheet className="size-4" aria-hidden />
+                Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onExport("csv")}>
+                <FileText className="size-4" aria-hidden />
+                CSV (.csv)
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onExport("pdf")}>
+                <FileDown className="size-4" aria-hidden />
+                PDF (.pdf)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
         <button
           type="button"
           onClick={onRefresh}

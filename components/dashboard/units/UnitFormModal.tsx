@@ -5,7 +5,7 @@ import toast from "@/lib/toast";
 import { Lock } from "lucide-react";
 
 import { FormModal } from "@/components/modal/FormModal";
-import { CheckboxField, FormField, Input } from "@/components/form";
+import { FormField, Input, ToggleSwitch } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { createUnit, updateUnit, type Unit } from "@/services/unitService";
 
@@ -59,7 +59,7 @@ export default function UnitFormModal({
         locked ? (
           <div className="flex items-start gap-2.5 border-b border-border bg-amber-50/70 px-5 py-2.5 text-[11px] text-amber-700">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
-            <p>Built-in unit. The name is locked — symbol and status can still be changed.</p>
+            <p>Built-in unit. The name is locked. Symbol and status can still be changed.</p>
           </div>
         ) : null
       }
@@ -87,7 +87,7 @@ export default function UnitFormModal({
         </FormField>
       </div>
       <div className="mt-4">
-        <CheckboxField
+        <ToggleSwitch
           checked={form.is_active}
           onChange={(v) => setForm((f) => ({ ...f, is_active: v }))}
           label="Active"

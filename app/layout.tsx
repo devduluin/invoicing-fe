@@ -20,7 +20,7 @@ export const metadata: Metadata = {
     template: "%s | Duluin Invoice",
   },
   description:
-    "Invoicing and financial record-keeping for businesses — sales, purchases, and standard accounting financial reports.",
+    "Invoicing and financial record-keeping for businesses: sales, purchases, and standard accounting financial reports.",
   applicationName: "Duluin Invoice",
   manifest: "/manifest.webmanifest",
   robots: isPublicProduction()

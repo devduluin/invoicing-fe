@@ -8,7 +8,7 @@ describe("roleLabel", () => {
     expect(roleLabel("Kasir")).toBe("Kasir");
   });
   it("handles empty", () => {
-    expect(roleLabel("")).toBe("—");
+    expect(roleLabel("")).toBe("-");
   });
 });
 

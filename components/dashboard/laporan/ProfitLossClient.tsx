@@ -43,7 +43,7 @@ export default function ProfitLossClient() {
       <PageHeader
         icon={TrendingUp}
         title="Profit & Loss"
-        description="Income and expenses for a given period — computed from posted journal entries."
+        description="Income and expenses for a given period, computed from posted journal entries."
       />
 
       <Card>

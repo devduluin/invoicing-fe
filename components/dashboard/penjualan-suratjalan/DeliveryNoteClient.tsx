@@ -19,13 +19,16 @@ import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { shipmentLineDetails } from "@/lib/exportDetails";
 import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { listDeliveryNotes, deleteDeliveryNote } from "@/services/deliveryNoteService";
+import { useTr } from "@/lib/useTr";
 
 const TABLE_KEY = "delivery-notes";
 const DEFAULT_VISIBLE = ["number", "date", "mitra_id"];
 
 export default function DeliveryNoteClient() {
+  const tr = useTr();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-delivery-note-create");
@@ -59,7 +62,7 @@ export default function DeliveryNoteClient() {
         noSort: true,
         render: (_v, row) => partnerName(row),
       },
-      { id: "notes", header: "Notes", noSort: true, render: (v) => htmlToPlainText(String(v ?? "")) || "—" },
+      { id: "notes", header: "Notes", noSort: true, render: (v) => htmlToPlainText(String(v ?? "")) || "-" },
       relColumn("sales_order_id", "Sales Order"),
       relColumn("sales_invoice_id", "Sales Invoice"),
       ...auditColumns(),
@@ -119,6 +122,9 @@ export default function DeliveryNoteClient() {
       params={list.params}
       updateParams={list.updateParams}
       onRefresh={list.refresh}
+      exportRows={() => list.fetchAll({ details: true })}
+      exportDetails={shipmentLineDetails(tr)}
+      exportTitle="Delivery Notes"
       loading={list.loading}
       error={list.error}
       defaultSort={{ column: "date", order: "desc" }}

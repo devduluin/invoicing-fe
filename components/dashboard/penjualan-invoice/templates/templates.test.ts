@@ -77,7 +77,7 @@ describe("buildInvoiceView — the shared, template-agnostic data", () => {
   it("formats lines: quantity, discount as % or Rp, tax names", () => {
     const [a, b] = view().lines;
     expect(a).toMatchObject({ name: "Reimbursement Statement", quantity: "2", price: "250.000", discount: "5%", tax: "PPn 10%", amount: "522.500" });
-    expect(b).toMatchObject({ discount: "Rp2.000", tax: "—", amount: "25.000" });
+    expect(b).toMatchObject({ discount: "Rp2.000", tax: "-", amount: "25.000" });
   });
 
   it("switches labels with the language", () => {

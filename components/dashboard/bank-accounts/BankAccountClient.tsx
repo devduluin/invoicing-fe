@@ -28,7 +28,7 @@ const SPECS: ColumnSpec<TableRow>[] = [
     header: "Bank",
     render: (_v, row) => (
       <div className="flex items-center gap-2">
-        <span className="font-semibold text-slate-700">{String(row.bank_name ?? "—")}</span>
+        <span className="font-semibold text-slate-700">{String(row.bank_name ?? "-")}</span>
         {row.bank_code ? (
           <span className="font-mono text-[11px] text-slate-400">{String(row.bank_code)}</span>
         ) : null}
@@ -102,6 +102,8 @@ export default function BankAccountClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={list.fetchAll}
+        exportTitle="Bank Accounts"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "bank_name", order: "asc" }}

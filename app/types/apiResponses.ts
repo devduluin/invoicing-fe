@@ -57,6 +57,8 @@ export type GetAllPayload = {
   is_compound?: "true" | "false" | "";
   mitra_id?: string;
   salesperson_id?: string;
+  /** "details" — also return each record's lines / contact persons (exports) */
+  with?: "details";
   sales_order_id?: string;
   sales_invoice_id?: string;
   purchase_invoice_id?: string;

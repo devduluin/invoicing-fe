@@ -258,7 +258,7 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
 
   const bankOptions = bankAccounts.map((b) => ({
     value: b.id,
-    label: `${b.bank_name} — ${b.account_number}${b.is_primary ? " (Primary)" : ""}`,
+    label: `${b.bank_name} · ${b.account_number}${b.is_primary ? " (Primary)" : ""}`,
   }));
 
   if (loading) {
@@ -388,10 +388,10 @@ export default function PurchaseReceiptFormPage({ mode = "create", id }: { mode?
                         placeholder="Select invoice…"
                       />
                       <span className="text-right font-mono text-xs text-slate-600">
-                        {inv ? money.format(inv.grand_total) : "—"}
+                        {inv ? money.format(inv.grand_total) : "-"}
                       </span>
                       <span className="text-right font-mono text-xs text-slate-600">
-                        {inv ? money.format(remainingOf(inv)) : "—"}
+                        {inv ? money.format(remainingOf(inv)) : "-"}
                       </span>
                       <NumberSeparatorInput
                         value={row.amount}

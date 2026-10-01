@@ -88,7 +88,7 @@ export default function OnboardingWizard() {
     try {
       const res = await submitOnboarding(draftToPayload(draft));
       if (res.failed_invites?.length) {
-        toast.error(`${res.failed_invites.length} invitation(s) failed to send — you can retry from the Team menu.`);
+        toast.error(`${res.failed_invites.length} invitation(s) failed to send. You can retry from the Team menu.`);
       }
       // The company just created is the active one from now on.
       setActiveCompanyCookie(res.company.id, getRootCookieDomain());

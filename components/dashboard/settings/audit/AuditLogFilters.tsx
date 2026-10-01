@@ -4,7 +4,7 @@ import * as Popover from "@radix-ui/react-popover";
 import { ListFilter } from "lucide-react";
 
 import { Button } from "@/components/ui";
-import { DatePickerInput, FormField, Select } from "@/components/form";
+import { DatePickerInput, FormField, SearchableSelect } from "@/components/form";
 import { useTr } from "@/lib/useTr";
 import { cn } from "@/lib/utils";
 import { AUDIT_ACTION_FILTER_OPTIONS, AUDIT_MODULES } from "@/lib/auditTaxonomy";
@@ -52,19 +52,21 @@ export default function AuditLogFilters({ value, onChange }: { value: AuditLogFi
               </FormField>
             </div>
             <FormField label={tr("Aksi", "Action")}>
-              <Select
+              <SearchableSelect
                 value={value.action}
                 onChange={(v) => set({ action: v })}
-                clearable
+                searchPlaceholder={tr("Cari…", "Search…")}
+                emptyText={tr("Tidak ditemukan", "Not found")}
                 placeholder={tr("Semua aksi", "All actions")}
                 options={AUDIT_ACTION_FILTER_OPTIONS.map((o) => ({ value: o.value, label: tr(o.label.id, o.label.en) }))}
               />
             </FormField>
             <FormField label={tr("Modul", "Module")}>
-              <Select
+              <SearchableSelect
                 value={value.module}
                 onChange={(v) => set({ module: v })}
-                clearable
+                searchPlaceholder={tr("Cari…", "Search…")}
+                emptyText={tr("Tidak ditemukan", "Not found")}
                 placeholder={tr("Semua modul", "All modules")}
                 options={AUDIT_MODULES.map((m) => ({ value: m.value, label: tr(m.label.id, m.label.en) }))}
               />

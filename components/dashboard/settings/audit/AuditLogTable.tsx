@@ -93,8 +93,8 @@ export default function AuditLogTable({
                 <td className="max-w-[280px] truncate px-3.5 py-2.5 align-middle text-[13px] text-slate-700" title={e.description}>
                   {e.description}
                 </td>
-                <td className="px-3.5 py-2.5 align-middle text-[13px] text-slate-600">{e.entity_name || "—"}</td>
-                <td className="px-3.5 py-2.5 align-middle font-mono text-[12px] text-slate-500">{e.ip_address || "—"}</td>
+                <td className="px-3.5 py-2.5 align-middle text-[13px] text-slate-600">{e.entity_name || "-"}</td>
+                <td className="px-3.5 py-2.5 align-middle font-mono text-[12px] text-slate-500">{e.ip_address || "-"}</td>
                 <td className="px-3.5 py-1.5" onClick={(ev) => ev.stopPropagation()}>
                   <div className="flex justify-end">
                     <RowActionDropdown onView={() => onOpen(e.id)} />

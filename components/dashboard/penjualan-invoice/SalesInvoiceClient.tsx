@@ -20,6 +20,7 @@ import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { lineItemDetails } from "@/lib/exportDetails";
 import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { listSalesInvoices, deleteSalesInvoice, type SalesInvoice, type SalesInvoiceKind } from "@/services/salesInvoiceService";
 import { downloadDocumentPdf, downloadInvoicesZip } from "@/services/pdfService";
@@ -93,7 +94,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
   const title = isDP ? tr("Invoice Uang Muka", "Down Payment Invoices") : tr("Invoice Penjualan", "Sales Invoices");
   const description = isDP
     ? tr("Tagih mitra untuk uang muka sebelum barang/jasa dikirim.", "Bill a partner for a down payment before goods/services are delivered.")
-    : tr("Tagih mitra atas barang/jasa yang dijual — dibuat langsung atau dari pesanan penjualan.", "Bill a partner for products/services sold — created directly or from a sales order.");
+    : tr("Tagih mitra atas barang/jasa yang dijual, dibuat langsung atau dari pesanan penjualan.", "Bill a partner for products/services sold, created directly or from a sales order.");
   const createLabel = isDP ? tr("Buat Invoice Uang Muka", "New Down Payment") : tr("Buat Invoice", "New Invoice");
 
   const goTo = (id: string) => router.push(`${basePath}/${id}`);
@@ -114,7 +115,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         header: tr("Jatuh Tempo", "Due Date"),
         render: (v, row) => {
           const inv = row as unknown as SalesInvoice;
-          if (!v) return <span className="text-slate-400">—</span>;
+          if (!v) return <span className="text-slate-400">-</span>;
           const late = isOverdue(inv);
           return (
             <span className={late ? "font-medium text-slate-900" : "text-slate-600"}>
@@ -134,7 +135,7 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         noSort: true,
         render: (_v, row) => {
           const inv = row as unknown as SalesInvoice;
-          if (inv.status !== "confirmed") return <span className="text-slate-400">—</span>;
+          if (inv.status !== "confirmed") return <span className="text-slate-400">-</span>;
           const out = inv.outstanding_amount ?? Math.max(0, inv.grand_total - inv.paid_amount);
           return <span className={out > 0 ? "font-medium tabular-nums text-slate-900" : "tabular-nums text-slate-500"}>{money.format(out)}</span>;
         },
@@ -257,6 +258,9 @@ export default function SalesInvoiceClient({ kind }: { kind: SalesInvoiceKind })
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={() => list.fetchAll({ details: true })}
+        exportDetails={lineItemDetails(tr)}
+        exportTitle={title}
         loading={list.loading}
         error={list.error}
         // ONE filter entry point: status, partner and anything else live in the Filters popover.

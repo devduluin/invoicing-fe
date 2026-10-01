@@ -110,7 +110,7 @@ export default function DownPaymentInvoiceChoiceModal({ onClose, kind = "down_pa
             description={
               isInvoice
                 ? tr("Buat invoice kosong. Pesanan bersifat opsional dan bisa dihubungkan di formulir.", "Start a blank invoice. The order is optional and can be linked in the form.")
-                : tr("Buat uang muka baru tanpa sumber — bersifat opsional.", "Create a new down payment with no source; a source is optional.")
+                : tr("Buat uang muka baru tanpa sumber, bersifat opsional.", "Create a new down payment with no source; a source is optional.")
             }
             onClick={createNew}
           />

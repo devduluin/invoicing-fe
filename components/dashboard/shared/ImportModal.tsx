@@ -223,7 +223,7 @@ export default function ImportModal<T>({
               <p className="flex items-center gap-1.5 text-[13px] font-semibold text-destructive">
                 <AlertCircle className="size-4 shrink-0" />
                 {parsed.errors.length && !parsed.fatal
-                  ? tr(`${parsed.errors.length} masalah ditemukan — perbaiki di file lalu unggah ulang`, `${parsed.errors.length} problems found — fix them in the file and upload it again`)
+                  ? tr(`${parsed.errors.length} masalah ditemukan. Perbaiki di file lalu unggah ulang`, `${parsed.errors.length} problems found. Fix them in the file and upload it again`)
                   : tr("File belum bisa diimpor", "The file can't be imported yet")}
               </p>
               <ul className="mt-2 max-h-56 list-disc space-y-1 overflow-y-auto pl-5 text-[13px] text-slate-700">

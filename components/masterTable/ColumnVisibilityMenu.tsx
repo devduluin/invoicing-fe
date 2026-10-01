@@ -121,7 +121,7 @@ export default function ColumnVisibilityMenu<TData>({
             onToggle={toggle}
           />
         ) : (
-          <ControlsTab settings={tableSettings} onChange={onControlChange} locked={forceShowCheckbox ? { showCheckbox: "Always on here — used by the bulk actions" } : undefined} />
+          <ControlsTab settings={tableSettings} onChange={onControlChange} locked={forceShowCheckbox ? { showCheckbox: "Always on here, used by the bulk actions" } : undefined} />
         )}
       </div>
 

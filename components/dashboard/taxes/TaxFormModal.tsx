@@ -5,7 +5,7 @@ import toast from "@/lib/toast";
 import { Lock } from "lucide-react";
 
 import { FormModal } from "@/components/modal/FormModal";
-import { CheckboxField, FormField, Input, Select, SearchableSelect } from "@/components/form";
+import { FormField, Input, Select, SearchableSelect, ToggleSwitch } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import type { Account } from "@/services/accountService";
 import {
@@ -117,7 +117,7 @@ export default function TaxFormModal({
         locked ? (
           <div className="flex items-start gap-2.5 border-b border-border bg-slate-50 px-5 py-2.5 text-xs text-slate-600">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
-            <p>Built-in system tax. Name & kind are locked — rate, method, accounts, and status can still be changed.</p>
+            <p>Built-in system tax. Name & kind are locked. Rate, method, accounts, and status can still be changed.</p>
           </div>
         ) : null
       }
@@ -192,7 +192,7 @@ export default function TaxFormModal({
         </div>
       </div>
 
-      <CheckboxField
+      <ToggleSwitch
         checked={form.is_active}
         onChange={(v) => set("is_active", v)}
         label="Active"

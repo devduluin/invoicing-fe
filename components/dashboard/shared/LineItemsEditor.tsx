@@ -415,7 +415,7 @@ export function LineItemsEditor({
 
       <div className="border-t border-border bg-slate-50/60 px-4 py-3">
         {disabled ? (
-          <span className="text-[13px] text-slate-500">{disabledMessage ?? tr("Dokumen ini sudah diterbitkan/dibatalkan — hanya bisa dilihat.", "This document is already confirmed/cancelled — view only.")}</span>
+          <span className="text-[13px] text-slate-500">{disabledMessage ?? tr("Dokumen ini sudah diterbitkan/dibatalkan, hanya bisa dilihat.", "This document is already confirmed/cancelled, view only.")}</span>
         ) : (
           <Button variant="outline" size="sm" leftIcon={<Plus className="size-4" />} onClick={addRow}>
             {tr("Tambah Baris", "Add Line")}

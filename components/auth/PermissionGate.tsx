@@ -64,8 +64,8 @@ function IdentityLoadError() {
       </h2>
       <p className="mx-auto max-w-sm text-sm text-muted-foreground">
         {isIndonesian
-          ? "Layanan sedang tidak dapat dijangkau. Anda tidak keluar — coba lagi."
-          : "The service couldn't be reached. You're still signed in — try again."}
+          ? "Layanan sedang tidak dapat dijangkau. Anda masih masuk, coba lagi."
+          : "The service couldn't be reached. You're still signed in. Try again."}
       </p>
       <Button variant="outline" leftIcon={<RefreshCw className="size-4" />} onClick={() => void reloadIdentity()}>
         {isIndonesian ? "Coba lagi" : "Retry"}

@@ -19,13 +19,16 @@ import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { shipmentLineDetails } from "@/lib/exportDetails";
 import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { listGoodsReceipts, deleteGoodsReceipt } from "@/services/goodsReceiptService";
+import { useTr } from "@/lib/useTr";
 
 const TABLE_KEY = "goods-receipts";
 const DEFAULT_VISIBLE = ["number", "date", "mitra_id"];
 
 export default function GoodsReceiptClient() {
+  const tr = useTr();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-goods-receipt-create");
@@ -59,7 +62,7 @@ export default function GoodsReceiptClient() {
         noSort: true,
         render: (_v, row) => partnerName(row),
       },
-      { id: "notes", header: "Notes", noSort: true, render: (v) => htmlToPlainText(String(v ?? "")) || "—" },
+      { id: "notes", header: "Notes", noSort: true, render: (v) => htmlToPlainText(String(v ?? "")) || "-" },
       relColumn("purchase_order_id", "Purchase Order"),
       ...auditColumns(),
       { id: "created_at", header: "Created At", kind: "datetime" },
@@ -118,6 +121,9 @@ export default function GoodsReceiptClient() {
       params={list.params}
       updateParams={list.updateParams}
       onRefresh={list.refresh}
+      exportRows={() => list.fetchAll({ details: true })}
+      exportDetails={shipmentLineDetails(tr)}
+      exportTitle="Goods Receipts"
       loading={list.loading}
       error={list.error}
       defaultSort={{ column: "date", order: "desc" }}

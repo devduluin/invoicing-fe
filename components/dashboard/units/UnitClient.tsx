@@ -88,6 +88,8 @@ export default function UnitClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={list.fetchAll}
+        exportTitle="Units"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "name", order: "asc" }}

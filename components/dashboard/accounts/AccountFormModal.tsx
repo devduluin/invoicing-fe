@@ -5,7 +5,7 @@ import toast from "@/lib/toast";
 import { Lock } from "lucide-react";
 
 import { FormModal } from "@/components/modal/FormModal";
-import { CheckboxField, FormField, Input, Select, SearchableSelect } from "@/components/form";
+import { FormField, Input, Select, SearchableSelect, ToggleSwitch } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import {
   createAccount,
@@ -115,7 +115,7 @@ export default function AccountFormModal({
           <div className="flex items-start gap-2.5 border-b border-border bg-slate-50 px-5 py-2.5 text-xs text-slate-600">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <p>
-              Built-in system account. Its code and classification are locked — name, parent,
+              Built-in system account. Its code and classification are locked. Name, parent,
               and status can still be changed.
             </p>
           </div>
@@ -135,7 +135,7 @@ export default function AccountFormModal({
         </FormField>
         <FormField label="Account Name" required error={errors.name}>
           <Input
-            placeholder="e.g. Bank BCA — Operational"
+            placeholder="e.g. Bank BCA Operational"
             value={form.name}
             autoFocus
             error={!!errors.name}
@@ -158,13 +158,13 @@ export default function AccountFormModal({
             value={form.parent_id}
             options={parentOptions}
             onChange={(v) => set("parent_id", v)}
-            placeholder="— Top-level account —"
+            placeholder="Top-level account"
             searchPlaceholder="Search accounts…"
           />
         </FormField>
       </div>
 
-      <CheckboxField checked={form.is_active} onChange={(v) => set("is_active", v)} label="Account is active" />
+      <ToggleSwitch checked={form.is_active} onChange={(v) => set("is_active", v)} label="Account is active" />
     </FormModal>
   );
 }

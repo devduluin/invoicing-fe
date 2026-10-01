@@ -23,6 +23,13 @@ import type { LucideIcon } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { useTr } from "@/lib/useTr";
+import toast from "@/lib/toast";
+import { extractApiError } from "@/lib/apiError";
+import { downloadTable, type ExportFormat } from "@/lib/tableExport";
+import type { ColumnMeta } from "./columnFactory";
+import type { ExportDetails } from "@/lib/exportDetails";
+import { createRoot } from "react-dom/client";
+import { flushSync } from "react-dom";
 import type { GetAllPayload, TableMeta, TableRow } from "@/app/types/apiResponses";
 import { useTableColumnStore, visibilityKey } from "@/store/useTableColumnStore";
 import { ActiveFilterChips, FilterPopover, type FilterConfig } from "@/components/layouts/page/FilterPanel";
@@ -75,6 +82,14 @@ export interface MasterTableProps<T extends TableRow> {
   /** Fires with the full row objects currently checked, any time the selection changes (a row
    *  toggled, select-all, cleared, or the page/filter reset it). */
   onSelectionChange?: (rows: T[]) => void;
+  /** Every row the current search / filters / sort match (all pages) — enables Export. Without it the
+   *  export takes the rows on screen. */
+  exportRows?: () => Promise<T[]>;
+  /** Export title and file name, e.g. "Sales Invoices" → sales-invoices_2026-10-01.xlsx */
+  exportTitle?: string;
+  /** What each record expands to in the export (line items, contact persons…): one export row per
+   *  detail, the record's columns repeated — rows from `exportRows` must then carry the details. */
+  exportDetails?: ExportDetails;
 }
 
 const EMPTY_VIS: Record<string, boolean> = {};
@@ -109,6 +124,9 @@ export default function MasterTable<T extends TableRow>({
   getRowId,
   forceShowCheckbox,
   onSelectionChange,
+  exportRows,
+  exportTitle,
+  exportDetails,
 }: MasterTableProps<T>) {
   const tr = useTr();
   const activeFilterCount = filters?.filter((f) => f.value).length ?? 0;
@@ -127,6 +145,44 @@ export default function MasterTable<T extends TableRow>({
     const shown = new Set(dataColumnIds);
     return Array.from(new Set(availableColumns?.length ? availableColumns : dataColumnIds)).filter((id) => shown.has(id));
   }, [availableColumns, dataColumnIds]);
+
+  // Export: the visible columns in their current order, every row matching the current view, each
+  // cell as the text the table shows (rendered by the same cell components, so statuses, dates and
+  // amounts read exactly as on screen).
+  const [exporting, setExporting] = useState(false);
+  const runExport = async (format: ExportFormat) => {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const rows = exportRows ? await exportRows() : data;
+      const cols = table.getVisibleLeafColumns();
+      const metaOf = (c: (typeof cols)[number]) => c.columnDef.meta as ColumnMeta<T> | undefined;
+      const text = await cellsAsText(
+        rows.map((r) => cols.map((c) => metaOf(c)?.exportCell(r) ?? String((r as Record<string, unknown>)[c.id] ?? ""))),
+      );
+      const headColumns = cols.map((c) => ({ header: labelFor(c.id), align: metaOf(c)?.align }));
+      // with details: one row per detail (line item, contact person…), the record's cells repeated
+      const outRows = exportDetails
+        ? rows.flatMap((r, i) => {
+            const details = exportDetails.rows(r);
+            return details.length ? details.map((d) => [...text[i], ...d]) : [[...text[i], ...exportDetails.columns.map(() => "")]];
+          })
+        : text;
+      await downloadTable(
+        {
+          title: exportTitle || tableKey,
+          columns: exportDetails ? [...headColumns, ...exportDetails.columns] : headColumns,
+          rows: outRows,
+        },
+        format,
+      );
+      toast.success(tr(`${rows.length} baris diekspor`, `${rows.length} rows exported`));
+    } catch (err) {
+      toast.error(extractApiError(err, tr("Gagal mengekspor data", "Export failed")));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const labelFor = useMemo(
     () => columnLabel ?? ((id: string) => humanize(id)),
@@ -268,6 +324,8 @@ export default function MasterTable<T extends TableRow>({
               ) : undefined
             }
             selectedCount={selectedCount}
+            onExport={runExport}
+            exporting={exporting}
             onClearSelection={() => setSelected({})}
           />
           {filters?.length ? (
@@ -451,4 +509,36 @@ function humanize(id: string): string {
     .replace(/\bid\b/i, "")
     .replace(/\b\w/g, (c) => c.toUpperCase())
     .trim();
+}
+
+/** Renders cells off-screen with the app's own React (so hooks and the current language apply) and
+ *  reads back their text, one line per cell. */
+async function cellsAsText(cells: ReactNode[][]): Promise<string[][]> {
+  const host = document.createElement("div");
+  host.style.cssText = "position:fixed;left:-99999px;top:0;visibility:hidden";
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  try {
+    flushSync(() =>
+      root.render(
+        <table>
+          <tbody>
+            {cells.map((row, i) => (
+              <tr key={i}>
+                {row.map((cell, j) => (
+                  <td key={j}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>,
+      ),
+    );
+    return Array.from(host.querySelectorAll("tr")).map((tr) =>
+      Array.from(tr.children).map((td) => (td.textContent ?? "").replace(/[ \t\r\n]+/g, " ").trim()),
+    );
+  } finally {
+    root.unmount();
+    host.remove();
+  }
 }

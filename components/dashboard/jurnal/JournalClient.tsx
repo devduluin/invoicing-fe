@@ -15,6 +15,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { journalLineDetails } from "@/lib/exportDetails";
 import { auditColumns, rel, relLabel } from "@/components/masterTable/cells";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
@@ -24,6 +25,7 @@ import {
   type JournalEntry,
   type JournalEntryStatus,
 } from "@/services/journalService";
+import { useTr } from "@/lib/useTr";
 
 const TABLE_KEY = "journal-entries";
 const DEFAULT_VISIBLE = ["number", "date", "description", "status", "total_debit"];
@@ -31,6 +33,7 @@ const DEFAULT_VISIBLE = ["number", "date", "description", "status", "total_debit
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
 export default function JournalClient() {
+  const tr = useTr();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-journal-create");
@@ -127,6 +130,9 @@ export default function JournalClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={() => list.fetchAll({ details: true })}
+        exportDetails={journalLineDetails(tr)}
+        exportTitle="Journal Entries"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "date", order: "desc" }}

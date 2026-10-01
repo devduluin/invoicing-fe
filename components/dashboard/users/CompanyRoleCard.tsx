@@ -28,7 +28,7 @@ export default function CompanyRoleCard({ companyName, roleId, roles, error, onR
         <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-primary text-white">
           <Building2 className="size-[18px]" aria-hidden />
         </span>
-        <span className="min-w-0 truncate text-[13px] font-semibold text-slate-900">{companyName || "—"}</span>
+        <span className="min-w-0 truncate text-[13px] font-semibold text-slate-900">{companyName || "-"}</span>
       </div>
       {roles?.status === "error" ? (
         <div className="flex items-center justify-between gap-2 text-[13px] text-rose-600">

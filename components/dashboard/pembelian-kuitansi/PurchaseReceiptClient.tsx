@@ -16,6 +16,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { allocationDetails } from "@/lib/exportDetails";
 import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import {
   listPurchaseReceipts,
@@ -23,6 +24,7 @@ import {
   PAYMENT_METHOD_LABEL,
   type PurchaseReceiptPaymentMethod,
 } from "@/services/purchaseReceiptService";
+import { useTr } from "@/lib/useTr";
 
 const TABLE_KEY = "purchase-receipts";
 const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "payment_method", "amount"];
@@ -30,6 +32,7 @@ const DEFAULT_VISIBLE = ["number", "date", "mitra_id", "payment_method", "amount
 const money = new Intl.NumberFormat("id-ID", { style: "currency", currency: "IDR", maximumFractionDigits: 0 });
 
 export default function PurchaseReceiptClient() {
+  const tr = useTr();
   const router = useRouter();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-purchase-receipt-create");
@@ -114,6 +117,9 @@ export default function PurchaseReceiptClient() {
       params={list.params}
       updateParams={list.updateParams}
       onRefresh={list.refresh}
+      exportRows={() => list.fetchAll({ details: true })}
+      exportDetails={allocationDetails(tr, "purchase")}
+      exportTitle="Purchase Receipts"
       loading={list.loading}
       error={list.error}
       defaultSort={{ column: "date", order: "desc" }}

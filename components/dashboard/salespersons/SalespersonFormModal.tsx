@@ -5,7 +5,7 @@ import toast from "@/lib/toast";
 import { AlertTriangle } from "lucide-react";
 
 import { FormModal } from "@/components/modal/FormModal";
-import { CheckboxField, FormField, Input, Select } from "@/components/form";
+import { FormField, Input, Select, ToggleSwitch } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import { useTr } from "@/lib/useTr";
 import {
@@ -70,7 +70,7 @@ export default function SalespersonFormModal({
   };
 
   const memberOptions = [
-    { value: "", label: tr("— Tidak ditautkan —", "— Not linked —") },
+    { value: "", label: tr("Tidak ditautkan", "Not linked") },
     ...(members ?? [])
       .filter((m) => !m.salesperson_id || m.salesperson_id === salesperson?.id)
       .map((m) => ({ value: m.user_id, label: m.name || m.email, hint: m.name ? m.email : undefined })),
@@ -174,7 +174,7 @@ export default function SalespersonFormModal({
           <Select value={form.user_id} options={memberOptions} onChange={(v) => linkMember(String(v ?? ""))} />
         </FormField>
       )}
-      <CheckboxField
+      <ToggleSwitch
         checked={form.is_active}
         onChange={(v) => set("is_active", v)}
         label={tr("Aktif", "Active")}

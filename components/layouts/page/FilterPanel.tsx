@@ -3,7 +3,7 @@
 import * as Popover from "@radix-ui/react-popover";
 import { ListFilter, X } from "lucide-react";
 
-import { FormField, Select, type SelectOption } from "@/components/form";
+import { FormField, SearchableSelect, type SelectOption } from "@/components/form";
 import { Button } from "@/components/ui/Button";
 import { useTr } from "@/lib/useTr";
 import { cn } from "@/lib/utils";
@@ -57,7 +57,14 @@ export function FilterPopover({
           <div className="space-y-3">
             {filters.map((f) => (
               <FormField key={f.key} label={f.label}>
-                <Select value={f.value} options={f.options} onChange={(v) => onChange(f.key, v)} placeholder={f.placeholder ?? tr("Semua", "All")} clearable />
+                <SearchableSelect
+                  value={f.value}
+                  options={f.options}
+                  onChange={(v) => onChange(f.key, v)}
+                  placeholder={f.placeholder ?? tr("Semua", "All")}
+                  searchPlaceholder={tr("Cari…", "Search…")}
+                  emptyText={tr("Tidak ditemukan", "Not found")}
+                />
               </FormField>
             ))}
           </div>

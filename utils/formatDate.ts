@@ -21,11 +21,11 @@ function parse(value: unknown): Date | null {
 /** "09 Sep 2026" */
 export function formatDateStyle(value: unknown): string {
   const d = parse(value);
-  return d ? dateFmt.format(d) : "—";
+  return d ? dateFmt.format(d) : "-";
 }
 
 /** "09 Sep 2026, 14.30" */
 export function formatDateTimeStyle(value: unknown): string {
   const d = parse(value);
-  return d ? dateTimeFmt.format(d) : "—";
+  return d ? dateTimeFmt.format(d) : "-";
 }

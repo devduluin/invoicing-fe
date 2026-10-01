@@ -15,6 +15,7 @@ import MasterTable from "@/components/masterTable/MasterTable";
 import RowActionDropdown from "@/components/masterTable/RowActionDropdown";
 import { ConfirmDeleteModal } from "@/components/modal/ConfirmDeleteModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { contactPersonDetails } from "@/lib/exportDetails";
 import { auditColumns, relColumn } from "@/components/masterTable/cells";
 import MitraTypeBadge from "./MitraTypeBadge";
 import MitraFormModal from "./MitraFormModal";
@@ -30,6 +31,7 @@ import {
   type Mitra,
   type MitraType,
 } from "@/services/mitraService";
+import { useTr } from "@/lib/useTr";
 
 const TABLE_KEY = "mitra";
 const DEFAULT_VISIBLE = ["code", "name", "contact_name", "type", "is_active"];
@@ -39,7 +41,7 @@ const SPECS: ColumnSpec<TableRow>[] = [
   {
     id: "name",
     header: "Name",
-    render: (_v, row) => <span className="font-semibold text-slate-700">{String(row.name ?? "—")}</span>,
+    render: (_v, row) => <span className="font-semibold text-slate-700">{String(row.name ?? "-")}</span>,
   },
   { id: "type", header: "Type", render: (v) => <MitraTypeBadge type={(v as MitraType) ?? "customer"} /> },
   { id: "email", header: "Email" },
@@ -56,6 +58,7 @@ const SPECS: ColumnSpec<TableRow>[] = [
 const LABELS = Object.fromEntries([...SPECS.map((s) => [s.id, s.header]), ["contact_name", "Contact (PIC)"]]);
 
 export default function MitraClient() {
+  const tr = useTr();
   const permissions = useAuthStore((s) => s.permissions);
   const canCreate = hasPermission(permissions, "invoice-mitra-create");
   const canUpdate = hasPermission(permissions, "invoice-mitra-update");
@@ -102,7 +105,7 @@ export default function MitraClient() {
             // one line: the PIC, with the number of contact persons after it (details on hover)
             return (
               <span title={n ? `${n} ${n === 1 ? "contact person" : "contact persons"}` : "No contact person"}>
-                <span className={v ? "text-slate-700" : "text-slate-400"}>{v ? String(v) : "—"}</span>
+                <span className={v ? "text-slate-700" : "text-slate-400"}>{v ? String(v) : "-"}</span>
                 {n > 1 && <span className="ml-1.5 text-xs text-slate-500">+{n - 1}</span>}
               </span>
             );
@@ -165,6 +168,9 @@ export default function MitraClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={() => list.fetchAll({ details: true })}
+        exportDetails={contactPersonDetails(tr)}
+        exportTitle="Partners"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "created_at", order: "desc" }}

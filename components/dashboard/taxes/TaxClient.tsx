@@ -68,7 +68,7 @@ export default function TaxClient() {
         render: (_v, row) => (
           <div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-slate-700">{String(row.name ?? "—")}</span>
+              <span className="font-semibold text-slate-700">{String(row.name ?? "-")}</span>
               {row.is_compound ? (
                 <span className="inline-flex rounded-md bg-secondary px-1.5 py-0.5 text-[10px] font-bold text-primary-ink">
                   Compound
@@ -93,13 +93,13 @@ export default function TaxClient() {
       {
         id: "kind",
         header: "Kind",
-        render: (v, row) => (row.is_compound ? "—" : TAX_KIND_LABEL[v as keyof typeof TAX_KIND_LABEL] ?? String(v)),
+        render: (v, row) => (row.is_compound ? "-" : TAX_KIND_LABEL[v as keyof typeof TAX_KIND_LABEL] ?? String(v)),
       },
       {
         id: "calc_method",
         header: "Method",
         render: (v, row) =>
-          row.is_compound ? "—" : (CALC_METHOD_LABEL[v as keyof typeof CALC_METHOD_LABEL] ?? "").split(" — ")[0],
+          row.is_compound ? "-" : (CALC_METHOD_LABEL[v as keyof typeof CALC_METHOD_LABEL] ?? "").split(" (")[0],
       },
       {
         id: "rate",
@@ -173,6 +173,8 @@ export default function TaxClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={list.fetchAll}
+        exportTitle="Taxes"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "name", order: "asc" }}

@@ -6,7 +6,7 @@ import toast from "@/lib/toast";
 
 import { Button } from "@/components/ui";
 import { Modal } from "@/components/modal/Modal";
-import { CheckboxField, FormField, Input, RadioField, Textarea } from "@/components/form";
+import { FormField, Input, RadioField, Textarea, ToggleSwitch } from "@/components/form";
 import { cn } from "@/lib/utils";
 import { localPhone } from "@/lib/phone";
 import { hasPermission, useAuthStore } from "@/store/useAuthStore";
@@ -71,8 +71,28 @@ export default function MitraFormModal({
     if (editing) return;
     getNextMitraCode().then(setNextCode).catch(() => setNextCode(""));
   }, [editing]);
-  // Other partners with the same name: shown once as a warning; saving again goes ahead.
+  // Other partners with the same name: a warning while typing (null = not checked yet). A namesake is
+  // allowed (branches, namesakes) — the warning is there so it's never by accident. Save also checks
+  // when the name hasn't been looked at yet (saved before the typing check landed).
   const [sameName, setSameName] = useState<Mitra[] | null>(null);
+  useEffect(() => {
+    const name = form.name.trim();
+    const unchanged = editing && name.toLowerCase() === (mitra?.name ?? "").trim().toLowerCase();
+    if (name.length < 2 || unchanged) {
+      setSameName(name.length < 2 ? null : []);
+      return;
+    }
+    let alive = true;
+    const t = setTimeout(() => {
+      findMitraByName(name, mitra?.id)
+        .then((rows) => alive && setSameName(rows))
+        .catch(() => alive && setSameName(null));
+    }, 400);
+    return () => {
+      alive = false;
+      clearTimeout(t);
+    };
+  }, [form.name, editing, mitra]);
   const [busy, setBusy] = useState(false);
   // Contact persons are part of this form: edited in place and saved (added / changed / removed)
   // together with the partner by the Save button; Cancel discards them.
@@ -169,7 +189,7 @@ export default function MitraFormModal({
     else if (!EMAIL_RE.test(form.email.trim())) next.email = "Invalid email format.";
     if (!form.phone.replace(/\D/g, "")) next.phone = "PIC phone is required.";
     if (companyCode.trim() && lookup === "notfound") next.company_code = "No Duluin company with this ID. Fix it or leave it empty.";
-    else if (companyCode.trim() && lookup === "loading") next.company_code = "Still checking this company code — try again in a moment.";
+    else if (companyCode.trim() && lookup === "loading") next.company_code = "Still checking this company code. Try again in a moment.";
     setErrors(next);
     if (Object.keys(next).length) {
       setTab("perusahaan");
@@ -319,7 +339,7 @@ export default function MitraFormModal({
                     lookup === "found"
                       ? editing
                         ? `Linked to ${linkedName}'s Duluin account.`
-                        : `Linked to ${linkedName}'s Duluin account. Its details were filled in and locked — clear the code to unlink and type them yourself.`
+                        : `Linked to ${linkedName}'s Duluin account. Its details were filled in and locked. Clear the code to unlink and type them yourself.`
                       : lookup === "notfound"
                         ? "No Duluin company with this code. Check it, or leave it empty."
                         : editing && savedCompanyCode
@@ -388,7 +408,7 @@ export default function MitraFormModal({
                         <li key={m.id}>{mitraLabel(m)}</li>
                       ))}
                     </ul>
-                    <p className="mt-1">Check it isn't the same partner. Save again to keep both.</p>
+                    <p className="mt-1">Check it isn&apos;t the same partner. You can still save. Both will be kept, told apart by their partner code.</p>
                   </div>
                 </div>
               )}
@@ -454,7 +474,7 @@ export default function MitraFormModal({
                 />
               </FormField>
 
-              <CheckboxField checked={form.is_active} onChange={(v) => set("is_active", v)} label="Partner is active" />
+              <ToggleSwitch checked={form.is_active} onChange={(v) => set("is_active", v)} label="Partner is active" />
             </form>
           </div>
         </div>

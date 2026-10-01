@@ -115,8 +115,8 @@ export function useBulkMasterActions<T extends Row>({
       open={deleteOpen}
       title={tr(`Hapus ${rows.length} ${noun.id}?`, `Delete ${rows.length} ${noun.en}?`)}
       description={tr(
-        "Yang masih dipakai di dokumen tidak bisa dihapus — nonaktifkan saja.",
-        "Any still used on documents can't be deleted — deactivate those instead.",
+        "Yang masih dipakai di dokumen tidak bisa dihapus, nonaktifkan saja.",
+        "Any still used on documents can't be deleted. Deactivate those instead.",
       )}
       onConfirm={() => run("delete", rows, 0)}
       onClose={() => setDeleteOpen(false)}

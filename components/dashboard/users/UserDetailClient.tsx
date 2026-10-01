@@ -15,7 +15,7 @@ import UserStatusBadge from "./UserStatusBadge";
 import { useUserActions } from "./useUserActions";
 import { USERS_LIST_PATH, USERS_PATH } from "./InviteUserClient";
 
-const dash = (v?: string | null) => (v ? v : "—");
+const dash = (v?: string | null) => (v ? v : "-");
 
 export default function UserDetailClient({ id }: { id: string }) {
   const tr = useTr();

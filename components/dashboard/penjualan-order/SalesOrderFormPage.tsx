@@ -195,7 +195,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
       contact_phone: contactInfo.phone,
       contact_email: contactInfo.email,
       attachment_data: attachmentData || undefined,
-      number: number.trim() || "—",
+      number: number.trim() || "-",
       date,
       
       ref_no: refNo.trim() || undefined,
@@ -466,7 +466,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
         title={isEdit ? tr("Ubah Pesanan Penjualan", "Edit Sales Order") : tr("Buat Pesanan Penjualan", "New Sales Order")}
         description={
           readOnly
-            ? tr("Dokumen ini sudah diterbitkan atau dibatalkan — hanya bisa dilihat.", "This document is issued or cancelled — view only.")
+            ? tr("Dokumen ini sudah diterbitkan atau dibatalkan, hanya bisa dilihat.", "This document is issued or cancelled, view only.")
             : tr("Isi informasi, tambahkan item, lalu simpan. Ringkasan dan template ada di sisi kanan.", "Fill in the details, add items, then save. Summary and template are on the right.")
         }
         meta={isEdit ? <Status status={status as StatusKey} label={SALES_ORDER_STATUS_LABEL[status]} /> : undefined}
@@ -585,7 +585,7 @@ export default function SalesOrderFormPage({ mode, id }: Props) {
             onChange={setLines}
             taxes={taxes}
             disabled={readOnly}
-            disabledMessage="This order is already confirmed/cancelled — view only."
+            disabledMessage="This order is already confirmed/cancelled, view only."
             additionalDiscount={{
               type: additionalDiscountType,
               value: additionalDiscountValue,

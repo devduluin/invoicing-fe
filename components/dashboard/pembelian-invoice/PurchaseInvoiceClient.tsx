@@ -21,6 +21,7 @@ import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import InvoiceImportModal from "../shared/InvoiceImportModal";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { lineItemDetails } from "@/lib/exportDetails";
 import { auditColumns, partnerName, relColumn } from "@/components/masterTable/cells";
 import { InvoiceStatusBadge, isOverdue, daysOverdue } from "../penjualan-invoice/statusBadges";
 import { formatDateStyle } from "@/utils/formatDate";
@@ -113,7 +114,7 @@ export default function PurchaseInvoiceClient() {
         header: tr("Jatuh Tempo", "Due Date"),
         render: (v, row) => {
           const inv = row as unknown as PurchaseInvoice;
-          if (!v) return <span className="text-slate-400">—</span>;
+          if (!v) return <span className="text-slate-400">-</span>;
           const late = isOverdue(inv);
           return (
             <span className={late ? "font-medium text-rose-700" : "text-slate-600"}>
@@ -138,7 +139,7 @@ export default function PurchaseInvoiceClient() {
         noSort: true,
         render: (_v, row) => {
           const inv = row as unknown as PurchaseInvoice;
-          if (inv.status !== "confirmed") return <span className="text-slate-400">—</span>;
+          if (inv.status !== "confirmed") return <span className="text-slate-400">-</span>;
           const out = Math.max(0, inv.grand_total - inv.paid_amount);
           return <span className={out > 0 ? "font-medium tabular-nums text-slate-900" : "tabular-nums text-slate-500"}>{money.format(out)}</span>;
         },
@@ -174,7 +175,7 @@ export default function PurchaseInvoiceClient() {
           <PageHeader
             icon={FileText}
             title="Purchase Invoices"
-            description="Bill from a supplier for products/services purchased — created directly or from a purchase order."
+            description="Bill from a supplier for products/services purchased, created directly or from a purchase order."
             actions={
               <div className="flex items-center gap-2">
                 <BulkActionMenu selectedCount={selectedRows.length} actions={bulk.actions} />
@@ -205,6 +206,9 @@ export default function PurchaseInvoiceClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={() => list.fetchAll({ details: true })}
+        exportDetails={lineItemDetails(tr)}
+        exportTitle="Purchase Invoices"
         loading={list.loading}
         error={list.error}
         filters={[

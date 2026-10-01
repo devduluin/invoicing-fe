@@ -299,7 +299,7 @@ export function buildInvoiceView({
       cfg.formats.discount === "percent" ? asPercent() : cfg.formats.discount === "amount" ? asAmount() : isAmount ? (value ? asAmount() : "0%") : asPercent();
     const quantity = qtyNf.format(l.quantity);
     const price = fmt.number(l.unit_price);
-    const taxText = taxes.length ? taxes.map((t) => (cfg.formats.tax === "rate" ? `${t.rate}%` : t.name)).join(", ") : "—";
+    const taxText = taxes.length ? taxes.map((t) => (cfg.formats.tax === "rate" ? `${t.rate}%` : t.name)).join(", ") : "-";
     const amount = fmt.number(l.line_total ?? 0);
     return {
       key: l.id ?? String(i),
@@ -374,7 +374,7 @@ export function buildInvoiceView({
     show: { customer: cfg.visible("hdr.partner"), companyInfo: cfg.visible("hdr.companyInfo") },
     columns: cfg.columns().map((key) => ({ key, label: currencyLabel(key, cfg.label(key)), align: key === "col.product" ? ("left" as const) : ("right" as const) })),
     company: {
-      name: company?.name ?? "—",
+      name: company?.name ?? "-",
       // The document's own attachment (when it is an image) is its logo; otherwise the company logo.
       logo: showHeader && cfg.header.showLogo ? attachmentLogo || company?.company_logo || undefined : undefined,
       addressLines: [...splitLines(company?.alamat), ...(companyCity ? [companyCity] : [])],
@@ -389,7 +389,7 @@ export function buildInvoiceView({
         ...(cfg.visible("hdr.contactPhone") && invoice.contact_phone ? [`${cfg.label("hdr.contactPhone")}: ${displayPhone(invoice.contact_phone)}`] : []),
         ...(cfg.visible("hdr.contactEmail") && invoice.contact_email ? [`${cfg.label("hdr.contactEmail")}: ${invoice.contact_email}`] : []),
       ],
-      name: mitra?.name ?? "—",
+      name: mitra?.name ?? "-",
       addressLines: splitLines(mitra?.address),
       email: mitra?.email || undefined,
       phone: mitra?.phone || undefined,
@@ -403,7 +403,7 @@ export function buildInvoiceView({
       dateLong: formatLongDate(invoice.date, lang),
       image: showSignatureImage ? invoice.signature_data || undefined : undefined,
       showStamp: variant === "signed_stamped" || !!invoice.stamp_duty,
-      name: cfg.signature.name || company?.name || "—",
+      name: cfg.signature.name || company?.name || "-",
     },
     terbilang: amountInWords(invoice.grand_total ?? 0, lang),
     downPayment: downPaymentRef && cfg.visible("sum.downPaymentRef")

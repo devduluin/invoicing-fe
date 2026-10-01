@@ -23,7 +23,13 @@ export interface UseMasterListResult<T extends TableRow> {
   params: GetAllPayload;
   updateParams: (patch: Partial<GetAllPayload>, replace?: boolean) => void;
   refresh: () => void;
+  /** Every row matching the current search / filters / sort (all pages), for exports. */
+  fetchAll: (opts?: { details?: boolean }) => Promise<T[]>;
 }
+
+/** Export ceiling: page size and number of pages fetched for one export. */
+const EXPORT_PAGE_SIZE = 200;
+const EXPORT_MAX_PAGES = 50;
 
 /**
  * Generic list state for a MasterTable page: holds the query params, calls
@@ -99,5 +105,17 @@ export function useMasterList<T extends TableRow>(
 
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
-  return { data, columns, attributes, meta, loading, error, params, updateParams, refresh };
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+  const fetchAll = useCallback(async (opts?: { details?: boolean }) => {
+    const out: T[] = [];
+    for (let page = 1; page <= EXPORT_MAX_PAGES; page++) {
+      const res = await fetcherRef.current({ ...paramsRef.current, page, limit: EXPORT_PAGE_SIZE, ...(opts?.details ? { with: "details" as const } : {}) });
+      out.push(...res.items);
+      if (!res.meta.hasNextPage) break;
+    }
+    return out;
+  }, []);
+
+  return { data, columns, attributes, meta, loading, error, params, updateParams, refresh, fetchAll };
 }

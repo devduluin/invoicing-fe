@@ -38,7 +38,7 @@ function humanize(part: string): string {
 }
 
 function fmtValue(v: unknown): string {
-  if (v === null || v === undefined || v === "") return "—";
+  if (v === null || v === undefined || v === "") return "-";
   if (typeof v === "object") {
     // A raw config/JSON blob — show it is different without dumping an unreadable wall of text.
     const s = JSON.stringify(v);

@@ -17,7 +17,7 @@ const money = new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0, maximum
 const startOfYearISO = () => `${new Date().getFullYear()}-01-01`;
 const todayISO = () => new Date().toISOString().slice(0, 10);
 
-const M = (v: number) => <span className="font-mono">{v ? money.format(v) : "—"}</span>;
+const M = (v: number) => <span className="font-mono">{v ? money.format(v) : "-"}</span>;
 
 const COLUMNS: ReportColumn<TrialBalanceRow>[] = [
   { key: "code", header: "Code", render: (r) => <span className="font-mono text-primary-ink">{r.code}</span> },
@@ -51,7 +51,7 @@ export default function TrialBalanceClient() {
       <PageHeader
         icon={Scale}
         title="Trial Balance"
-        description="Summary of beginning balance, movement, and ending balance per account — computed from posted journal entries."
+        description="Summary of beginning balance, movement, and ending balance per account, computed from posted journal entries."
         actions={
           data && (
             <StatusBadge label={data.is_balanced ? "Balanced" : "Not Balanced"} tone={data.is_balanced ? "success" : "danger"} icon={data.is_balanced ? CheckCircle2 : AlertCircle} />

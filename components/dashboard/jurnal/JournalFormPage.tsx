@@ -205,7 +205,7 @@ export default function JournalFormPage({ mode, id }: Props) {
     }
   };
 
-  const bookOptions = books.map((b) => ({ value: b.id, label: `${b.code} — ${b.name}` }));
+  const bookOptions = books.map((b) => ({ value: b.id, label: `${b.code} · ${b.name}` }));
 
   if (loading) {
     return (

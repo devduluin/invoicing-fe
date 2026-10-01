@@ -302,7 +302,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
       contact_email: contactInfo.email,
       attachment_data: attachmentData || undefined,
       kind,
-      number: number.trim() || "—",
+      number: number.trim() || "-",
       date,
       due_date: dueDate || undefined,
       payment_term: paymentTerm || undefined,
@@ -796,7 +796,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
         title={isEdit ? tr(`Ubah ${docTitle}`, `Edit ${docTitle}`) : tr(`Buat ${docTitle}`, `New ${docTitle}`)}
         description={
           readOnly
-            ? tr("Invoice ini sudah diterbitkan atau dibatalkan — hanya bisa dilihat.", "This invoice is issued or cancelled — view only.")
+            ? tr("Invoice ini sudah diterbitkan atau dibatalkan, hanya bisa dilihat.", "This invoice is issued or cancelled, view only.")
             : tr("Isi informasi, tambahkan item, lalu simpan. Ringkasan dan template ada di sisi kanan.", "Fill in the details, add items, then save. Summary and template are on the right.")
         }
         meta={isEdit ? <Status status={status === "confirmed" ? "confirmed" : status === "cancelled" ? "cancelled" : "draft"} label={status === "confirmed" ? statusLabels.confirmed : status === "cancelled" ? statusLabels.cancelled : statusLabels.draft} /> : undefined}
@@ -1027,7 +1027,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
           <div className="grid gap-6 sm:grid-cols-2">
             <div>
               <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">{tr("Info Perusahaan", "Company")}</p>
-              <p className="mt-1 text-sm font-bold text-slate-800">{company?.name ?? "—"}</p>
+              <p className="mt-1 text-sm font-bold text-slate-800">{company?.name ?? "-"}</p>
               <div className="mt-1 space-y-0.5 text-[13px] text-slate-600">
                 {company?.alamat && <p>{company.alamat}</p>}
                 {(company?.kota || company?.provinsi) && (
@@ -1084,7 +1084,7 @@ export default function SalesInvoiceFormPage({ kind, mode, id }: Props) {
             onChange={setLines}
             taxes={taxes}
             disabled={readOnly}
-            disabledMessage={tr("Invoice ini sudah diterbitkan/dibatalkan — hanya bisa dilihat.", "This invoice is already confirmed/cancelled — view only.")}
+            disabledMessage={tr("Invoice ini sudah diterbitkan/dibatalkan, hanya bisa dilihat.", "This invoice is already confirmed/cancelled, view only.")}
             additionalDiscount={{
               type: additionalDiscountType,
               value: additionalDiscountValue,

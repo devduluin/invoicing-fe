@@ -28,7 +28,7 @@ export default function SettingsLayout({ children }: { children: ReactNode }) {
   const flatOptions = groups.flatMap((g) =>
     g.items.map((item) => ({
       value: item.href,
-      label: `${tr(g.label.id, g.label.en)} — ${tr(item.label.id, item.label.en)}`,
+      label: `${tr(g.label.id, g.label.en)} / ${tr(item.label.id, item.label.en)}`,
     })),
   );
 

@@ -7,7 +7,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: "Duluin Invoice",
     short_name: "Invoice",
     description:
-      "Invoicing and financial record-keeping for businesses — sales, purchases, and financial reports.",
+      "Invoicing and financial record-keeping for businesses: sales, purchases, and financial reports.",
     start_url: "/dashboard",
     scope: "/",
     display: "standalone",

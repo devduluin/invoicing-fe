@@ -58,7 +58,7 @@ export default function JournalBookClient() {
         header: "Name",
         render: (_v, row) => (
           <div className="flex items-center gap-2">
-            <span className="font-semibold text-slate-700">{String(row.name ?? "—")}</span>
+            <span className="font-semibold text-slate-700">{String(row.name ?? "-")}</span>
             {row.is_system ? (
               <span className="inline-flex rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] font-bold text-slate-400">
                 Built-in
@@ -101,7 +101,7 @@ export default function JournalBookClient() {
           <PageHeader
             icon={BookMarked}
             title="Journal Books"
-            description="Group journal entries by book (General/Sales/Purchase/Cash/Bank) — each book has its own automatic numbering."
+            description="Group journal entries by book (General/Sales/Purchase/Cash/Bank). Each book has its own automatic numbering."
             actions={
               canCreate && (
                 <Button variant="primary" leftIcon={<Plus className="size-4" />} onClick={() => setModal({ open: true, row: null })}>
@@ -120,11 +120,13 @@ export default function JournalBookClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={list.fetchAll}
+        exportTitle="Journal Books"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "code", order: "asc" }}
         emptyTitle="No journal books yet"
-        emptyDescription="Default journal books are created automatically — add new ones if needed."
+        emptyDescription="Default journal books are created automatically. Add new ones if needed."
         filters={[
           {
             key: "type",

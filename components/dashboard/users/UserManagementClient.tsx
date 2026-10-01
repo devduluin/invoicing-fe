@@ -88,7 +88,7 @@ export default function UserManagementClient({ compact = false }: UserManagement
         noSort: true,
         render: (_v, row) => {
           const cs = (row as unknown as Member).companies ?? [];
-          if (cs.length === 0) return <span className="text-slate-400">—</span>;
+          if (cs.length === 0) return <span className="text-slate-400">-</span>;
           const first = cs[0].company_name;
           return (
             <span className="text-slate-700" title={cs.map((c) => `${c.company_name} · ${roleLabel(c.role ?? "")}`).join("\n")}>
@@ -113,7 +113,7 @@ export default function UserManagementClient({ compact = false }: UserManagement
         <Icon className="size-4" aria-hidden />
       </span>
       <div>
-        <p className="text-lg leading-5 font-semibold text-slate-900 tabular-nums">{value ?? "—"}</p>
+        <p className="text-lg leading-5 font-semibold text-slate-900 tabular-nums">{value ?? "-"}</p>
         <p className="text-xs text-slate-500">{label}</p>
       </div>
     </div>

@@ -23,7 +23,7 @@ import { useBulkMasterActions } from "@/components/dashboard/shared/useBulkMaste
 import { deleteSalesperson, listSalespersons, type Salesperson } from "@/services/salespersonService";
 
 const TABLE_KEY = "salespersons";
-const DEFAULT_VISIBLE = ["code", "name", "email", "is_active"];
+const DEFAULT_VISIBLE = ["code", "name", "email", "phone", "is_active"];
 
 export default function SalespersonClient() {
   const tr = useTr();
@@ -53,7 +53,7 @@ export default function SalespersonClient() {
   const specs: ColumnSpec<TableRow>[] = useMemo(
     () => [
       { id: "code", header: tr("Kode", "Code"), kind: "mono" },
-      { id: "name", header: tr("Nama", "Name"), render: (_v, row) => <span className="font-semibold text-slate-700">{String(row.name ?? "—")}</span> },
+      { id: "name", header: tr("Nama", "Name"), render: (_v, row) => <span className="font-semibold text-slate-700">{String(row.name ?? "-")}</span> },
       { id: "email", header: "Email" },
       { id: "phone", header: tr("Telepon", "Phone") },
       { id: "user_id", header: tr("Anggota Tim", "Team Member"), noSort: true, render: (_v, row) => relLabel(rel(row, "user_id")) },
@@ -118,6 +118,8 @@ export default function SalespersonClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={list.fetchAll}
+        exportTitle="Salespersons"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "name", order: "asc" }}

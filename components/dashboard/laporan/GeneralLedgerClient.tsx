@@ -16,12 +16,12 @@ import { ReportTable, type ReportColumn } from "./ReportTable";
 const money = new Intl.NumberFormat("id-ID", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const startOfYearISO = () => `${new Date().getFullYear()}-01-01`;
 const todayISO = () => new Date().toISOString().slice(0, 10);
-const M = (v: number) => <span className="font-mono">{v ? money.format(v) : "—"}</span>;
+const M = (v: number) => <span className="font-mono">{v ? money.format(v) : "-"}</span>;
 
 const COLUMNS: ReportColumn<LedgerLine>[] = [
   { key: "date", header: "Date", render: (r) => formatDateStyle(r.date) },
   { key: "number", header: "Journal No.", render: (r) => <span className="font-mono text-primary-ink">{r.number}</span> },
-  { key: "description", header: "Description", render: (r) => r.description || "—" },
+  { key: "description", header: "Description", render: (r) => r.description || "-" },
   { key: "debit", header: "Debit", align: "right", render: (r) => M(r.debit) },
   { key: "credit", header: "Credit", align: "right", render: (r) => M(r.credit) },
   { key: "balance", header: "Running Balance", align: "right", render: (r) => <b>{money.format(r.running_balance)}</b> },
@@ -57,14 +57,14 @@ export default function GeneralLedgerClient() {
   const accountOptions = accounts
     .slice()
     .sort((a, b) => a.code.localeCompare(b.code))
-    .map((a) => ({ value: a.id, label: `${a.code} — ${a.name}` }));
+    .map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }));
 
   return (
     <div className="space-y-4">
       <PageHeader
         icon={BookOpenText}
         title="General Ledger"
-        description="Movement history for a single account along with its running balance — computed from posted journal entries."
+        description="Movement history for a single account along with its running balance, computed from posted journal entries."
       />
 
       <Card>
@@ -94,7 +94,7 @@ export default function GeneralLedgerClient() {
             <Card className="p-4">
               <p className="text-xs text-slate-400">Account</p>
               <p className="mt-1 font-mono text-sm font-bold text-slate-700">
-                {data.account_code} — {data.account_name}
+                {data.account_code} · {data.account_name}
               </p>
             </Card>
             <Card className="p-4">

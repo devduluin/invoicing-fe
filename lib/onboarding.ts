@@ -43,7 +43,7 @@ export const FALLBACK_INVITE_ROLE_NAMES = ["Invoice Admin", "Invoice Viewer"];
 
 /** Trims the SSO "{companyHex}-" prefix and the leading "Invoice " for display. */
 export function roleLabel(role: string): string {
-  if (!role) return "—";
+  if (!role) return "-";
   const withoutPrefix = role.replace(/^[0-9a-f]{6,}-/i, "");
   return withoutPrefix.replace(/^Invoice\s+/i, "") || withoutPrefix;
 }

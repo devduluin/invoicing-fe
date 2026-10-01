@@ -5,7 +5,7 @@ import toast from "@/lib/toast";
 import { Lock } from "lucide-react";
 
 import { FormModal } from "@/components/modal/FormModal";
-import { CheckboxField, FormField, Input, Select, SearchableSelect } from "@/components/form";
+import { FormField, Input, Select, SearchableSelect, ToggleSwitch } from "@/components/form";
 import { extractApiError } from "@/lib/apiError";
 import type { Account } from "@/services/accountService";
 import {
@@ -50,7 +50,7 @@ export default function JournalBookFormModal({
   const accountOptions = accounts
     .slice()
     .sort((a, b) => a.code.localeCompare(b.code))
-    .map((a) => ({ value: a.id, label: `${a.code} — ${a.name}` }));
+    .map((a) => ({ value: a.id, label: `${a.code} · ${a.name}` }));
 
   const submit = async () => {
     const next: typeof errors = {};
@@ -95,7 +95,7 @@ export default function JournalBookFormModal({
           <div className="flex items-start gap-2.5 border-b border-border bg-slate-50 px-5 py-2.5 text-xs text-slate-600">
             <Lock className="mt-0.5 size-3.5 shrink-0" />
             <p>
-              Built-in system journal book. Its code and type are locked — name, default
+              Built-in system journal book. Its code and type are locked. Name, default
               accounts, and status can still be changed.
             </p>
           </div>
@@ -139,7 +139,7 @@ export default function JournalBookFormModal({
             value={form.default_account_id}
             options={accountOptions}
             onChange={(v) => set("default_account_id", v)}
-            placeholder="— Not set —"
+            placeholder="Not set"
             searchPlaceholder="Search accounts…"
           />
         </FormField>
@@ -148,7 +148,7 @@ export default function JournalBookFormModal({
             value={form.default_debit_account_id}
             options={accountOptions}
             onChange={(v) => set("default_debit_account_id", v)}
-            placeholder="— Not set —"
+            placeholder="Not set"
             searchPlaceholder="Search accounts…"
           />
         </FormField>
@@ -159,12 +159,12 @@ export default function JournalBookFormModal({
           value={form.default_credit_account_id}
           options={accountOptions}
           onChange={(v) => set("default_credit_account_id", v)}
-          placeholder="— Not set —"
+          placeholder="Not set"
           searchPlaceholder="Search accounts…"
         />
       </FormField>
 
-      <CheckboxField checked={form.is_active} onChange={(v) => set("is_active", v)} label="Journal book is active" />
+      <ToggleSwitch checked={form.is_active} onChange={(v) => set("is_active", v)} label="Journal book is active" />
     </FormModal>
   );
 }

@@ -104,8 +104,8 @@ export const TAX_KIND_OPTIONS: { value: TaxKind; label: string }[] = [
 ];
 
 export const CALC_METHOD_LABEL: Record<TaxCalcMethod, string> = {
-  exclusive: "Exclusive — tax added on top of price",
-  inclusive: "Inclusive — tax already included in price",
+  exclusive: "Exclusive (tax added on top of price)",
+  inclusive: "Inclusive (tax already included in price)",
 };
 
 export const CALC_METHOD_OPTIONS: { value: TaxCalcMethod; label: string }[] = [

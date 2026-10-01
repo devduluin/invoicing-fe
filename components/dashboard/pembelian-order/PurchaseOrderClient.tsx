@@ -18,6 +18,7 @@ import { DeleteDocumentModal } from "../shared/DeleteDocumentModal";
 import { useBulkDocumentActions } from "../shared/useBulkDocumentActions";
 import BulkActionMenu from "@/components/masterTable/BulkActionMenu";
 import { buildColumns, type ColumnSpec } from "@/components/masterTable/columnFactory";
+import { lineItemDetails } from "@/lib/exportDetails";
 import { auditColumns, partnerName } from "@/components/masterTable/cells";
 import { Status, type StatusKey } from "@/components/ui/StatusBadge";
 import {
@@ -130,7 +131,7 @@ export default function PurchaseOrderClient() {
           <PageHeader
             icon={ShoppingCart}
             title="Purchase Orders"
-            description="Record a purchase agreement with a supplier before billing — product lines are free text."
+            description="Record a purchase agreement with a supplier before billing. Product lines are free text."
             actions={
               <div className="flex items-center gap-2">
                 <BulkActionMenu selectedCount={selectedRows.length} actions={bulk.actions} />
@@ -156,6 +157,9 @@ export default function PurchaseOrderClient() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={() => list.fetchAll({ details: true })}
+        exportDetails={lineItemDetails(tr)}
+        exportTitle="Purchase Orders"
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "date", order: "desc" }}

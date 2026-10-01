@@ -119,6 +119,8 @@ function RolesManager() {
         params={list.params}
         updateParams={list.updateParams}
         onRefresh={list.refresh}
+        exportRows={list.fetchAll}
+        exportTitle={tr("Peran", "Roles")}
         loading={list.loading}
         error={list.error}
         defaultSort={{ column: "name", order: "asc" }}
