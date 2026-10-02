@@ -143,8 +143,11 @@ export async function createSalesInvoice(input: SalesInvoiceInput): Promise<Sale
 
 /** Imports regular invoices (saved as drafts) from the Excel template, all or nothing. `row` = the
  *  invoice's first spreadsheet row (the service prefixes its validation messages with it). */
-export async function importSalesInvoices(invoices: (SalesInvoiceInput & { row: number })[]): Promise<{ created: number }> {
-  const { data } = await api.post<Envelope<{ created: number }>>("/sales-invoices/import", { invoices });
+/** An invoice number the company already has updates that (draft) invoice; any other creates one. */
+export async function importSalesInvoices(
+  invoices: (SalesInvoiceInput & { row: number; default_notes?: boolean; default_terms?: boolean })[],
+): Promise<{ created: number; updated: number }> {
+  const { data } = await api.post<Envelope<{ created: number; updated: number }>>("/sales-invoices/import", { invoices });
   return data.data;
 }
 

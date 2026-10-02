@@ -147,7 +147,7 @@ export function DetailPanel({ title, count, children }: { title: string; count?:
         <h2 className="font-display text-[13px] font-semibold text-slate-900">{title}</h2>
         {count !== undefined && <span className="rounded-full bg-primary/10 px-2 text-xs font-semibold tabular-nums text-primary-ink">{count}</span>}
       </div>
-      <div className="overflow-x-auto">{children}</div>
+      <div className="table-scroll overflow-x-auto">{children}</div>
     </section>
   );
 }

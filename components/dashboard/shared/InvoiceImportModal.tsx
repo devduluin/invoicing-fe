@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { importResultText } from "@/lib/importResult";
 
 import ImportModal, { ImportPreviewTable } from "@/components/dashboard/shared/ImportModal";
 import { useTr } from "@/lib/useTr";
@@ -96,9 +97,11 @@ export default function InvoiceImportModal({ side, onClose, onImported }: { side
       submitLabel={(n) => tr(`Import ${n} Invoice`, `Import ${n} Invoices`)}
       submit={async (items) => {
         const res = sales
-          ? await importSalesInvoices(items.map((i) => ({ ...(i.input as SalesInvoiceInput), row: i.row })))
-          : await importPurchaseInvoices(items.map((i) => ({ ...(i.input as PurchaseInvoiceInput), row: i.row })));
-        return tr(`${res.created} invoice berhasil diimpor`, `${res.created} invoices imported`);
+          ? await importSalesInvoices(
+              items.map((i) => ({ ...(i.input as SalesInvoiceInput), row: i.row, default_notes: i.defaultNotes, default_terms: i.defaultTerms })),
+            )
+          : await importPurchaseInvoices(items.map((i) => ({ ...(i.input as PurchaseInvoiceInput), row: i.row, default_notes: i.defaultNotes })));
+        return importResultText(tr, res, tr("invoice", "invoices"));
       }}
       onClose={onClose}
       onImported={onImported}

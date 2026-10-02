@@ -121,8 +121,11 @@ export async function createPurchaseInvoice(input: PurchaseInvoiceInput): Promis
 
 /** Imports purchase invoices (saved as drafts) from the Excel template, all or nothing. `row` = the
  *  invoice's first spreadsheet row (the service prefixes its validation messages with it). */
-export async function importPurchaseInvoices(invoices: (PurchaseInvoiceInput & { row: number })[]): Promise<{ created: number }> {
-  const { data } = await api.post<Envelope<{ created: number }>>("/purchase-invoices/import", { invoices });
+/** An invoice number the company already has updates that (draft) invoice; any other creates one. */
+export async function importPurchaseInvoices(
+  invoices: (PurchaseInvoiceInput & { row: number; default_notes?: boolean })[],
+): Promise<{ created: number; updated: number }> {
+  const { data } = await api.post<Envelope<{ created: number; updated: number }>>("/purchase-invoices/import", { invoices });
   return data.data;
 }
 

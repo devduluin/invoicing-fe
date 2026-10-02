@@ -98,7 +98,7 @@ export function JournalLinesEditor({
 
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="overflow-x-auto">
+      <div className="table-scroll overflow-x-auto">
         <div className="min-w-[880px]">
           <div className={`${GRID_COLS} border-b border-border bg-table-head px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400`}>
             <span>Account</span>

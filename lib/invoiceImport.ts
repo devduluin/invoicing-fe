@@ -121,17 +121,18 @@ function notes(side: InvoiceSide, lang: Lang): string[] {
       : []),
     `Satu baris = satu barang. Invoice dengan lebih dari 1 barang: tulis setiap barang di baris baru dengan ${q("number")} yang SAMA dan data invoice (${q("partner")}, ${q("date")}, ${q("due_date")}, dst.) yang sama (lihat contoh ${n1}).`,
     sales
-      ? `${q("number")} tidak boleh sama dengan invoice penjualan yang sudah ada.`
-      : `${q("number")} diisi nomor invoice dari pemasok, dan tidak boleh sama dengan invoice pembelian yang sudah ada.`,
+      ? `Jika ${q("number")} sudah ada, invoice tersebut DIPERBARUI dengan data di file (hanya invoice Draft; invoice yang sudah dikonfirmasi atau dibatalkan ditolak). Nomor baru membuat invoice baru.`
+      : `${q("number")} diisi nomor invoice dari pemasok. Jika nomor sudah ada, invoice tersebut DIPERBARUI dengan data di file (hanya invoice Draft; invoice yang sudah dikonfirmasi atau dibatalkan ditolak). Nomor baru membuat invoice baru.`,
+    `Saat memperbarui, semua barang invoice diganti dengan barang di file. Kolom teks yang dikosongkan (${q("ref_no")}, ${q("notes")}${sales ? `, ${q("terms")}, ${q("salesperson")}` : ""}) tidak mengubah data lama; lampiran, tanda tangan, dan kontak tetap.`,
     `${q("date")} dan ${q("due_date")} ditulis dengan format YYYY-MM-DD, contoh 2026-09-30 (DD/MM/YYYY juga diterima). ${q("due_date")} tidak boleh sebelum ${q("date")}.`,
     `${q("qty")}, ${q("price")}, diskon, dan ${q("shipping")} diisi angka tanpa titik ribuan, contoh 5000000.`,
     `${q("disc_type")}: % (persen, maks. 100) atau Rp (nominal). Jika ${q("disc")} diisi, ${q("disc_type")} wajib diisi. Sama untuk ${q("add_disc")} dan ${q("add_disc_type")}.`,
     `${q("tax")} diisi sesuai sheet "${taxes}". Lebih dari 1 pajak untuk satu barang: pisahkan dengan titik koma (;).`,
     `${q("add_disc")} dan ${q("shipping")} berlaku untuk seluruh invoice (bukan per barang).`,
     sales
-      ? `Grand Total dihitung otomatis. ${q("terms")} dan ${q("notes")} yang dikosongkan akan diisi dari Pengaturan Dokumen.`
-      : `Grand Total dihitung otomatis. ${q("notes")} yang dikosongkan akan diisi dari Pengaturan Dokumen.`,
-    `Invoice diimpor sebagai Draft. Maksimal ${INVOICE_IMPORT_MAX} invoice per file; seluruh isi file akan diimpor, atau tidak sama sekali jika ada baris yang salah.`,
+      ? `Grand Total dihitung otomatis. ${q("terms")} dan ${q("notes")} yang dikosongkan pada invoice baru akan diisi dari Pengaturan Dokumen.`
+      : `Grand Total dihitung otomatis. ${q("notes")} yang dikosongkan pada invoice baru akan diisi dari Pengaturan Dokumen.`,
+    `Invoice baru diimpor sebagai Draft. Maksimal ${INVOICE_IMPORT_MAX} invoice per file; seluruh isi file akan diimpor, atau tidak sama sekali jika ada baris yang salah.`,
   ];
 }
 
@@ -229,6 +230,10 @@ export interface ImportInvoice {
   row: number;
   partnerName: string;
   input: ImportInvoiceInput;
+  /** Notes / Terms were blank in the file and filled from Document Settings: an invoice the row
+   *  updates (same number already exists) keeps its own instead */
+  defaultNotes: boolean;
+  defaultTerms: boolean;
 }
 
 export interface ImportRowError {
@@ -511,6 +516,8 @@ export function parseInvoiceRows(
         invoice: {
           row,
           partnerName: partnerLabel,
+          defaultNotes: !v.notes && !!defaults.notes,
+          defaultTerms: sales && !v.terms && !!defaults.terms,
           input: sales
             ? {
                 ...common,

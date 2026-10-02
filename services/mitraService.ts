@@ -135,8 +135,9 @@ export async function createMitra(input: MitraInput): Promise<Mitra> {
 
 /** Imports partners from the Excel template, all or nothing. `row` = the partner's spreadsheet row
  *  (the service prefixes its validation messages with it). */
-export async function importMitra(partners: (MitraInput & { row: number })[]): Promise<{ created: number }> {
-  const { data } = await api.post<Envelope<{ created: number }>>("/mitra/import", { partners });
+/** A partner code the company already has updates that partner; a new or blank code creates one. */
+export async function importMitra(partners: (MitraInput & { row: number })[]): Promise<{ created: number; updated: number }> {
+  const { data } = await api.post<Envelope<{ created: number; updated: number }>>("/mitra/import", { partners });
   return data.data;
 }
 

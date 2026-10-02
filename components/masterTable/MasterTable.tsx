@@ -333,7 +333,7 @@ export default function MasterTable<T extends TableRow>({
           ) : null}
         </div>
 
-      <div className="max-h-[calc(100svh-15rem)] min-h-[280px] flex-1 overflow-auto">
+      <div className="table-scroll max-h-[calc(100svh-15rem)] min-h-[280px] flex-1 overflow-auto">
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
           <table className="w-full text-left text-sm">
             <thead>

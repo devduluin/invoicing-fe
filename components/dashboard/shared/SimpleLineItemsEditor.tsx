@@ -74,7 +74,7 @@ export function SimpleLineItemsEditor({ lines, onChange, minLines = 1, embedded 
 
   return (
     <div className={embedded ? undefined : "overflow-hidden rounded-2xl border border-border bg-card"}>
-      <div className="overflow-x-auto">
+      <div className="table-scroll overflow-x-auto">
         <div className="min-w-[680px]">
           <div
             className={`${GRID_COLS} border-b border-border bg-table-head px-4 py-3 text-[11px] font-bold uppercase tracking-wider text-slate-400`}

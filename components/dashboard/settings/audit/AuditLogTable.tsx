@@ -37,7 +37,7 @@ export default function AuditLogTable({
   const entries = rows as unknown as AuditLogEntry[];
 
   return (
-    <div className="max-h-[calc(100svh-19rem)] min-h-[280px] flex-1 overflow-auto">
+    <div className="table-scroll max-h-[calc(100svh-19rem)] min-h-[280px] flex-1 overflow-auto">
       <table className="w-full text-left text-sm">
         <thead>
           <tr className="sticky top-0 z-10 bg-table-head">

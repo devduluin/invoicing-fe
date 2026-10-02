@@ -1,6 +1,7 @@
 "use client";
 
 import ImportModal, { ImportPreviewTable } from "@/components/dashboard/shared/ImportModal";
+import { importResultText } from "@/lib/importResult";
 import { useTr } from "@/lib/useTr";
 import { useLanguageStore } from "@/store/useLanguageStore";
 import { buildPartnerTemplate, parsePartnerFile, type ImportPartner } from "@/lib/partnerImport";
@@ -52,7 +53,7 @@ export default function MitraImportModal({
       submitLabel={(n) => tr(`Import ${n} Mitra`, `Import ${n} Partners`)}
       submit={async (items) => {
         const res = await importMitra(items.map((p) => ({ ...p.input, row: p.row })));
-        return tr(`${res.created} mitra berhasil diimpor`, `${res.created} partners imported`);
+        return importResultText(tr, res, tr("mitra", "partners"));
       }}
       onClose={onClose}
       onImported={onImported}

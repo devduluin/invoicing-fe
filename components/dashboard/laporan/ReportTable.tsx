@@ -23,7 +23,7 @@ interface ReportTableProps<T> {
 export function ReportTable<T>({ columns, rows, totals, emptyText = "No data" }: ReportTableProps<T>) {
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="overflow-x-auto">
+      <div className="table-scroll overflow-x-auto">
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="bg-table-head">

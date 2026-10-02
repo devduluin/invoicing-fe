@@ -119,7 +119,7 @@ export default function UserDetailClient({ id }: { id: string }) {
       <div id="access" className="scroll-mt-4">
       <Card className="space-y-3">
         <SectionTitle title={tr("Akses perusahaan", "Company access")} hint={tr("Setiap perusahaan punya peran sendiri.", "Each company has its own role.")} />
-        <div className="overflow-x-auto">
+        <div className="table-scroll overflow-x-auto">
           <table className="w-full min-w-[520px] text-left text-[13px]">
             <thead>
               <tr className="border-b border-border text-xs text-slate-500">
